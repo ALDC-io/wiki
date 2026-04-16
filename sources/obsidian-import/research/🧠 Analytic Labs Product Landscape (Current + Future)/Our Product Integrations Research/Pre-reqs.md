@@ -1,0 +1,1 @@
+- ensure each repo is production ready before attempting any integrations between others

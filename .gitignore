@@ -1,0 +1,14 @@
+# Credentials vault — NEVER commit
+vault/
+
+# Obsidian workspace/cache
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.obsidian/plugins/
+.trash/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

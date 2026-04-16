@@ -1,0 +1,1 @@
+session on this thursday or friday

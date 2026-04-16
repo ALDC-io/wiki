@@ -1,0 +1,20 @@
+- Obsidian set up for research and ticket tracking
+	- Ensure there is a clear structure to this in a clear logical format that can be maintained and followed into the future.
+- VS Code Setup
+	- Install Python
+	- Refer to old laptop for other extensions
+	- Clone repos
+		- clients
+		- connector
+	- AI Integration Tools
+- Create bookmarks for Frequently Accessed URLS.
+	- templates - eclipse
+	- snowflake
+	- Jira
+	- Confluence
+	- Miro
+	- Github
+	-
+- Setup Terence
+	- Add to known hosts
+-  Check password notepad on old laptop - if there is any saved there.

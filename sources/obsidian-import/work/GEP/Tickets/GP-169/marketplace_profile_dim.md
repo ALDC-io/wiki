@@ -1,0 +1,1 @@
+**Design the standalone object** (probably a secure view) with columns `PROFILE_ID, COUNTRY_CODE, CURRENCY_CODE, MARKETPLACE_ID, MARKETPLACE_NAME, UPDATED_AT`
