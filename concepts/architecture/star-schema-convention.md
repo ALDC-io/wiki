@@ -1,9 +1,9 @@
 ---
 tags: [concept, architecture, snowflake, naming, star-schema]
 aliases: [star schema, naming convention, warehouse naming]
-sources: [clients repo __TEMPLATE_ACCOUNT/snowflake/readme.txt, GEP/snowflake/warehouse/*.sql]
+sources: [clients repo __TEMPLATE_ACCOUNT/snowflake/readme.txt, GEP/snowflake/warehouse/*.sql, Confluence TECH/1238499340 (Warehouse Standards)]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-17
 ---
 
 # Star Schema Convention
@@ -132,6 +132,66 @@ WHERE timestamp > (SELECT MAX(timestamp) FROM WAREHOUSE.table);
 | Refresh | Scheduled tasks (manual management) | `TARGET_LAG = '1 hour'` (auto) |
 | Domain focus | E-commerce (sales, inventory, purchasing) | Media (spend, flights, campaigns) |
 | Fact complexity | High (margin calculations, fee allocation, return handling) | Moderate (spend aggregation, deduplication) |
+
+## SQL style conventions
+
+Sourced from Confluence TECH/1238499340 (Warehouse Standards, Brayden) — labelled "in progress, to be discussed" in the source; captured here as **proposed conventions**, not formally ratified. Ingested 2026-04-17.
+
+### Order `*_KEY` after the value it hashes
+
+When a view emits both a value and its `*_KEY`, put the **value first**, then the `*_KEY` as `SHA2(value)`. Lets the key reference the already-computed column instead of re-duplicating the calculation.
+
+Instead of:
+
+```sql
+SHA2(
+    DATEFROMPARTS(
+        EXTRACT(YEAR FROM TO_DATE(SMARTSHEET.FLIGHT_START)),
+        MONTHLY_SPEND.MONTH_NUMBER,
+        1
+    )
+) AS SPEND_DATE_KEY,
+DATEFROMPARTS(
+    EXTRACT(YEAR FROM TO_DATE(SMARTSHEET.FLIGHT_START)),
+    MONTHLY_SPEND.MONTH_NUMBER,
+    1
+) AS SPEND_DATE,
+```
+
+Do:
+
+```sql
+DATEFROMPARTS(
+    EXTRACT(YEAR FROM TO_DATE(SMARTSHEET.FLIGHT_START)),
+    MONTHLY_SPEND.MONTH_NUMBER,
+    1
+) AS SPEND_DATE,
+SHA2(SPEND_DATE) AS SPEND_DATE_KEY,
+```
+
+### Re-use already-defined fields in `SELECT`
+
+Downstream columns should reference earlier ones by alias rather than copy-pasting the expression. Saves edits and prevents drift between duplicated calculations.
+
+Instead of:
+
+```sql
+TOTALSALES AS SALES_ACTUAL_GROSS,
+TOTALSALES - TOTALDISCOUNT - TOTALREFUND AS SALES_ACTUAL_NET,
+(TOTALSALES - TOTALDISCOUNT - TOTALREFUND) / QTY AS SALES_ACTUAL_NET_PER_ITEM,
+```
+
+Do:
+
+```sql
+TOTALSALES AS SALES_ACTUAL_GROSS,
+SALES_ACTUAL_GROSS - TOTALDISCOUNT - TOTALREFUND AS SALES_ACTUAL_NET,
+SALES_ACTUAL_NET / QTY AS SALES_ACTUAL_NET_PER_ITEM,
+```
+
+### Stick to `NUMBER` and `FLOAT`
+
+Snowflake has only two real numeric type families — the `NUMBER` family (incl. `INT`, `DECIMAL`, `NUMERIC` etc.) and the `FLOAT` family (incl. `DOUBLE`, `REAL`). The rest are aliases. Proposal: standardize on `NUMBER` and `FLOAT` only, avoid the aliases, to reduce inconsistency across the warehouse.
 
 ## See Also
 

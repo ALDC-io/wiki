@@ -54,6 +54,7 @@ Onboarding involves a quick 5-minute process:
 ## See Also
 
 - [[zeus-memory]] -- the backend memory and API service powering CCE
+- [[cce-troubleshooting]] -- known issues and fixes: settings.local.json parsing, Windows path bugs, Zeus API key, poller daemon startup
 - [[ai-driven-dev-workflow]] -- the broader workflow methodology CCE operates within
 - [[monorepo-research]] -- analysis of consolidating repos to maximize CCE benefits
 - [[factoria]] -- another ALDC project that uses OpenClaw for agent orchestration

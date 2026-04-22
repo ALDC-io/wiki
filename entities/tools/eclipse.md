@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, eclipse, connector, etl]
 aliases: [Eclipse, Eclipse Connector, ALDC Connector]
-sources: [clients repo eclipse/ directories, connector repo]
+sources: [clients repo eclipse/ directories, connector repo, daily/2026-04-17.md, Confluence TECH/1191575556 (Eclipse 2.0)]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-17
 ---
 
 # Eclipse
@@ -103,9 +103,140 @@ Connection configs for both are in `ALDC_ENG/eclipse/connections/`.
 - 300+ templates defining data pulls
 - Major connection types: Snowflake, SQL Server, REST APIs (Amazon, Meta, Google, etc.), CSV files, MongoDB, Firebase
 
+## Eclipse 2 framework decisions (WIP)
+
+> The Next.js UI repo that implements these decisions lives at [[entities/repos/eclipse|eclipse (repo)]]. See that page for architecture, dev guide, and deployment details.
+
+Sourced from Confluence TECH/1191575556 (Eclipse 2.0, Brayden). Marked "PAGE IN PROGRESS" in the source; last edited 2024-04-04. Ingested 2026-04-17 — status may have drifted. Treat as the 2024 planning snapshot, not settled truth.
+
+Eclipse 2 is the Node-based rebuild of the platform (Eclipse 1 is the legacy portal web app — see [[Azure]] for the app-service split). The source page states the intent to eventually fold this content into a Development Standards page split into **Core / Portal / Agent** sections.
+
+### Decided (in the source doc)
+
+| Area | Decision |
+|---|---|
+| Styling | Tailwind CSS (easier to customize than Bootstrap) |
+| Component style | Function-based React components (better fit for Hooks) |
+| Rendering | Client-side by default; server-side where performance demands |
+| Indentation | 4-space (explicitly replacing the 2-space Metl style) |
+| Identifier style | camelCase |
+| Docstring format | JSDoc-style `@param {type} : description` / `@return {type} : description` |
+
+### Open debates / undecided
+
+- **JS vs TS** — Helio strongly recommends JS; Brayden strongly recommends TS. JSDoc + linter proposed as a middle ground.
+- **IDE** — Helio: JetBrains WebStorm (~$8/user/mo). Lawrence: VS Code.
+- **Package manager** — NPM (Helio: "speed difference is negligible").
+- **Testing framework** — candidates listed: Jest, Vitest, Testing, Cypress. No decision.
+- **Postman replacement** — "find something to replace Postman" noted as an open task.
+- **Swagger execution tooling** — "research" (tools that take Swagger docs and execute them).
+- **Database alternatives to Postgres** — evaluating multi-region support for full failover.
+- **@return docstring requirement** — unresolved whether it's mandatory or optional.
+
+### Planned but not built
+
+- **Error handling**: verbose error logs using dictionaries; native error handling; Slack integration; try/catch on all API calls; devs-only bug-log document (split per day); email on critical portal errors.
+- **Caching**: Redis via Azure Redis service; evaluating multi-region support for API + webservice.
+
+### Mentioned as adjacent/reference tools
+
+Brayden's note about tools that overlap with or compete with what Eclipse 2 aims to build: Segment, Amplitude, Metabase (slight competitor), Better Stack, Lightdash (slight competitor).
+
+## Eclipse 2.0 Application Framework Patterns
+
+> Apps built on this framework (e.g. [[dax-media-app]]) embed inside the [[entities/repos/eclipse|eclipse (repo)]] portal via the iframe app loader (`pages/application/[...slug].tsx`).
+
+*Source: CF92/1254883340 — architectural design notes for apps built on Eclipse 2.0 (e.g. [[dax-media-app]])*
+
+Key patterns used when building Eclipse 2.0-based applications:
+
+- **Permissions & Groups** — Named permission categories assigned to users and groups. Sub-form functional changes based on assigned permissions (e.g. hide/show fields per role).
+- **Form & Dataset Management** — Form layout configuration + styling. Distinction between native app data (writable) and Linked (Snowflake) data (read-only).
+- **Workflow & Action Triggers** — Automated workflows triggered by user actions and system events.
+- **Search** — Full-text and filtered search across application data.
+- **Sidebar & Navigation** — Context-aware sidebar; sub-screen navigation; form-to-form flows; hierarchical screen organization.
+
+## Connector Development Standards
+
+*Source: Confluence CONN/424280065*
+
+> **Prefect migration note:** The attribute hierarchy, parameter schemas, and response structure below are the foundational interface contract that Prefect connector flows must preserve when replacing Eclipse connectors.
+
+### Attribute Hierarchy
+
+Maps directly to Snowflake DDL. Acceptable characters: A-Z, 0-9, underscore. Lowercase is uppercased in Snowflake.
+
+| Level | Description | Example |
+|---|---|---|
+| **Connector** | Class name + version. Does not appear in warehouse. | `googleanalytics_v4` |
+| **Topic** | Data source instance. Appears as Snowflake schema. | `GOOGLE_ANALYTICS_CANADA` |
+| **Category** | Queryable dataset within source (API endpoint, DB schema). | `TRAFFIC` |
+| **Table** | Table within the collection. | `USAGE` |
+
+**Snowflake naming pattern:** `{CLIENT_SHORT_NAME}.{TOPIC}.{CATEGORY}_{TABLE}`
+
+*Example:* `ACME_MFG.GOOGLE_ANALYTICS.TRAFFIC_USAGE`
+
+### Connector Interface
+
+#### Initialisation
+
+```python
+connector_instance = Connector(name, connection, options)
+```
+
+**`connection` dict** — physical connection parameters (API keys, DB host/port/user/pass).
+
+**`options` dict** — query parameters composed by the scheduler:
+```python
+{"symbols": ["CAD", "AUD"], "start_date": "2021-01-01", "end_date": "2021-01-05"}
+```
+
+#### Response Structure
+
+Returns a list of dicts, one per table:
+```python
+[{"connector": str, "category": str, "collection": str, "table": str,
+  "dataframe": pd.DataFrame, "rowcount": int, "bytes": int}]
+```
+
+### Base Classes
+
+- `base_connector.py` — root base class
+- `base_connector_rest.py` — REST API connectors
+- `base_connector_odbc.py` — ODBC connectors (Query Mode: direct SQL; Table Mode: component-based query with field filtering + schema support)
+- `base_connector_flatfile.py` — flat file connectors
+
+### Code Layout
+
+```
+connector_project/
+├── _connector_test.py
+└── connector/
+    ├── __init__.py
+    ├── connector_file.py
+    └── base/
+        ├── base_connector.py
+        ├── base_connector_rest.py
+        ├── base_connector_odbc.py
+        └── base_connector_flatfile.py
+```
+
+### Development Workflow
+
+1. Copy an existing connector or `_template_REST.py`
+2. Add logic; register class in `__init__.py` + pass-through function
+3. Test with `_connector_test.py` (outputs CSV/JSON per table)
+4. Delete test CSV/JSON files before committing to GitHub
+
 ## See Also
 
-- [[clients-repo]] — where Eclipse configs live
+- [[clients-repo]] — where Eclipse configs live (source of truth)
 - [[data-pipeline-flow]] — Eclipse's role in the full pipeline
 - [[Snowflake]] — where Eclipse loads data
-- [[connector]] — the Eclipse runtime codebase
+- [[connector]] — the Eclipse runtime codebase (data plane)
+- [[core_api]] — Eclipse's backend API service (control plane)
+- [[CosmosDB]] — runtime store for Eclipse connections and templates
+- [[eclipse-azure-deployment]] — Eclipse app deployment runbook (staging slot + swap)
+- [[debugging-warehouse-loads]] — what to do when an Eclipse template's data isn't landing
+- [[google-analytics]] / [[facebook-ads]] / [[bing-ads]] / [[google-ads]] / [[amazon-ads]] / [[trade-desk]] — per-platform connector docs

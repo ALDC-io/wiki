@@ -3,12 +3,14 @@ tags: [process, deployment, setup, onboarding, python, vscode, docker, power-bi]
 aliases: [Environment Setup, Laptop Setup, Developer Onboarding, Machine Setup]
 sources: [sources/obsidian-import/general/Laptop Setup.md, sources/obsidian-import/general/Power BI Setup.md, sources/obsidian-import/general/Python & VSCode Setup.md, sources/obsidian-import/general/Docker -Core Connectors - VMs.md]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-17
 ---
 
 # Environment Setup -- New Developer / Machine
 
 Complete setup guide for a new ALDC development machine. Covers tooling, repos, Python environment, [[Snowflake]] connectivity, [[Power BI]] Desktop, Docker agents, and VM access.
+
+> **Before running this**: complete [[employee-onboarding]] first. That page covers account access (M365, Slack, GitHub, Jira, Eclipse, Snowflake, Azure permissions). This page assumes those accounts and permissions are in place.
 
 ## Prerequisites
 

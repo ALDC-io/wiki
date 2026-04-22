@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, prefect, orchestration, connector-migration]
 aliases: [Prefect]
-sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md]
+sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md, daily/2026-04-17.md, Confluence TECH/1766260745 (Prefect subtree, Brayden Offboarding)]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-17
 ---
 
 # Prefect
@@ -72,8 +72,93 @@ MSYS_NO_PATHCONV=1 PYTHONPATH=. .venv/Scripts/python -m tests.test_connectors.ne
 
 Note: Must use `MSYS_NO_PATHCONV=1` in Git Bash to prevent MSYS2 path translation converting leading `/` to `C:/Program Files/Git/`.
 
+## Deployment
+
+Prefect runs in the **QA subscription** in [[Azure]] — a sandbox for the in-flight migration. See [[azure-environments]] for the subscription map. The [[connector]] repo holds the Prefect flow definitions.
+
+> **Naming gotcha**: the Prefect resources carry an `aldcprod*` prefix (e.g. `aldcprodrsgpconnector1c`) even though they live in the QA subscription. The `prod` here refers to the logical "production Prefect instance" that workflows point to, *not* the ALDC production Azure subscription. This naming collides with the standard ALDC convention where `aldcprod*` = Production 2 subscription resources. Reconciled 2026-04-17 per Paul.
+
+URL: https://prefect.analyticlabs.io
+
+Architecture + resource inventory below sourced from Confluence TECH/1767014406 subtree (Brayden Offboarding), ingested 2026-04-17.
+
+### Deployment architecture
+
+Four moving parts:
+
+- **Prefect Server** — API server for workflow scheduling, runs, deployments. Also serves the UI/Dashboard. Connects to a Postgres database for transactional state.
+- **Work Pool** — long-running container that watches for workflow runs on the queue and starts a worker per run. ALDC uses the Azure Container Instances work pool type ([Prefect docs](https://docs.prefect.io/v3/concepts/work-pools)).
+- **Workers** — short-lived Azure Container Instances started by the Work Pool. Each worker runs one workflow, reports progress back to Prefect Server, uploads output to [[Azure]] storage (which [[Snowflake]] then ingests).
+- **Blocks** — where Prefect Server stores credentials (Snowflake creds, Azure creds, per-workflow connection creds). Snowflake-credential Blocks are auto-created when Prefect Deployments are deployed; password fields start as placeholders and must be filled in before use.
+
+### Azure resources (production)
+
+All resources in the `aldcprodrsgpconnector1c` resource group except where noted. See [[Azure]] for the broader ALDC Azure subscription model.
+
+**Prefect Server:**
+
+| Resource | Type | Purpose |
+|---|---|---|
+| `aldcprodwbapprefectserver1c01` | App Service | Prefect Server (API + UI) |
+| `aldcprodapspprefectserver1c01` | App Service Plan | Hosts the server |
+
+**Work Pool / Workers** (in separate `aldcprodrsgpprefectworkers1c` resource group):
+
+| Resource | Type | Purpose |
+|---|---|---|
+| `aldcprodrsgpprefectworkers1c` | Resource Group | Holds all auto-generated Container Instances for workflow runs (ephemeral — deleted when runs complete) |
+| `aldcprodctappprefectworkpool1c01` | Container App | The Prefect Work Pool process. Default Prefect image, runs `prefect worker start` |
+| `aldcprodmgidprefectworkers1c` | Managed Identity (user-assigned) | Attached to each Container Instance so workflows can reach other Azure resources |
+
+**Database:**
+
+| Resource | Type | Purpose |
+|---|---|---|
+| `aldcprodpgdbconnector1c01` | Azure Database for Postgres | Prefect Server's transactional database |
+| `aldcprodpgdbconnector1c01.private.postgres.database.azure.com` | Private DNS Zone | Private DNS for the Postgres server inside the VNET |
+
+**Networking / admin:**
+
+| Resource | Type | Purpose |
+|---|---|---|
+| `aldcprodvnetconnector1c` | Virtual Network | VNET containing all Prefect services. Only Prefect Server is publicly accessible — everything else is VNET-private |
+| `aldcprodvmconnector1c01` | Virtual Machine | Admin jump-host for `psql` access to the VNET-bound Postgres. Should be stopped when not in use |
+
+### Switching environments (QA / Test / Prod)
+
+The Work Pool uses two environment variables to pick an environment:
+
+- `ENVIRONMENT_LEVEL`
+- `ENVIRONMENT_DEPLOYMENT_GROUP`
+
+Together they select:
+
+- The Azure storage account used for staging data
+- The [[Snowflake]] account + target database (including the Snowflake user + role)
+
+To switch **all** Prefect workflows to a different environment, change those two env vars on the Work Pool.
+
+To run a **single** Deployment against a different environment, stand up a second Work Pool with the other env vars and point that Deployment at the new pool. This lets one Work Pool serve production workflows while another serves Test/QA — without switching everything at once.
+
+## Connector Specs
+
+The 6 ad platform connector specs in `entities/tools/connectors/` document the legacy connection/options schemas and auth patterns that Prefect implementations must replicate. Full migration pattern in [[connector-development-standards]].
+
+- [[google-analytics]] — GA4 + Universal Analytics connector
+- [[facebook-ads]] — Meta Marketing API connector
+- [[bing-ads]] — Microsoft Advertising connector
+- [[google-ads]] — Google Ads connector
+- [[amazon-ads]] — Amazon Ads + DSP connector
+- [[trade-desk]] — The Trade Desk My Reports connector
+- [[google-oauth-python]] — shared Google OAuth pattern (used by GA4 + Google Ads)
+- [[connector-token-refresh]] — operational token refresh runbook (Bing 90-day, Facebook 60-day)
+
 ## See Also
 
 - [[Eclipse]] — the platform being replaced
+- [[connector]] — the repo where Prefect flows live
+- [[connector-development-standards]] — canonical Prefect connector pattern (attribute hierarchy, migration steps, PartitionScheme/MergeScheme selection)
 - [[clients-repo]] — where Eclipse configs live (Prefect configs in connector repo)
 - [[data-pipeline-flow]] — Prefect replaces Eclipse in Layer 1
+- [[azure-environments]] — QA subscription is Prefect's current home
+- [[Confluence]] — holds the Prefect / Azure resources doc

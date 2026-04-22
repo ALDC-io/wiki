@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, snowflake, data-warehouse]
 aliases: [Snowflake, SF]
-sources: [clients repo snowflake/ directories, __TEMPLATE_ACCOUNT/snowflake/readme.txt]
+sources: [clients repo snowflake/ directories, __TEMPLATE_ACCOUNT/snowflake/readme.txt, INFRA/1532067843, INFRA/1034092551, CORE/1571160065, CORE/374341641, CORE/418873390]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-18
 ---
 
 # Snowflake
@@ -113,6 +113,280 @@ Steps:
 3. Verify view/table was created correctly
 4. Pause → recreate → resume any scheduled tasks that reference the changed objects
 
+## Core API Integration
+
+Source: Confluence INFRA/1532067843 (ALDC Snowflake ecosystem / integration, 2025-02-05). A General Datawarehouse workflow diagram existed on the source page but is image-only and unretrieval via MCP — deferred.
+
+[[core_api]] connects to Snowflake directly through four route modules:
+
+### route_capacity.py
+
+| Function | Purpose |
+|---|---|
+| `create_snowflake_connection` | **Main entry point** — creates a Snowflake connection object based on the capacity and capacity-provider document |
+| `capacity_usage` | Queries Snowflake traffic and usage for an account |
+| `capacity_monitor` | Queries the most recent hour of warehouse history — average queries blocked |
+| `create_reader_account` | Creates and enables a Snowflake reader account for external (non-ALDC) users |
+| `add_user_to_reader_account` | Adds a new user to a Snowflake share/reader account |
+| `remove_user_to_reader_account` | Removes a user from a Snowflake share/reader account |
+
+### route_dataset.py
+
+| Function | Purpose |
+|---|---|
+| `get_snowflake_tables` | Retrieves all tables and views for an account |
+| `data_columns` | Finds columns/fields for a given table/view |
+| `data_fetch` | Fetches data with filters from a table/view |
+| `data_fetch_random_sample` | Like `data_fetch` but returns a random sample |
+
+### route_setup.py
+
+| Function | Purpose |
+|---|---|
+| `setup_query` | Sets up a new Snowflake account using superuser access |
+| `setup_snowflake_query` | Similar to `setup_query`; used for new user/client accounts |
+
+### route_warehouse.py
+
+| Function | Purpose |
+|---|---|
+| `warehouse_query` | **Main entry point** — executes any Snowflake-related command, including staging and merging data into Snowflake |
+
+## Reader Accounts
+
+Source: Confluence INFRA/1034092551 (Snowflake Reader Accounts, 2022-11-03).
+
+Reader accounts allow external (non-ALDC) users to query a Snowflake data share without an ALDC Snowflake subscription. Provisioned programmatically via `create_reader_account` / `add_user_to_reader_account` in [[core_api]], or manually with the SQL patterns below.
+
+### Active reader accounts
+
+| Account ID | URL |
+|---|---|
+| AH87540 | https://ah87540.canada-central.azure.snowflakecomputing.com/ |
+
+Admin user: `READER_ADMIN_BACA483F` — password in `vault/infra-credentials.md` § Snowflake Reader Account admin.
+
+### SQL reference — reader account lifecycle (run on ALDC account)
+
+```sql
+-- Create a managed reader account
+CREATE MANAGED ACCOUNT <name>
+  admin_name = aldc, admin_password = '{{READER_ADMIN_PASSWORD}}', type = reader;
+
+-- Create a share and grant access
+CREATE SHARE <share_name>;
+GRANT USAGE ON DATABASE "<DB>" TO SHARE <share_name>;
+USE DATABASE <DB>;
+GRANT USAGE ON SCHEMA "<SCHEMA>" TO SHARE <share_name>;
+USE SCHEMA <SCHEMA>;
+GRANT SELECT ON TABLE "<TABLE>" TO SHARE <share_name>;
+
+-- Add reader account to share, then inspect
+ALTER SHARE <share_name> ADD ACCOUNTS = <account_id>;
+SHOW GRANTS TO SHARE <share_name>;
+SHOW SHARES;
+SHOW MANAGED ACCOUNTS;
+
+-- Tear down
+DROP MANAGED ACCOUNT <name>;
+DROP SHARE <share_name>;
+```
+
+### SQL reference — reader account setup (run ON the reader account)
+
+```sql
+USE ROLE ACCOUNTADMIN;
+
+CREATE WAREHOUSE COMPUTE_WH WITH
+  WAREHOUSE_SIZE = 'XSMALL' WAREHOUSE_TYPE = 'STANDARD'
+  AUTO_SUSPEND = 300 AUTO_RESUME = TRUE;
+
+-- Mount the incoming share as a database
+CREATE DATABASE "<SHARE_DB_NAME>"
+  FROM SHARE <producer_org>.<producer_account>."<SHARE_NAME>";
+GRANT IMPORTED PRIVILEGES ON DATABASE "<SHARE_DB_NAME>" TO ROLE "SYSADMIN";
+GRANT IMPORTED PRIVILEGES ON DATABASE "<SHARE_DB_NAME>" TO ROLE "ACCOUNTADMIN";
+
+-- Resource monitor: cap at 2 daily credits, suspend at 90/100%
+CREATE RESOURCE MONITOR "RESOURCE_MONITOR" WITH
+  CREDIT_QUOTA = 2, FREQUENCY = 'DAILY', START_TIMESTAMP = 'IMMEDIATELY'
+  TRIGGERS
+    ON 60 PERCENT DO NOTIFY
+    ON 90 PERCENT DO SUSPEND
+    ON 100 PERCENT DO SUSPEND_IMMEDIATE;
+ALTER WAREHOUSE "COMPUTE_WH" SET RESOURCE_MONITOR = "RESOURCE_MONITOR";
+
+-- Create a user (must change password on first login)
+CREATE USER <name>
+  PASSWORD = '{{PASSWORD}}'
+  LOGIN_NAME = '<LOGIN>' DISPLAY_NAME = '<Display>'
+  DEFAULT_ROLE = "PUBLIC" DEFAULT_WAREHOUSE = 'COMPUTE_WH'
+  MUST_CHANGE_PASSWORD = TRUE;
+GRANT ROLE "PUBLIC" TO USER <name>;
+```
+
+## Infrastructure Architecture
+
+*Source: CF92/1363017731 — general Snowflake reference; not client-specific*
+
+### Account Hierarchy
+
+**Organization → Account → Database** (3-part object coordinates: `database.schema.object`)
+
+- **Organization** — Top-level container. Controls custom URLs, billing, cross-account access.
+- **Account** — Self-contained Snowflake instance in a specific region. Independent config, users, capacity, history. Accounts do not affect each other except via shared objects.
+- **Database** — Container for data objects.
+
+**Cloud provider:** Azure, AWS, or GCP. GCP not recommended (feature limitations). Azure preferred for SSO/Azure AD integration. Note: Snowflake runs *alongside* cloud providers, not within standard cloud subscriptions.
+
+### Virtual Warehouses & Credit Model
+
+Warehouses are compute containers; storage and compute are fully separated.
+
+| Concept | Detail |
+|---------|--------|
+| Sizing | X-Small → 6XL; each size doubles cost and typically halves query time |
+| Billing | Per-second; auto-suspend after 5 minutes idle |
+| Standard Edition | ~$2.00–$2.25 USD/credit/hour |
+| Isolation | Unlimited warehouses can be created; separate ETL / Reporting / Ad-hoc to prevent interference |
+
+**Example cost:**
+
+| Warehouse | Size | Hours | Credits | Cost |
+|-----------|------|-------|---------|------|
+| ETL Loading | X-Small (1 credit) | 14.5 | 14.5 | $29 |
+| Standard Reporting | Small (2 credits) | 10.0 | 20.0 | $40 |
+| Data Science | Large (8 credits) | 43.9 | 351.2 | $702 |
+
+*Data loading/unloading performance is warehouse-size independent.*
+
+### Access Control
+
+All access is role-based. Users are assigned roles; roles receive grants. Never assign privileges directly to users.
+
+**Built-in roles (highest to lowest):**
+`ORGADMIN > ACCOUNTADMIN > SECURITYADMIN > SYSADMIN > USERADMIN > PUBLIC`
+
+Build custom roles from the PUBLIC base role.
+
+### Performance Notes
+
+- Snowflake auto-optimizes storage/compute based on usage patterns.
+- Micro-partition cluster keys are available but rarely needed.
+- Dynamic Tables + Materialized Views help avoid performance issues with long-chained views.
+- Larger warehouse ≠ always faster — test before upsizing.
+
+## Authentication & MFA Hardening
+
+Source: Confluence CORE/1571160065 (Snowflake MFA and OAuth Setup, 2025-04-02). Implementation in progress as of that date.
+
+### Service Account Migration (MFA deadline: Aug 2025)
+
+Service accounts moved to `TYPE = LEGACY_SERVICE` to extend username/password grace period past the MFA enforcement deadline.
+
+```sql
+ALTER USER service_account SET TYPE = LEGACY_SERVICE;
+```
+
+| Account | Environment | Status |
+|---|---|---|
+| DEV_MATILLION | dev | LEGACY_SERVICE |
+| QA_MATILLION | qa | LEGACY_SERVICE |
+| PROD_MATILLION | prod | Pending conversion (owner: Cathy) |
+| MATILLION_LOADER | — | Deprecate |
+| PBI_GATEWAY | — | Deprecate |
+| EXCELBISERVICE | — | Power BI service account |
+
+Long-term target: key-pair authentication or federated credentials for all service accounts.
+
+### Network Policy Audit
+
+```sql
+SHOW NETWORK POLICIES;
+```
+
+If policies block application auth origins, amend per [Snowflake Network Policies docs](https://docs.snowflake.com/en/user-guide/network-policies#protecting-the-snowflake-service).
+
+### Key-Pair Authentication Setup
+
+For non-interactive service accounts:
+
+```bash
+openssl genrsa -out private_key.pem 2048
+openssl req -new -x509 -key private_key.pem -out public_key.pem -days 365
+```
+
+Store private key in Azure Key Vault:
+
+```bash
+az keyvault secret set --vault-name <vault-name> --name <secret-name> --file private_key.pem
+```
+
+Set annual rotation reminder after setting up.
+
+### Power BI Integration via Entra (INCOMPLETE as of 2025-04-02)
+
+Checklist:
+- [ ] Confirm Azure security integration (enterprise app) exists or re-authenticate
+- [ ] `SHOW SECURITY INTEGRATIONS;` — list existing integrations
+- [ ] `SHOW GRANTS TO USER <username>;` — review grants; create custom role if over-privileged
+- [ ] Map service principal to security integration
+- [ ] Power BI → Settings → Manage connections → add service principal connection
+
+## v1 Client Database Structure (2021)
+
+Source: Confluence CORE/374341641 (Snowflake, 2021-04-29).
+
+> *v1 design (2021) — verify naming conventions against current client databases.*
+
+### Database naming per client
+
+Each client has four databases:
+
+| Purpose | Pattern | Example |
+|---|---|---|
+| Staging (raw ingest) | `STG_<ACCOUNT_ID>` | `STG_D77E717C` |
+| Warehouse (historical) | `<SHORT_CODE>_WH` | `WEST_GEOTECH_WH` |
+| Reporting (facts/dims) | `<SHORT_CODE>_RPT` | `WEST_GEOTECH_RPT` |
+| Sandbox (analyst) | `<SHORT_CODE>_SBOX` | `WEST_GEOTECH_SBOX` |
+
+Object names (databases, schemas, tables): A-Z, 0-9, underscore only — any other character replaced with `_`. Identifiers are case-insensitive (stored uppercase).
+
+### Service account role model (v1)
+
+| Role | Pattern | Privileges |
+|---|---|---|
+| Service (write) | `CORE_SVC_<ACCOUNT_ID>` | USAGE + OPERATE on COMPUTE_WH; full DML on staging + short-code DB |
+| Reporting (read) | `CORE_RPT_<ACCOUNT_ID>` | SELECT on short-code DB; read-only warehouse |
+| Client group | `CLIENT_<SHORT_CODE>_<GROUP>` | SELECT on group schema/tables; XS warehouse |
+
+### v1 Snowflake Azure integration setup
+
+Source: Confluence CORE/418873390 (Datawarehouse Integrations, 2021-04-30).
+
+Setup sequence for connecting Snowflake to Azure Blob (Parquet staging):
+
+1. Create staging DB (`STG_<ACCOUNT_ID>`) + stage schema
+2. Create storage integration (EXTERNAL_STAGE): link to Azure tenant + storage account; configure `AZURE_MULTI_TENANT_APP_NAME` (Snowflake PAC service principal)
+3. Obtain `azure_consent_url` from `DESC INTEGRATION` → authorize in Azure AD (allow ~15 min for sync)
+4. Define Parquet file format + external stage pointing to Azure Blob
+5. Create service user + `CORE_SVC_<ACCOUNT_ID>` role with granular grants
+6. Assign **Storage Blob Data Reader** + **Storage Blob Data Contributor** to the PAC service principal on the Azure storage account
+
+Service account credentials for each client account: see `vault/infra-credentials.md` § Snowflake service accounts.
+
+## Performance Review Notes
+
+Source: Confluence CLIEN/1071644673 (Snowflake Review with Mark, 2023).
+
+Updated data organization on 5 largest DW objects to improve performance: `DIM_ORDER`, `DIM_CUSTOMER`, `FCT_ORDER_LINE`, `FCT_CUSTOMER`, `FCT_ORDER`.
+
+Best practices from the review:
+- Avoid Direct Query in Power BI — refresh instead to offload work to the PBI engine
+- Use common datasets and build reports from shared datasets to minimize refresh times
+- Monthly query credit budget: ~60 credits/month (target ceiling from that engagement)
+- Monitor reader account daily
+
 ## See Also
 
 - [[star-schema-convention]] — naming patterns
@@ -120,3 +394,6 @@ Steps:
 - [[Power BI]] — downstream consumer
 - [[Eclipse]] — upstream data source
 - [[clients-repo]] — where SQL files live
+- [[core_api]] — API service that manages Snowflake connections and queries
+- [[data-share-pattern]] — Snowflake data share setup patterns
+- [[fusion92-data-architecture]] — Fusion92-specific Snowflake setup decisions

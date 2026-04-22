@@ -8,6 +8,11 @@ updated: 2026-04-16
 
 # Flight Check
 
+> **Name disambiguation:** Three wiki pages share the "flight check" phrase.
+> - **This page** — the **ALDC operational validation process** (Eclipse connector health / Snowflake task chain / data freshness). Not the app or the repo.
+> - **[[dax-media-app]]** — the DAX Media App product (Fusion92's Flight Management web app, replaced the legacy Firebase Flight Check app in November 2024).
+> - **[[entities/repos/flight-check|flight-check (repo)]]** — the Next.js frontend repo that implements the DAX Media App.
+
 A validation process run to verify that all systems are healthy and data is flowing correctly. Referenced during knowledge transfer sessions and in to-do items as a recurring operational concern.
 
 > **Note**: The source material for this page was minimal (a reference to scheduling a session and an email related to a flight check issue). This page captures the known context and should be expanded as the process is formalized.
@@ -102,6 +107,25 @@ Failures here indicate the share has been modified or objects removed.
 - **Power BI refresh can succeed but show stale data** if the underlying Snowflake views/tables weren't updated. Always check Snowflake freshness first.
 - **Flight check issues should be documented.** When something is found, note it in the ticket/to-do system and communicate to the relevant team member.
 
+## Account health dashboard (Power BI)
+
+Source: Confluence CORE/923140107 (Monitoring the health of our Accounts on PowerBI, 2022-04).
+
+> *2022 — verify workspace name and dataset availability.*
+
+A Power BI report shows real-time account health: process completion status, zombie counts, and queue volume.
+
+**Access:**
+1. Sign in to [app.powerbi.com](https://app.powerbi.com) with your Microsoft credential (same as Outlook/Azure)
+2. **Workspaces → ALDC_ENG Prod Reports**
+3. Hover over the dataset → click **Refresh** (takes 1–2 minutes)
+4. Open the report once refresh completes
+5. Use the account picklist (top-left) to filter by account
+
+**Sections:** Process status (Completed, Init, Zombies) · Queue volume per account.
+
+See [[debugging-warehouse-loads]] § Marking stalled items as zombies to resolve zombie entries.
+
 ## See Also
 
 - [[gep-snowflake-pbi-deployment]] -- deployment runbook (includes validation phases)
@@ -110,3 +134,4 @@ Failures here indicate the share has been modified or objects removed.
 - [[Eclipse]] -- connector platform
 - [[data-pipeline-flow]] -- end-to-end data flow architecture
 - [[knowledge-transfer-log]] -- related knowledge transfer context
+- [[debugging-warehouse-loads]] -- runbook for warehouse load failures and zombie recovery

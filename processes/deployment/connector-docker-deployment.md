@@ -1,9 +1,9 @@
 ---
 tags: [process, deployment, docker, connector, agents]
 aliases: [connector deployment, Docker agent deployment, agent deployment]
-sources: [sources/obsidian-import/general/Docker -Core Connectors - VMs.md]
+sources: [sources/obsidian-import/general/Docker -Core Connectors - VMs.md, CORE/1074823173]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-18
 ---
 
 # Connector Docker Deployment
@@ -100,8 +100,94 @@ The `docker_assets/images/agent_template` path may vary by server. Each server i
 ### VPN Agents
 The GEP SellerCloud SQL agent requires OpenVPN configuration. Credentials are in Dashlane under the `gep-sellercloudvpn` entry.
 
+## Docker Reference
+
+Source: Confluence CORE/1074823173 (Docker Guides, 2025-04-15).
+
+### Core concepts
+
+Docker shares the host OS kernel — it is not a VM. Linux containers require a Linux host; Windows containers require Windows. **Images** are blueprints; **containers** are running instances (ephemeral); **volumes** provide persistent storage outside container lifecycle.
+
+### Build & run
+
+```bash
+sudo docker build -t <tag> -f <dockerfile> .
+sudo docker run --memory=16G --cpus=8 -d --name <name> --network bonded <image>
+sudo docker exec -it <name> bash
+sudo docker logs -f --tail 10 <name>
+```
+
+### MACVLAN networking
+
+Bonds containers directly to the physical network with their own MAC + IP on the local subnet:
+
+```bash
+sudo docker network create -d macvlan \
+  --subnet=192.168.46.0/24 --gateway=192.168.46.1 \
+  --ip-range 192.168.46.160/26 \
+  -o parent=enp6s19 bonded
+```
+
+`--ip-range` is the CIDR pool Docker manages (must not conflict with DHCP). `--parent` is the physical adapter.
+
+### Volume (bind mount)
+
+```bash
+sudo docker volume create --driver local \
+  --opt type=none --opt device=/home/aldc/agent/volume --opt o=bind agent_volume
+```
+
+### Samba access to volume from Windows
+
+```bash
+sudo apt install samba -y && sudo smbpasswd -a aldc
+# Add to /etc/samba/smb.conf:
+# [agent_volume]
+# path = /home/aldc/agent/volume
+# valid users = aldc
+# writable = yes
+sudo ufw allow 445 && sudo ufw allow 135:137/tcp && service smbd restart
+# Access: \\<host.fqdn>\agent_volume
+```
+
+### GHCR (GitHub Container Registry)
+
+Images stored at org level (`ghcr.io/aldc-io/<package>:<version>`).
+
+```bash
+sudo docker login ghcr.io --username <GITHUB_USER>
+sudo docker tag <IMAGE_ID> ghcr.io/aldc-io/<package>:<version>
+sudo docker push ghcr.io/aldc-io/<package>:<version>
+```
+
+Service account: `aldc-svc-automation` — token and password in `vault/infra-credentials.md` § Docker / GHCR service account. Token expires 90 days from creation; check Dashlane if expired.
+
+### Postgres local dev restore
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: portal
+      POSTGRES_USER: aldcportal
+      POSTGRES_PASSWORD: "{{POSTGRES_DOCKER_PASSWORD}}"  # vault/infra-credentials.md § Docker
+    ports: ["14301:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+```
+
+```bash
+# Dump from QA Azure Postgres
+pg_dump -h aldcqapgdbportal1c01.postgres.database.azure.com -U aldcportal -d portal -F c -f backup.dump
+# Restore to local Docker instance
+pg_restore -h 192.168.36.71 -p 14301 -U aldcportal -d portal --no-owner --if-exists --no-acl -c backup.dump
+```
+
 ## See Also
 
 - [[Eclipse]] — the connector platform these agents run
 - [[data-pipeline-flow]] — agents' role in the pipeline
 - [[connector-timeout-outage]] — outage caused by agent `/work/pick` scaling issue
+- [[agent-builds]] — Proxmox VM provisioning for Docker agent hosts
+- [[deployment-groups]] — Docker node inventory per environment

@@ -3,12 +3,14 @@ tags: [process, deployment, gep, snowflake, power-bi, runbook]
 aliases: [GEP Deployment Runbook, Snowflake Deployment, PBI Deployment, GEP Deploy]
 sources: [sources/obsidian-import/deployments/Order of Operations.md, sources/obsidian-import/deployments/GP-200.md, sources/obsidian-import/deployments/Future Improvements - CREATE TICKET FOR THIS.md, sources/obsidian-import/work/Documentation/Knowledge Transfer/Deployment Steps-Guide - Paul.md, sources/obsidian-import/work/Documentation/Knowledge Transfer/Deployment Steps-Guide - Steven.md]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-21
 ---
 
 # GEP Snowflake + Power BI Deployment Runbook
 
 End-to-end deployment guide for shipping changes to the [[GEP]] client's data warehouse and reporting layer. Covers the full cycle from feature branch through [[Snowflake]] deploy and [[Power BI]] model refresh. This runbook was battle-tested during the GP-200 (Amazon UK orders) deployment and generalized for reuse.
+
+> **When to use this vs [[client-release-checklist]]**: this page is the GEP-specific end-to-end walkthrough with per-phase pitfalls and exact error messages. For a **generic** client release checklist (any client, simpler form), see [[client-release-checklist]]. Both reference the same underlying [[git-branching-strategy]].
 
 **Key principle**: Code merge does NOT auto-deploy. [[Snowflake]] and [[Power BI]] deploys are always manual steps.
 
@@ -102,8 +104,9 @@ Deployment is manual -- copy each SQL file from the repo and execute it in the S
 Views deployed in Phase 5 update `WAREHOUSE_SOURCE.*` (the logical view layer). Physical tables in `WAREHOUSE.*` are populated by scheduled [[Snowflake]] tasks.
 
 **Option A -- Wait for cron (slow):**
-- `task_warehouse_orderline_0` runs at :50 past each hour (America/Vancouver)
-- `task_warehouse_extract_metadata` runs at :00 each hour
+- `TASK_WAREHOUSE_ORDERLINE_0` runs **once daily at 06:00 America/Vancouver** (`USING CRON 0 6 * * * America/Vancouver`). Verified 2026-04-21 via `SHOW TASKS LIKE 'TASK_WAREHOUSE_ORDERLINE%' IN DATABASE TEST_DG1_GEP`.
+- `task_warehouse_extract_metadata` runs at :00 each hour (verify separately; not re-confirmed in 2026-04-21 check)
+- Means: new rows deployed during the day won't materialize in `WAREHOUSE.*` until the next 06:00 PDT window unless you manually trigger.
 
 **Option B -- Trigger manually (fast, recommended):**
 1. Snowsight -> **Monitoring -> Task History**
@@ -190,14 +193,16 @@ Each company should map to its expected currency. Small `ZZZ` rows indicate unma
 
 ### Phase 9: Refresh & Validate Power BI Test Model
 
-**9a. Trigger refresh:**
+> **Refresh cadence:** the GEP Test semantic model runs a **scheduled refresh once daily**. During a deploy you almost always want to trigger an ad-hoc refresh immediately rather than waiting for the next scheduled fire — otherwise the test model won't reflect your change until the schedule next runs.
+
+**9a. Trigger an ad-hoc refresh:**
 1. Go to `app.powerbi.com`
 2. Workspace: **GEP Test Models**
 3. Find the **Semantic model** row (NOT the Report row)
 4. Click **...** (More options) -> **Refresh now**
 5. Watch **... -> Refresh history** for completion (can take a few minutes to 30+ minutes)
 
-> If credentials have expired, refresh will fail. Fix via **... -> Settings -> Data source credentials -> Edit credentials**.
+> If credentials have expired, refresh will fail. Fix via **... -> Settings -> Data source credentials -> Edit credentials**. See [[powerbi-secret-refresh]] for the secret lifecycle.
 
 **9b. Smoke-test in Explore (web):**
 1. On the Semantic model page, click **Explore** in the top toolbar
@@ -268,6 +273,8 @@ SQL files reference `PROD_DG1_GEP.*` schemas via an external data share configur
 
 **Fix:** Add the missing object to the share in the Snowflake **prod** UI, then re-run. Consider auditing the share against all `PROD_DG1_GEP.*` references in `GEP/snowflake/warehouse/**/*.sql` before your first deploy.
 
+**This can recur post-deploy.** On 2026-04-21, `CURRENT_REPORT_ALL_ORDERS_UK` was present in the share at 06:00 PDT (task chain succeeded), then dropped out mid-day (likely via an Eclipse `CREATE OR REPLACE TABLE` refresh revoking the object-level grant), then failed at 13:26 PDT. If a stakeholder reports fresh data missing from test days/weeks after a deploy, check the share before assuming a code issue. Permanent fix options tracked in [[GP-PENDING-data-share-stability]].
+
 ### 2. extract_warehouse_metadata.sql view-vs-table conflict
 
 Line 109 uses `CREATE OR REPLACE SECURE VIEW WAREHOUSE.EXTRACT_WAREHOUSE_METADATA` but the hourly task materializes the same name as a physical TABLE. Snowflake cannot use `CREATE VIEW` to replace a TABLE.
@@ -327,6 +334,7 @@ Identified improvements to the deployment process (from source notes):
 
 ## See Also
 
+- [[model-deploy-production]] — generic production model deployment checklist (PBI publish step + client user access)
 - [[GEP]] -- client entity page
 - [[Snowflake]] -- data warehouse tool page
 - [[Power BI]] -- reporting tool page

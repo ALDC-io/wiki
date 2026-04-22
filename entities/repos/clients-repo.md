@@ -88,6 +88,44 @@ See [[star-schema-convention]] for naming details.
 - 300+ Eclipse templates
 - 200+ Snowflake warehouse SQL views
 
+## Branching & Release
+
+- [[git-branching-strategy]] — per-client `<CLIENT>/development` → `user-testing` → `main` model, happy-path walkthrough + cheatsheet
+- [[client-release-checklist]] — generic checklist for shipping a client change to production
+
+## Client Inventory
+
+### Active clients (`entities/clients/active/`)
+
+| Client | Notes |
+|--------|-------|
+| [[GEP]] | Largest account. Amazon US/UK/CA, SellerCloud, Galactica. |
+| [[fusion92]] | Media activation. Meta, Google, Trade Desk, Viant, Amazon Ads. |
+
+### Inactive clients (`entities/clients/inactive/`)
+
+| Client | Notes |
+|--------|-------|
+| [[adm]] | Fusion92 sub-client. GCP/BigQuery/Looker Studio stack. |
+| [[dish-duer]] | Retail apparel. SAP + Shopify; Finance + Sales models. |
+| [[kit-ace]] | Retail apparel. NetSuite; Finance model + Google Analytics. |
+| [[book-depot]] | Wholesale books. Standard Retail Dimensional Model. |
+| [[terrayn]] | Cannabis retail. AWS Athena; creds in vault. |
+| [[aspire-north]] | 2022 discovery only. |
+| [[indochino]] | 2021 assessment only. SQL Server + SSIS. |
+| [[drop-in-gaming]] | 2022 discovery only. |
+| [[heartland-dental]] | Stub — no content ingested. |
+
+## Development Standards
+
+All code in the clients repo must follow ALDC standards:
+
+- [[ai-pr-workflow]] — automated PR checks (Semgrep, TruffleHog, Claude Opus review, PyTestArch, quality gate). Live as of 2026-04-10.
+- [[adversarial-investigation-skill]] — `/investigate-adversarial` skill for debugging and architecture decisions
+- [[ai-development-project-standard]] — mandatory header + ROI tracking for any feature with >50% AI authorship
+- [[python-development-standards]] — PEP 8, Google docstrings, VS Code + PyLint conventions (Snowflake SQL files apply PEP 8 spirit: consistent casing, aligned keywords)
+- [[git-branching-strategy]] — per-client `<CLIENT>/development` → `user-testing` → `main` branching model
+
 ## See Also
 
 - [[GEP]] — largest active client
@@ -96,3 +134,5 @@ See [[star-schema-convention]] for naming details.
 - [[Snowflake]] — data warehouse
 - [[star-schema-convention]] — naming patterns
 - [[client-repo-structure]] — detailed folder layout pattern
+- [[git-branching-strategy]] — branching model used by this repo
+- [[client-release-checklist]] — deploy checklist

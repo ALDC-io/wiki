@@ -1,9 +1,9 @@
 ---
 tags: [entity, client, gep, navira, e-commerce]
 aliases: [GEP, Navira, Global E-commerce Partners]
-sources: [clients repo GEP/ directory]
+sources: [clients repo GEP/ directory, CGEP/1233092873, CGEP/1233289293]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-18
 ---
 
 # GEP (Navira)
@@ -117,6 +117,102 @@ GEP has a Snowflake data share setup exposing warehouse views to external consum
 - [[GP-197]] — (historical)
 - [[GP-169]] — (historical)
 
+## ALDC Team
+
+ALDC team members on the GEP engagement (source: CGEP/1233092873, 2024-03-27):
+
+- John Moran
+- Sean O'Grady
+- Karen Prete
+- Aaron Stryd
+
+> GEP-side team members were not documented in the Confluence space at time of ingestion.
+
+## Inventory Subject Area
+
+Subject area scope page for GEP inventory data (source: CGEP/1233289293). Related Jira: CUST-761.
+
+### Participating Objects
+
+| Object | Type |
+|--------|------|
+| Fact Inventory Balance | Fact |
+| Fact Purchase Order | Fact |
+| Dimension Product | Dimension |
+| Dimension Warehouse | Dimension |
+| Dimension Vendor | Dimension |
+| Dimension Purchase Order | Dimension |
+
+> **Gap:** `Dimension Purchase Order` is listed as a participating object in the Confluence subject-area page but is not documented in the [[GEP]] § Snowflake Warehouse section above. The view may not yet exist or may be tracked under a different name. See also [[GP-208]] (inventory rebuild in progress).
+
+## Client Contact & Contract
+
+Source: Confluence CLIEN/1173913601 (GEP Onboarding Checklist, 2024-01-12).
+
+| Field | Value |
+|---|---|
+| Full Name | Global Ecom Partners |
+| Primary Contact | Heather Tabor (Chief Operating Officer) |
+| Email | htabor@globalecompartners.com |
+| Phone | 770-639-8331 |
+| Address | 7167 Cross County Rd, Suite A, North Charleston, SC 29418 |
+| Time Zone | EST |
+| Industry | Retail |
+| Contract Start | January 1, 2024 |
+| Minimum Fee | $3,500/month |
+| Short Code | GEP |
+| Tenant Location | Canada |
+| Tier | XS |
+| Invoice Day | 1 |
+| Jira Startup | CUST-701 |
+
+## Excel Model Scope
+
+Source: Confluence CLIEN/1167196168 (GEP overview page, 2023-12-22).
+
+Proposed Excel model feature set combining all dimensions and facts:
+
+- KPI Report
+- Order Summary
+- Promo Recaps
+- Long-term storage fees
+- Excess Inventory
+- No Sales
+- Lost Buy Box
+- Open to Buy
+
+## Service Requests (as of 2024-12)
+
+Source: Confluence CLIEN/1458634759.
+
+| SR | Title | Key Outcomes | Status |
+|---|---|---|---|
+| REQ-397 | Tool Additions Rd 2 | Amazon Order # field; custom margin calc; Product Condition via SQL Server | NOT STARTED |
+| REQ-402 | Tool Additions Rd 3 | Remove Order Problem; Other Marketplace Ad Spend; Inventory Bins; Amazon MX/CA | IN PROGRESS (4h approved) |
+| REQ-415 | Tool Additions Rd 4 | 120-day no-margin logic; SKU Dept/Category classification; Subscribe & Save; Search Query Performance | IN PROGRESS (4h approved) |
+| REQ-430 | Tool Additions Rd 5 | Order Exception | NOT STARTED |
+| REQ-451 | Tool Additions Rd 6 | FBA product age indicator | NOT STARTED |
+| REQ-441 | Credits | Brand credit flag (Y/N, date, RTO indicator) | NOT STARTED |
+| REQ-422 | Periodicity | Show YTD instead of full-year for previous year | NOT STARTED (may already exist) |
+| REQ-453 | FBA Inventory (Daytona) | Update FBA inventory logic | NOT STARTED |
+| REQ-404 | QBO Connection | QuickBooks Online connection | NOT STARTED (scope unknown) |
+| REQ-438 | Daily Sales Dashboard | Add Marketplace Name filter (post REQ-402 Marketplace Name) | NOT STARTED |
+
+## NetSuite Integration Context
+
+Source: Confluence CLIEN/1302986753 (NetSuite Scoping Call, 2024-06-17).
+
+Attendees: Johanna, Lindsey, Shannon, Christina Taylor, Cory Hanna, Sean, Karen.
+
+**Problem:** NetSuite and Flight Check are not connected — Fusion92 team manually enters data in both systems.
+
+**Goal:** Invoice details (Date/Number/Amount) entered in Flight Check push to NetSuite to auto-generate an invoice — single-entry workflow.
+
+**Key constraints:**
+- Client invoices are billed per campaign code, up-front — disconnect from vendor invoices (billed after ads run)
+- Vendor invoices (e.g. Google) cover multiple clients and campaign lines
+- Next steps: Christina + Sean to align on platform-level detail; Flight Check ID + NetSuite media project as line-level inputs
+
 ## See Also
 
 - [[clients-repo]] — repo structure and conventions
@@ -125,3 +221,5 @@ GEP has a Snowflake data share setup exposing warehouse views to external consum
 - [[Eclipse]] — connector platform
 - [[Snowflake]] — data warehouse
 - [[Power BI]] — reporting layer
+- [[periodicity]] — periodicity dimension and DAX patterns used in GEP model
+- [[dax-media-app]] — Flight Check app (referenced in NetSuite scoping context)

@@ -1,9 +1,9 @@
 ---
 tags: [concept, architecture, pipeline, data-flow]
 aliases: [data pipeline, pipeline flow, ETL flow]
-sources: [clients repo GEP/ and FUSION_92/ directories, __TEMPLATE_ACCOUNT/snowflake/readme.txt]
+sources: [clients repo GEP/ and FUSION_92/ directories, __TEMPLATE_ACCOUNT/snowflake/readme.txt, daily/2026-04-17.md]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-21
 ---
 
 # Data Pipeline Flow
@@ -56,12 +56,24 @@ The end-to-end data pipeline at ALDC: [[Eclipse]] pulls from source systems, loa
            │
            ▼
 ┌──────────────────────┐
+│   SQL SERVER DB      │  ◄──── SSMS (engineer edits, partition runs)
+│   (intermediate hop  │
+│    before PBI model) │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
 │   POWER BI           │
 │   Imports from       │
+│   SQL Server DB /    │
 │   REPORT_COMMON.*    │
-│   Manual refresh     │
+│   Scheduled refresh  │
+│   (per model; GEP    │
+│    Test = daily)     │
 └──────────────────────┘
 ```
+
+Note: the SQL Server layer is not used for all clients, but it is a real hop — especially for [[GEP]] partition processing and any time old data needs reprocessing before landing in a PBI model. See [[SSMS]].
 
 ## Layer Details
 
@@ -75,8 +87,16 @@ Examples for [[GEP]]:
 - Galactica SQL Server (additional order/payment data)
 - CSV supplements (budgets, currency rates, forecasts, reference data)
 
-### Layer 1: Eclipse Ingestion
-[[Eclipse]] connectors pull data on schedule and load into Snowflake source schemas.
+### Layer 1: Eclipse / Connector Ingestion
+[[Eclipse]] connectors (or, increasingly, [[Prefect]] flows in the [[connector]] repo) pull data on schedule.
+
+Transport path (post-[[Prefect]] migration):
+
+```
+Source API ──► connector (Prefect flow) ──► Azure Storage Account ──► Snowflake COPY/MERGE ──► CURRENT_* table
+```
+
+The Azure Storage Account is the **transport layer** — the connector writes pulled data there, and a Snowflake query then pulls it into the DWH. This is why [[core_api]] in the Prefect world is *not* directly connected to Snowflake: data movement is the [[connector]]'s job.
 
 Data lands as `CURRENT_*` tables:
 ```
@@ -135,8 +155,13 @@ Secure views for Snowflake-to-Snowflake sharing with external consumers:
 
 ## See Also
 
-- [[Eclipse]] — connector platform (Layer 1)
+- [[Eclipse]] — connector platform (Layer 1, legacy)
+- [[connector]] — repo hosting the data-plane (Prefect flows replacing Eclipse connectors)
+- [[core_api]] — Eclipse control-plane API (not in the data path in the Prefect world)
 - [[Snowflake]] — data warehouse (Layers 2-5)
+- [[SSMS]] — intermediate SQL Server hop between Snowflake and PBI
 - [[Power BI]] — reporting (consumer)
+- [[Azure]] — hosts storage accounts, web apps, CosmosDB
+- [[azure-environments]] — environment model for the pipeline
 - [[star-schema-convention]] — naming patterns for Layers 2-3
 - [[client-repo-structure]] — where the SQL/config files live
