@@ -14,6 +14,8 @@ End-to-end deployment guide for shipping changes to the [[GEP]] client's data wa
 
 **Key principle**: Code merge does NOT auto-deploy. [[Snowflake]] and [[Power BI]] deploys are always manual steps.
 
+> **XMLA automation for metadata-only PBI changes (added 2026-04-24).** For new tables, columns, relationships, measures, and format strings — i.e. anything that does NOT change visual layout — GEP now supports programmatic model updates via `pbi_model_apply.exe` (XMLA + TOM + Roslyn) instead of the PBI Desktop republish described in Phase 10 below. See [[pbi-xmla-automation]] for the pattern and [[pbi-model-apply-wrapper]] for the wrapper. Phases 9 and 10 of this runbook still apply when changes include visual edits (`changes.pbi_model.visual_required = true`) or when `.pbix` artefacts themselves need updating in `repos/power_bi`. First validated end-to-end on [[GP-208]] (2026-04-24).
+
 ## Prerequisites
 
 - Access to [[Snowflake]] (Snowsight web UI) for both `TEST_DG1_GEP` and `PROD_DG1_GEP`

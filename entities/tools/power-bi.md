@@ -1,28 +1,30 @@
 ---
 tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
-sources: [clients repo report_common/ directories, Obsidian vault notes, daily/2026-04-17.md]
+sources: [clients repo report_common/ directories, Obsidian vault notes, daily/2026-04-17.md, GP-208 Data Source Settings check 2026-04-21]
 created: 2026-04-16
-updated: 2026-04-21
+updated: 2026-04-24
 ---
 
 # Power BI
 
-ALDC's reporting and visualization layer. Power BI models consume `REPORT_COMMON` views from [[Snowflake]] — but, importantly, data usually passes through a **SQL Server** layer edited via [[SSMS]] in between, not directly from Snowflake into the PBI model. Most clients import straight from Snowflake; the SQL-Server hop is used when engineers need to reprocess old data or run partitions (see [[SSMS]]).
+ALDC's reporting and visualization layer. Power BI semantic models import data directly from [[Snowflake]] (via M queries against `WAREHOUSE.*` and `REPORT_COMMON.*` views) and store it in the model's internal VertiPaq column-store cache. That cache is what refreshes populate; "partitions" of that cache are what gets re-processed via [[SSMS]] or `pbi_model_apply.exe`.
 
 ## Data flow into Power BI
 
 ```
-Snowflake (report_common.*)
+Snowflake (WAREHOUSE.*, REPORT_COMMON.*)
+        │  (Snowflake.Databases connector, M query per table)
+        ▼
+Power BI semantic model — VertiPaq cache (tabular model partitions)
         │
         ▼
-SQL Server DB  ◄──── SSMS (engineer edits, partition runs — GEP especially)
-        │
-        ▼
-Power BI (model import + refresh)
+Power BI reports (visuals, DAX measures)
 ```
 
-A more detailed dataflow diagram lives in [[Confluence]].
+> **Correction (2026-04-24):** earlier versions of this page described an intermediate SQL Server DB between Snowflake and PBI. **That DB does not exist in the GEP data path.** PBI connects direct to Snowflake (+ core_api for glossary metadata). The confusion arose because SSMS is used to process partitions of the PBI tabular model via its XMLA endpoint — SSMS is acting as an XMLA client into the PBI Premium Analysis Services layer, not into a separate SQL Server database. Verified via Data Source Settings inspection on the live GEP PBIX (2026-04-21); confirmed architecturally in the 2026-04-24 GP-208 XMLA validation session. See [[SSMS]] for the reframe, and [[pbi-xmla-automation]] for the automation layer that replaces SSMS partition processing for metadata changes.
+
+A more detailed (external) diagram lives in [[Confluence]] — treat its SQL-Server-intermediate framing with the same correction in mind.
 
 ## How Power BI Connects to Snowflake
 
@@ -96,9 +98,15 @@ After a Snowflake warehouse change, the scheduled refresh will eventually pick i
 - **Schema mismatch**: If Snowflake view columns change, PBI model may error on refresh — update the PBI model to match
 - **Date columns**: Some date columns may not import correctly into PBI models — may need research per ticket (noted in [[GP-208]] to-do)
 
+## XMLA Automation (GEP)
+
+For metadata-only model changes (new tables, columns, relationships, measures, format strings), GEP uses a programmatic XMLA path instead of opening the `.pbix` in PBI Desktop. See [[pbi-xmla-automation]] for the canonical pattern and [[pbi-model-apply-wrapper]] for the .NET wrapper (`pbi_model_apply.exe`) that runs TE3-compatible C# scripts via TOM + Roslyn. Validated end-to-end against [[GP-208]] on 2026-04-24.
+
+Visual/report-layout edits (pages, visuals, bookmarks, colours) remain manual in PBI Desktop — no public API exists to automate them. The artifact's `changes.pbi_model.visual_required` flag keeps visual-bearing tickets on the manual republish path.
+
 ## Deployment Workflow
 
-See [[gep-snowflake-pbi-deployment]] for the full end-to-end deployment including PBI refresh steps.
+See [[gep-snowflake-pbi-deployment]] for the full end-to-end deployment including PBI refresh steps. For metadata-only model changes on GEP, the XMLA automation path above is the primary path; the manual `.pbix` republish is reserved for visual changes.
 
 ## Report Template
 
@@ -139,9 +147,12 @@ PBI Excel models require a separate ALDC-tenant login per user (not the user's o
 
 ## See Also
 
-- [[Snowflake]] — data source
-- [[SSMS]] — intermediate SQL Server layer; used for reprocessing and GEP partition runs
-- [[Confluence]] — detailed dataflow diagram and per-client SSMS schedules
+- [[Snowflake]] — direct data source (via Snowflake.Databases M connector)
+- [[SSMS]] — XMLA client into the PBI tabular model (for partition re-processing of historical data)
+- [[pbi-xmla-automation]] — canonical pattern for programmatic model metadata changes
+- [[pbi-model-apply-wrapper]] — .NET 8 wrapper that replaces TE3 CLI for scripted XMLA applies
+- [[pbi-xmla-model-changes]] — TOM gotchas (schema discovery, Mode=Import, drop-if-exists)
+- [[Confluence]] — detailed dataflow diagram (treat SQL-Server-intermediate framing with correction above)
 - [[star-schema-convention]] — warehouse naming that feeds report_common views
 - [[data-pipeline-flow]] — PBI's position in the full pipeline
 - [[GEP]] — primary client using PBI

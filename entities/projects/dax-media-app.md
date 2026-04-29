@@ -1,9 +1,9 @@
 ---
 tags: [entity, project, fusion92, dax, flight-check-app, web-app, eclipse]
 aliases: [DAX Media App, Flight Check App, Flight Management Application, Flight Check Replacement]
-sources: [CF92/1439399945, CF92/1206779949, CF92/1360887813, CF92/1425440769, CF92/1437204481, CF92/1437302786, CF92/1437204494, CF92/1632141315, CF92/1633681409, CF92/1654030337, CF92/1660911619]
+sources: [CF92/1439399945, CF92/1206779949, CF92/1360887813, CF92/1425440769, CF92/1437204481, CF92/1437302786, CF92/1437204494, CF92/1632141315, CF92/1633681409, CF92/1654030337, CF92/1660911619, TECH/1777106945 (Steven Offboarding), TECH/1772126209 (Azure Resources Reference)]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-27
 ---
 
 # DAX Media App
@@ -13,6 +13,27 @@ Flight Management web application built by ALDC for [[fusion92]]. Replaces Fusio
 > **Name disambiguation:** "Flight Check" historically referred to both (a) this web app and (b) ALDC's operational data-pipeline validation process (see [[flight-check]]). In CF92 Confluence, "Flight Check" = the app. In ALDC engineering context, [[flight-check]] = the operational runbook. This page covers the app.
 
 In production since **November 2024**. Hosted at `eclipse.datavize.com` (built on [[Eclipse]] 2.0 framework). Owned by Karen Prete (ALDC).
+
+## Architecture
+
+Source: Confluence TECH/1777106945 (Steven Offboarding).
+
+- **Frontend:** Next.js, running inside [[Eclipse]] 2.0 (not Eclipse 2.1). Flight Check cannot currently run as a standalone application — it depends on Eclipse 2 for authentication (token sharing).
+- **Document Storage:** Flight and job data stored as "Application" JSON documents in [[CosmosDB]], accessed via [[core_api]] (the old/v1 version, not v2/Eclipse 2.1).
+- **Business Logic Backend:** Split between [[core_api]] and the [[workflows|Dax API]]. General calls (auth, user info, document retrieval) go through Core API; all new features go to the Dax API. Over time, existing features should be routed through the Dax API even if they call Core API internally.
+- **Reporting Layer:** Flight Check data synced to [[Snowflake]] every 30 minutes by the `FlightCheckSnowflakeSyncWorkflow` in [[workflows]]. Due to this schedule, new Platform IDs added to flights take up to an hour to appear in the warehouse and metrics table.
+
+### Azure Resources (Production)
+
+| Resource | Type | Purpose |
+|---|---|---|
+| `aldcprodfnapf921c01` | Function App | Dax API (Flight Check backend) |
+| `aldcprodwbapflightcheck1c01` | App Service | Flight Check frontend |
+| `aldcprodwbapnode1c01` | App Service | Eclipse 2 (used for Flight Check auth/hosting) |
+
+Source: Confluence TECH/1772126209 (Azure Resources Reference).
+
+---
 
 ## User Roles
 
@@ -305,6 +326,92 @@ Red **"Unlock NetSuite PO#"** button on synced flights. Irreversible — permane
 - [ ] Publisher Name in dropdown (exact NetSuite vendor name)?
 - [ ] First sync: PO Number field empty?
 - [ ] Error: Expand context and copy for support ticket.
+
+---
+
+## Flight Metrics Table
+
+Source: Confluence TECH/1777106945 (Steven Offboarding).
+
+The flight metrics table serves three purposes: show direct API metrics data, show legacy Smartsheet data, and allow manual data entry for platforms without API connections.
+
+### Data Source Priority
+
+1. **Direct API data** — always shown when available; overrides all other sources
+2. **Smartsheet data** — shown for flights before 2026 when no API data exists
+3. **Manual data** — shown when neither API nor Smartsheet data exists
+
+For a select group of flights created in Flight Check during 2025 (when manual entry wasn't yet available), a mix of Smartsheet + manual data is possible: Smartsheet data shows for 2025 dates, manual entry is available for dates after 2025.
+
+### Filtering Behaviour
+
+Filtering differs by data source:
+
+- **Direct API tables**: filterable to the day. Rows reorganise into monthly buckets but start/end at selected dates regardless of month boundaries.
+- **Smartsheet rows**: filterable by row only. Any rows overlapping the selected date range are shown in full.
+- **Manual rows**: filterable by row. Rows use arbitrary time frames as entered and are shown in full if a filter date falls within the row's range.
+
+### Spend and Pacing
+
+The spend value in the metrics table drives the `Actual Platform Net Spend` field in the flight, which is the base for all `Actual` spend and pacing calculations. Filtering the metrics table does **not** affect this value.
+
+Manual metrics time periods cannot overlap and cannot be set outside of the flight start and end dates. The table may be locked in certain flight states or for certain user roles.
+
+---
+
+## Pacing
+
+Source: Confluence TECH/1777106945 (Steven Offboarding).
+
+### Flight Pacing Formula
+
+```
+(actual spend / total budget) / (days passed in flight / total days in flight)
+```
+
+### Job Pacing
+
+Uses the same formula with these differences:
+- Only includes flights that are **finished or currently running** (not-yet-started flights are excluded)
+- `days passed` = min start date of included flights → current date (or last end date if all flights are done)
+- `total days` = min start date → max end date of included flights
+
+> **Known limitation:** When flights within a job have large variations in duration or budget, the job pacing calculation spreads all budget/spend across the full duration, which can produce misleadingly high or low values. Solutions discussed with Fusion92 include showing average flight pacing or weighted calculations, but none implemented yet.
+
+### Pacing Notifications
+
+- **Out of Range**: sent Tuesday and Thursday mornings for flights pacing above 110% or below 90%
+- **Flight End**: sent every morning to flight creators the day after a flight ends, with the final pacing number
+
+---
+
+## Admin Features
+
+Source: Confluence TECH/1777106945 (Steven Offboarding).
+
+The Admin page allows:
+- **User role management** — adjust roles for existing users
+- **Change log export** — export an audit trail of the last several months of tracked changes
+- **Dropdown management** — add new options to dropdown fields and move between Active and Inactive lists. E.g., the Account field in a job has a set list of accounts. Dependant dropdowns update accordingly.
+
+### User Settings
+
+Accessed through the username menu (top-right), which goes through the Eclipse app using application metadata. Currently only Notification settings are adjustable — users can toggle notification groups or individual notifications. Settings are stored in Cosmos and updated on save.
+
+> **QA note:** In QA, the settings button appears twice — both lead to the same page. Cause unknown.
+
+---
+
+## Known Issues and Gotchas
+
+Source: Confluence TECH/1777106945 (Steven Offboarding).
+
+| Issue | Detail |
+|---|---|
+| **Standalone running** | Flight Check requires Eclipse 2 to be running for shared auth tokens. Both apps must be running for local dev and QA. |
+| **User invite flow** | Known issues with new user password-setting. After a role change, user settings may behave unexpectedly — ask the user to log out and back in. Role changes auto-disable notification settings not available to the new role but never auto-enable anything. |
+| **Cosmos document structure** | Flights and jobs are stored as generic "Application" JSON documents. Schema changes must be carefully managed. The difference between a flight and a job is encoded via an ID linking to a Metadata document for the respective form/table. |
+| **Core API vs Dax API split** | The boundary is informal. All new features should go to the Dax API. General calls (auth, user info, document retrieval) go through Core API because they are generic ALDC logic. Custom logic (exports, calculations, metrics) goes through Dax API. Ideally everything would flow through the Dax API which can call Core internally. |
 
 ---
 

@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, prefect, orchestration, connector-migration]
 aliases: [Prefect]
-sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md, daily/2026-04-17.md, Confluence TECH/1766260745 (Prefect subtree, Brayden Offboarding)]
+sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md, daily/2026-04-17.md, Confluence TECH/1766260745 (Prefect subtree, Brayden Offboarding), TECH/1772126209 (Azure Resources Reference), TECH/1774256132 (Github Repo and Branch Reference)]
 created: 2026-04-16
-updated: 2026-04-17
+updated: 2026-04-27
 ---
 
 # Prefect
@@ -71,6 +71,10 @@ MSYS_NO_PATHCONV=1 PYTHONPATH=. .venv/Scripts/python -m tests.test_connectors.ne
 ```
 
 Note: Must use `MSYS_NO_PATHCONV=1` in Git Bash to prevent MSYS2 path translation converting leading `/` to `C:/Program Files/Git/`.
+
+## Active Branch
+
+Prefect / new connector development lives on the `operation-fiasco` branch of the `connector` repo (not `main`). The `main` branch continues to serve old/current connector agents. Source: Confluence TECH/1774256132 (Github Repo and Branch Reference). See [[repo-integration-map]] § Product-to-Branch Reference.
 
 ## Deployment
 
@@ -152,6 +156,13 @@ The 6 ad platform connector specs in `entities/tools/connectors/` document the l
 - [[trade-desk]] — The Trade Desk My Reports connector
 - [[google-oauth-python]] — shared Google OAuth pattern (used by GA4 + Google Ads)
 - [[connector-token-refresh]] — operational token refresh runbook (Bing 90-day, Facebook 60-day)
+
+## Prefect v3 Documentation Reference
+
+For developers building connectors, two wiki pages provide a comprehensive Prefect v3 reference extracted from the official docs:
+
+- [[prefect-v3-reference]] — Core concepts: flows, tasks, blocks, work pools, deployments, schedules, states. Decorator parameters, deployment schema, state lifecycle.
+- [[prefect-v3-patterns]] — Development patterns: retries (exponential backoff, conditional), caching (policies, expiration, distributed), concurrency (submit/map, task runners), testing (test harness, `.fn()`), logging, secrets management, Docker/ACI deployment. Includes an ALDC connector checklist.
 
 ## See Also
 

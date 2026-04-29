@@ -188,11 +188,15 @@ validate.py --env prod --ticket <ID>
 
 ### 3.2 Sandbox Scope — Why True Ephemeral Isn't Practical
 
-The clean theoretical model is: each feature branch gets a fully isolated environment (Snowflake + PBI workspace) that is auto-provisioned on branch open and auto-destroyed on merge. This is achievable on the Snowflake side. It is **not** achievable on the Power BI side today.
+The clean theoretical model is: each feature branch gets a fully isolated environment (Snowflake + PBI workspace) that is auto-provisioned on branch open and auto-destroyed on merge. This is achievable on the Snowflake side. It is **partially** achievable on the Power BI side — enough to unblock most automation, but not enough for per-ticket workspace clones.
 
-**PBI constraint**: as of 2025, Microsoft's Power BI REST API supports refreshing a semantic model and reading refresh history, but does **not** expose a public API for programmatically creating or deleting workspaces, deploying `.pbix` files at scale, or managing workspace access. All of this requires manual action in the PBI Service browser UI or Power BI Desktop. A future Power BI Embedded / Fabric API may change this, but it's not available in the current ALDC stack.
+**PBI constraint (revised 2026-04-24 after Phase 6 validation)**: Power BI supports three relevant APIs:
+- **XMLA write** (Premium/PPU/Fabric) — full programmatic model metadata changes (tables, columns, relationships, measures, partitions). Available and in use — see [[pbi-xmla-automation]] and the 2026-04-24 GP-208 validation.
+- **REST refresh + parameter update** — trigger refreshes, poll status, rebind data-source parameters. Available and in use.
+- **REST workspace / `.pbix` import** — creating workspaces and importing `.pbix` files programmatically *does* work (2025 API update), but each workspace consumes Premium capacity. We chose one **persistent sandbox workspace** over per-ticket clones for capacity reasons — see [[phase6-pbi-automation-plan]] §2.
+- **Visual layer** — still no public API for pages, visuals, bookmarks, colours. These remain manual PBI Desktop edits.
 
-**Consequence**: even if we auto-provision a Snowflake schema per feature, the PBI validation step remains a human click. "True ephemeral" becomes "ephemeral Snowflake schema + static PBI test workspace," which is exactly the existing TEST_DG1_GEP setup.
+**Consequence (revised 2026-04-24)**: the automatable PBI stack is now: rebind sandbox dataset parameters → apply model metadata via XMLA → trigger refresh → poll → verify rows via DAX. Visual validation is the only remaining manual step for metadata-only changes; visual-bearing changes (`changes.pbi_model.visual_required = true`) still require the PBI Desktop republish path.
 
 ### 3.3 Practical Sandbox: Per-Feature Schema in TEST_DG1_GEP
 
@@ -405,19 +409,24 @@ This file IS the Obsidian ticket page — the wiki is already Obsidian-compatibl
                           → re-enter at feature-update stage with that change description
 ```
 
-### 3.6 The Remaining Manual Half (PBI + Prod Deploy)
+### 3.6 The Remaining Manual Half (Visual Validation Only, as of 2026-04-24)
 
-After `validate.py` passes, two manual steps remain:
+> **Revised 2026-04-24** after Phase 6 shipped. What this section described as "always manual" is now mostly automated for metadata-only changes. The only genuinely manual PBI step for metadata-only tickets is the visual pass/fail gate.
 
-**PBI validation** (always manual):
-1. In Power BI Service → GEP Test Models workspace → find semantic model → **Refresh now**
-2. Wait for refresh to complete (5–30 min)
-3. Click **Explore** → build Marketplace × Sales matrix → check new entity appears with correct currency, no data leakage, stable existing entries
-4. Checklist: [[gep-snowflake-pbi-deployment]] §9c
+**For metadata-only PBI changes (new tables, columns, relationships, measures, format strings):**
 
-This step cannot be automated until a PBI programmatic API is available. The Snowflake validation suite (§3.5) provides enough confidence that the data model is correct; PBI is a final smoke-test, not the primary QA gate.
+1. **Model apply** — `pbi_model_apply.exe` over XMLA, invoked by `/gep-feature` Sub-step 1b. Automated.
+2. **Refresh** — REST `POST /refreshes` + poll. Automated.
+3. **Row-count verification** — DAX `COUNTROWS` via REST `executeQueries`. Automated.
+4. **Visual pass/fail** — Paul opens the workspace, confirms affected visuals render correctly with no regressions. **Manual, by design** — no public API can render visuals.
 
-**Prod deploy**: the same `deploy.py --env prod` + `validate.py --env prod` invocation used for test. Plus the manual PBI Desktop republish (download `.pbix` from repo, set prod params, publish — [[gep-snowflake-pbi-deployment]] §10). The scripted half eliminates the copy-paste-into-Snowsight work; the PBI half remains manual.
+See [[pbi-xmla-automation]] for the full loop and [[pbi-model-apply-wrapper]] for the .NET wrapper.
+
+**For visual-bearing changes** (`changes.pbi_model.visual_required = true` — e.g. new report pages, visual swaps, bookmark changes):
+
+The manual PBI Desktop flow still applies: download `.pbix` from `repos/power_bi`, edit, republish. The `visual_required` flag set at `scoped` stage routes these tickets to the manual path and skips the auto-apply at prod-deployed.
+
+**Prod deploy**: `deploy.py --env prod` + `validate.py --env prod` for Snowflake. For PBI, metadata-only changes auto-apply via XMLA (Tranche D of [[phase6-pbi-automation-plan]], staged for post-dogfood); visual-bearing changes republish manually in PBI Desktop per [[gep-snowflake-pbi-deployment]] §10.
 
 ---
 
@@ -489,7 +498,7 @@ Scope:
 
 | # | Question | Status | Default if unresolved |
 |---|---|---|---|
-| 1 | Where do `deploy.py` and `validate.py` live — `GEP/scripts/`, a shared `scripts/`, or a separate repo? | Open | `GEP/scripts/` for now; refactor to shared when a second client needs it |
+| 1 | Where do `deploy.py` and `validate.py` live — `GEP/scripts/`, a shared `scripts/`, or a separate repo? | **Resolved 2026-04-26** | Separate `aldc-shipyard` repo (formerly `aldc-automation`) — keeps scripts off `clients`/`connector` CI/CD chains; neutral ground for multi-repo orchestration; scalable to other clients. See [[client-workflow-automation]] "Near-term Architecture Goal". |
 | 2 | Deploy manifest: explicit per-ticket YAML list vs. inferred from SQL dependency parse | Open | Explicit list first; dependency inference in Phase 1 follow-on |
 | 3 | Should `deploy.py` auto-drop `WAREHOUSE_TEST_<ticket>` on script exit, or leave it for manual inspection and teardown by a separate command? | Open | Leave it; explicit `--teardown` flag on a separate run |
 | 4 | Validation thresholds (e.g., 95% key join rate) — are these universal or should each client have its own? | Open | Start universal; tune per client as data reveals real distributions |
@@ -506,9 +515,9 @@ Scope:
 
 The following are explicitly excluded from v1 to keep scope bounded:
 
-- **PBI automation**: no programmatic workspace provisioning, refresh triggering, or smoke-test automation. Blocked by PBI API limitations. The `/gep-feature` skill prompts a manual PBI smoke-test after every TEST and PROD deploy before client notification.
-- **PBI health check automation** *(future roadmap — v2)*: after a TEST/PROD deploy, automatically verify the PBI semantic model refreshes without error and key visuals return data. Blocked today by the absence of a public PBI REST API for refresh-status monitoring and visual-level query execution. Track the Microsoft Fabric public roadmap — Fabric APIs may unlock this. When available, integrate as a post-deploy step in `/gep-feature` between `validate.py` and client notification.
-- **Prod deploy automation beyond Snowflake SQL**: the PBI Desktop publish step (download `.pbix`, set params, republish) stays manual.
+- ~~**PBI automation**~~: **resolved 2026-04-24 for metadata-only changes** via Phase 6 — see [[pbi-xmla-automation]], [[phase6-pbi-automation-plan]]. Refresh triggering and model-metadata changes are now scripted through XMLA + REST. Per-ticket workspace provisioning is still deferred (one persistent sandbox workspace instead — capacity cost rationale in §2 of the plan). Visual regression automation remains blocked (no public PBI API for visual rendering).
+- **PBI visual validation automation** *(future roadmap — v2)*: automated render-and-diff of report visuals post-deploy. Still blocked by the absence of a public PBI API for visual-level rendering or query execution against the visual layer. DAX-level query checks (§3.5 Snowflake validation + `executeQueries` DAX smoke-tests) partially substitute. Track the Microsoft Fabric public roadmap.
+- **Prod deploy automation beyond Snowflake SQL**: for metadata-only PBI changes — now automated (Tranche D of [[phase6-pbi-automation-plan]], staged for post-dogfood). For visual-bearing changes (`visual_required = true`), the PBI Desktop publish step (download `.pbix`, set params, republish) stays manual by design.
 - **CI/CD integration**: running `deploy.py` and `validate.py` from GitHub Actions on PR events is architecturally clean but adds complexity (secrets management in CI, GH Actions runner access to Snowflake). Phase 2+ concern.
 - **Multi-client generalization**: the scripts target GEP specifically. Refactoring to handle Fusion92 or other clients is a Phase 2+ concern once the GEP pattern is proven.
 - **Share freshness monitoring**: deferred. Not hard, but it's ops infrastructure rather than feature-delivery. See §2.5 note.

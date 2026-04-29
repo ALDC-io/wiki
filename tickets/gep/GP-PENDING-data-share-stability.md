@@ -4,7 +4,7 @@ aliases: [GP-PENDING-data-share-stability, Data Share Stability, Share Gap Detec
 sources: []
 created: 2026-04-21
 updated: 2026-04-21
-last_incident: 2026-04-21
+last_incident: 2026-04-22
 ---
 
 # GP-PENDING — Prod-to-Test Data Share Stability
@@ -37,6 +37,8 @@ expand a view that references the missing shared object.
 | 2026-04-18 | `SELLERCLOUD_SQL.CURRENT_MAIN_INVENTORY_PANDL` | Re-added manually during GP-208 Phase 1 session |
 | 2026-04-20 | (GP-200 era) `CURRENT_MAIN_PURCHASEITEM`, `CURRENT_SPONSORED_PRODUCTS_ADVERTISED_PRODUCT_REPORT` | Re-added manually (noted in [[GP-207]]) |
 | 2026-04-21 | `AMAZON.CURRENT_REPORT_ALL_ORDERS_UK` | Flapping — dropped mid-day post-deploy; re-added manually. See timeline below. |
+| 2026-04-22 | `AMAZON.CURRENT_REPORT_ALL_ORDERS_UK` | Dropped again (second recurrence in 2 days). Detected via `deploy.py --check-share` during [[GP-208]] sandbox pre-flight. Re-added manually by Paul. |
+| 2026-04-22 | `SUPPLEMENT.CURRENT_FORECAST_CSV` | First observed failure for this object. Detected via `deploy.py --check-share` during [[GP-208]] sandbox pre-flight. Re-added manually by Paul. |
 
 Pattern: every few tickets, a table drops out of the share and is only discovered when a
 sandbox or TEST deploy fails. Manual fix takes 5–15 minutes but is a recurring interrupt.

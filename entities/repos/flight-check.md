@@ -3,7 +3,7 @@ tags: [entity, repo, flight-check, dax-media-app, fusion92, nextjs, react, front
 aliases: [flight-check repo, DAX Media App frontend, Flight Check frontend, dax.fusion92.eclipse.aldc.io]
 sources: [repos/flight-check/README.md, repos/flight-check/package.json, repos/flight-check/Dockerfile, repos/flight-check/compose.yaml, repos/flight-check/compose_test.yaml, repos/flight-check/.env.template, repos/flight-check/authOptions.ts, repos/flight-check/next.config.mjs, repos/flight-check/pages/_app.tsx, repos/flight-check/pages/api/coreAPI.tsx, repos/flight-check/pages/api/auth/[...nextauth].tsx, repos/flight-check/pages/api/dax/calculations.ts, repos/flight-check/pages/api/dax/jobs/[job_id]/index.ts, repos/flight-check/pages/api/dax/jobs/[job_id]/export/index.ts, repos/flight-check/pages/api/dax/jobs/export.ts, repos/flight-check/pages/api/dax/flights/[flight_id].ts, repos/flight-check/pages/api/netsuite/publishers.ts, repos/flight-check/pages/api/netsuite/sync/enabled.ts, repos/flight-check/pages/api/netsuite/sync/syncpo.ts, repos/flight-check/pages/api/dios/audience/process.ts, repos/flight-check/pages/api/dios/projects/[projectName]/audiences.ts, repos/flight-check/pages/api/core/notificationCreate.tsx, repos/flight-check/pages/api/core/notificationUpdate.tsx, repos/flight-check/pages/api/core/sendWelcomeEmail.tsx, repos/flight-check/lib/dax/apiUtils.ts, repos/flight-check/lib/dax/types.ts, repos/flight-check/lib/dax/flights.ts, repos/flight-check/lib/dax/jobs.ts, repos/flight-check/lib/dax/notifications.ts, repos/flight-check/lib/dax/metricsTable.ts, repos/flight-check/lib/dax/exports.ts, repos/flight-check/metadata/README.MD, repos/flight-check/metadata/Job.json, repos/flight-check/metadata/admin.json, repos/flight-check/.github/workflows/PR_checks.yaml, repos/flight-check/.github/workflows/deploy_az_webapp.yaml]
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-23
 ---
 
 # flight-check (repo)
@@ -200,8 +200,8 @@ Source of truth: `.env.template`. Populate as `.env.local` for dev or `compose_t
 
 | Var | Purpose |
 |---|---|
-| `api_url` | Base URL for [[core_api]] (e.g. `https://aldcprodfnapcore1c01.azurewebsites.net/api/`) |
-| `api_token` | Bearer token for core_api — sent as raw `Authorization: <token>` (not `Bearer <token>`; see `coreAPI.tsx:16`) |
+| `api_url` | Base URL for [[core_api]] (e.g. `https://aldcqafnapcore1c01.azurewebsites.net/v1/`). **Must end with `/`.** |
+| `api_token` | Bearer token for core_api — sent as raw `Authorization: <token>` (not `Bearer <token>`; see `coreAPI.tsx:16`). In practice the **shared master bearer** `RkZGRkZGRkYwMDAwOmFsRGM5ODc2IQ==` (base64 of `FFFFFFFF0000:alDc9876!`) works across dev/test/qa/prod. |
 | `STAC_NAME`, `STAC_KEY` | Legacy Azure Storage keys — no references in current source code; likely dead |
 | `NEXTAUTH_URL` | Full URL of this app (e.g. `https://dax.fusion92.eclipse.aldc.io`) — drives cookie prefix (`__Secure-` only on HTTPS) and cookie domain |
 | `NEXTAUTH_SECRET` | JWT signing secret — **must match the parent Eclipse portal** for session cookie interop |
@@ -222,9 +222,9 @@ Source of truth: `.env.template`. Populate as `.env.local` for dev or `compose_t
 2. `nvm use 24` (or install Node 24).
 3. `npm install`
 4. Copy `.env.template` → `.env.local`. Fill values from `vault/credentials.md`. Note: `ECLIPSE_URL` is missing from the template — add it manually.
-5. Set `NEXTAUTH_URL` to a URL on the `*.eclipse.aldc.io` domain (or a local override that shares the cookie domain). If `NEXTAUTH_URL=http://localhost:3100`, the cookie domain becomes `.localhost` — most browsers reject this; session will resolve as null.
+5. Set `NEXTAUTH_URL` to the **parent Eclipse portal's URL** (`http://localhost:3000/` locally, or the real `eclipse.aldc.io` subdomain). The cookie domain `.localhost` is accepted across ports on hostname `localhost`, so the session cookie issued at `:3000` flows to flight-check at `:3100`. Use the same `NEXTAUTH_SECRET` in both apps.
 6. `npm run dev` — serves on **port 3100** (not 3000; that port is reserved for the parent Eclipse dev server).
-7. Visit `http://localhost:3100`. Expect redirect to the parent portal login if no session cookie is present.
+7. Log in at `http://localhost:3000` first; the parent portal will iframe flight-check with the shared cookie attached.
 
 ### Local setup — Option B: Docker Compose against prebuilt image
 
@@ -266,7 +266,7 @@ Pre-commit hook runs `lint-staged`: ESLint fix on `.{js,jsx,ts,tsx}` + Prettier 
 
 - **Dev port is 3100**, not 3000. Don't override — 3000 is used by the parent Eclipse dev server.
 - **Empty NextAuth providers.** You cannot log in from this app directly. The session must come from the parent Eclipse portal. For isolated local dev you'd have to mint a JWT manually and set the cookie.
-- **Cookie domain constraint.** `NEXTAUTH_URL` hostname controls `cookies.sessionToken.options.domain`. Setting `NEXTAUTH_URL=http://localhost:3100` makes the domain `.localhost` — browsers reject this; session resolves as null.
+- **Cookie domain — set `NEXTAUTH_URL` to the parent portal, not this app.** `NEXTAUTH_URL` hostname controls `cookies.sessionToken.options.domain`. The working local pattern is `NEXTAUTH_URL=http://localhost:3000/` (the parent Eclipse URL) with the same `NEXTAUTH_SECRET` in both apps — the cookie issued at `:3000` flows to flight-check at `:3100` because both share hostname `localhost`. Pointing `NEXTAUTH_URL` at flight-check's own origin (`http://localhost:3100`) does *not* make the cookie work in isolation; the cookie has to come from the parent portal's login flow either way. Confirmed against a working `.env.local` (2026-04-23).
 - **Metadata env swap.** `metadata/Job.json` + `job_details.json` + `admin.json` carry Prod-only `account_id` (`0fc00e34`) and Prod-only `app_url` (`dax.fusion92.eclipse.aldc.io`). Running these against QA binds forms to the wrong Fusion account. Per `metadata/README.MD`, swap `account_id` to the QA value and flip `app_url` to the `.com` QA domain before pasting into QA CosmosDB.
 - **NaN in API responses.** `coreAPI.tsx` silently scrubs `NaN` → `null` before parse. If you're debugging "why is X null", check the raw upstream response first.
 - **Hard-coded PostHog key** fires in all environments including local dev. Events from `localhost` land in the production PostHog project. Consider stubbing `PostHogProvider.tsx` for local work.

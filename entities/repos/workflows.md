@@ -2,6 +2,7 @@
 tags: [entity, repo, workflows, fusion92, dax-media-app, azure-functions, netsuite, bing-ads, notifications]
 aliases: [workflows repo, fusion92 workflows, DAX API backend, F92 workflow app, Fusion workflow function app]
 sources:
+  - Confluence TECH/1777106945 (Steven Offboarding)
   - repos/workflows/README.md
   - repos/workflows/fusion_92/F92_workflow_app/function_app.py
   - repos/workflows/fusion_92/F92_workflow_app/global_constants.py
@@ -45,7 +46,7 @@ sources:
   - repos/workflows/fusion_92/F92_notification_retrofitting_app/migrate.py
   - repos/workflows/fusion_92/F92_notification_retrofitting_app/requirements.txt
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-27
 ---
 
 # workflows (repo)
@@ -199,7 +200,7 @@ Typed wrapper around the [[core_api]] HTTP API. Reads `core_api_url` + `core_api
 
 DEPRECATED per docstring. Same env-var source (`core_api_url` + `core_api_token`) but untyped — returns raw `payload` dict-or-list, raises `WorkflowError("Cosmos document query failed", …)` on non-200.
 
-**`NetSuiteAPIClient`** (`workflows/netsuite.py:24–211`)
+**`NetSuiteAPIClient`** (`workflows/netsuite.py:24–211`) — see also § NetSuite Authentication Setup below for the key pair and certificate provisioning guide.
 
 Handles OAuth2 `client_credentials` grant with JWT client assertion (ES256) against `https://{ACCOUNT_ID}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token`. 15-minute JWT expiry (`netsuite.py:89`). Env vars: `NETSUITE_CLIENT_ID`, `NETSUITE_CERTIFICATE_ID`, `NETSUITE_ACCOUNT_ID`, `NETSUITE_PRIVATE_KEY` (PEM). Key methods: `connect()` (exchanges JWT for access token), `call_suiteql(query)` (paginated SuiteQL, 10k-offset cap), `put_purchase_order(po_json, external_id)` (creates/updates PO using external ID, then GETs the Location header to return the saved doc).
 
@@ -207,7 +208,7 @@ Handles OAuth2 `client_credentials` grant with JWT client assertion (ES256) agai
 
 Orchestrates the PO sync. Steps: read flight + parent job from core_api → look up NetSuite vendor (by publisher name), inventory item (by channel → mapped item name), project (by job number), existing PO (if `po_number` present) → build PO body → PUT → write `po_number` and `netsuite_sync="connected"` back to flight. Channel-to-item mapping is hard-coded in `channel_to_inventory_item_name()` (`netsuite.py:528–563`) — **9 channels**: Programmatic (CTV / Digital Audio / Display / OTT / Video / DOOH / Native), Social, Paid Search (SEM / Sponsored Reach / App Store), Direct, Print (OOH), Radio (Terrestrial), TV (Linear). Uses Unicode en dashes (`–`) because NetSuite item names use en dashes, not hyphens. Business rules for the PO sync live on [[dax-media-app]] § NetSuite PO Sync — do not re-author here.
 
-**`MicrosoftAdsTokenRefreshWorkflow`** (`workflows/bing_ads.py:15–229`)
+**`MicrosoftAdsTokenRefreshWorkflow`** (`workflows/bing_ads.py:15–229`) — **if Microsoft Ads data stops showing up in the Fusion warehouse, the first thing to check is whether this workflow is running successfully** (per Steven Offboarding TECH/1777106945).
 
 Hard-coded `CLIENT_ID = "98fe3659-b606-4550-9b16-c5e51a792618"` (the ALDC Microsoft Ads app registration — not a secret, but flagged as a tech-debt hard-code). Reads `MICROSOFT_ADS_CLIENT_SECRET`, `account_id`, `MICROSOFT_ADS_CONNECTION_ID`. Flow: fetch `work/connectionlist` → extract `developer_token` + `refresh_token` → call `oauth_client.request_oauth_tokens_by_refresh_token(refresh_token)` → call `work/connectionupdate` with new refresh token. Runs daily at 07:00 UTC (`function_app.py:275`). Cross-link: [[connector-token-refresh]] documents the manual fallback when this workflow fails.
 
@@ -293,6 +294,38 @@ Three data stores — UUIDs are hard-coded and must exist in each target environ
 | FLIGHT_METRICS | `20ae845b-334b-4dd4-ade7-a28dc87142be` | `["FLIGHT_ID", "DATE"]` | add |
 
 This sync is a leaf of the platform-wide data pipeline — see [[data-pipeline-flow]] for context.
+
+---
+
+### NetSuite Authentication Setup
+
+Source: Confluence TECH/1777106945 (Steven Offboarding — Dax API section).
+
+NetSuite uses RSA key pairs for M2M authentication. Three setup steps:
+
+**1. Create an App Integration** in NetSuite (`Setup > Integration > Manage Integrations > New`):
+- Save the `CLIENT_ID` and `CLIENT_SECRET` to Dashlane immediately — they are hidden after leaving the page
+- Check **Access Rest API Services**
+- Check **Client Credentials (Machine to Machine) Grant**
+- For the current auth flow, only `CLIENT_ID` is needed (but save both)
+
+**2. Generate a key pair:**
+```bash
+openssl req -new -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 728 -out public.pem -keyout private.pem
+```
+Copy both keys to Dashlane.
+
+**3. Create a certificate** in NetSuite (`Setup > Integration > OAuth 2.0 Client Credentials (M2M) Setup`):
+- Assign the ALDC user with the appropriate role (currently Admin; ideally a lower role if Fusion can create one)
+- Select the app integration from step 1
+- Upload the `public.pem` from step 2
+- Copy the generated **Certificate ID** and store in Dashlane — needed for JWT token generation
+
+**NetSuite access:** Use the `Fusion NetSuite Credentials` entry in Dashlane (username + password + authenticator). Choose sandbox or production role after login.
+
+**Sandbox vs. Production:** The Dax API uses env vars to switch between NetSuite environments. In QA these should point to the Sandbox. Testing new features in production is OK if coordinated with Fusion — POs go through Fusion's 2-person approval process before being used.
+
+**Reference links:** [NetSuite Docs](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_162686838198.html) · [Video Tutorial](https://www.youtube.com/watch?v=Ug2ZtI8wCDg)
 
 ---
 

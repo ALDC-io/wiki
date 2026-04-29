@@ -1,0 +1,120 @@
+---
+tags: [entity, project, observability, monitoring, alerting, platform, aldc]
+aliases: [Observability Platform, ALDC Observability, observability-platform, observability project]
+sources:
+  - processes/distributed-workflow/active/observability-platform.md
+  - C:/Users/PaulRussell/.claude/plans/fancy-inventing-aho.md
+created: 2026-04-24
+updated: 2026-04-24
+---
+
+# Observability Platform
+
+ALDC's lightweight, company-wide observability and monitoring platform — a small self-hosted stack that answers, at a glance and with alerting, whether every ALDC application, data job, on-prem and Azure resource, and the support inbox is healthy. Production-only scope for v1; env-parametric by config so Test / QA / Dev plug in later without refactor. Ratified design lives at [[concepts/architecture/observability-architecture|observability-architecture]].
+
+> **Status (2026-04-25): Week 1 complete.** Stack running locally. `check_eclipse_templates.py` live, firing real alerts to `#observability-dev`. Week 2 (Plane 2 + remaining Plane 3 + Snowflake + obs-api) is next session.
+
+## Why this exists
+
+Today the five health questions in the workstream tracker's *Goal* section are answered by manually poking [[Snowflake|Snowsight]], [[Power BI|Power BI Service]], [[Portainer]], the [[Azure|Azure Portal]], and Steven's ad-hoc `query-cosmos-schedules.py` script. There is no unified surface and no alerting. The most painful gaps surfaced as recent incidents:
+
+- [[connector-timeout-outage]] — no queue-depth alerting; the issue was diagnosed only after customers complained.
+- [[GP-PENDING-data-share-stability]] — `PROD_DG1_GEP` share occasionally drops tables silently; detected only when a deploy fails.
+- [[snowflake-data-share-refresh]] § *Failure mode 2* — frozen-share, 42-day undetected staleness on a SellerCloud view.
+- [[powerbi-secret-refresh]] — credential expiries are tracked in an Outlook calendar, not a system.
+
+v1 lands the alerting and the dashboard for these and the rest of the §F2 inventory in the tracker.
+
+## Scope
+
+### In scope (v1)
+
+| Plane | What | Reference |
+|---|---|---|
+| 1 — Synthetic / uptime | HTTP health probes for the 6 ALDC apps + on-prem LAN targets | [[observability-architecture]] § Plane 1 |
+| 2 — Metrics | Prometheus + Pushgateway + Grafana; node-exporter on Docker VMs; Azure Monitor read | [[observability-architecture]] § Plane 2 |
+| 3 — Job-health | Python CLIs for Eclipse templates, Snowflake tasks, PBI refresh, data shares | [[observability-architecture]] § Plane 3 |
+| Read API | `obs-api` FastAPI — thin read-only surface for v2 agents | [[observability-architecture]] § obs-api |
+| Alerter | P1/P2/P3 severity routing, correlation IDs, Slack | [[observability-architecture]] § Alert Topology |
+| Support inbox | Mailjet inbound parse → Function App → Jira REST | [[observability-architecture]] § Support Inbox |
+
+### Out of scope (v1, deferred to v2 or later)
+
+- LLM-based email classification.
+- Distributed tracing wire-up beyond what eclipse_exp already emits.
+- Full log aggregation (Loki / Elastic).
+- Client-visible SLA dashboards (GEP, Fusion92).
+- Non-prod environment monitors (Test / QA / Dev) — `test.yaml` and `qa.yaml` ship stubbed.
+- v2 MCP server / CLI / agent classifier — sketched in [[observability-architecture]] § v2 Seam.
+
+## Owners
+
+| Role | Person |
+|---|---|
+| Workstream lead | Paul Russell (`paul.russell@aldc.io`) |
+| Support-inbox co-owner | Lori Beck (`lori.beck@aldc.io`) |
+| Reference implementation source | Steven (failing-templates script) |
+
+Slack:
+- `#observability-dev` (private) — created 2026-04-24, channel ID `C0AV0PRJ4JF`. Webhook vaulted in `vault/credentials.md` § Observability.
+- `#observability` (public, prod) — **deferred** until v1 prod cutover.
+
+## Repo
+
+`github.com/ALDC-io/observability` — to be created at the start of Week 1 implementation. Local clone path will be `C:/Users/PaulRussell/repos/observability/`. Layout is documented in [[observability-architecture]] § Repo Layout.
+
+## Phasing
+
+Three weeks, dependency-ordered:
+
+1. **Week 1** — Local stack (no Azure spend). Plane 1 + first Plane 3 job. Exit criterion: real alert in `#observability-dev` from a real production failure.
+2. **Week 2** — Plane 2 + remaining Plane 3 jobs + `obs-api` + Snowflake `OBSERVABILITY.JOB_RUNS` + Grafana dashboard. Still local. Exit criterion: 30-day history queryable by correlation ID.
+3. **Week 3** — Azure cutover (B2ms VM in Quality 1 / East US 2), UptimeRobot dead-man switch, Mailjet inbound → Jira. Exit criterion: prod alerts flow to `#observability`, support email creates a Jira ticket.
+
+Full step-by-step procedure for each week is in the workstream tracker's Execution Boot Prompt.
+
+## Decisions
+
+The full Decisions Log is in `processes/distributed-workflow/active/observability-platform.md`. Summary of durable choices ratified for v1:
+
+- Dedicated `observability` repo under `github.com/ALDC-io`; do NOT absorb into [[aldc-scripts]].
+- Self-hosted (Uptime Kuma + Prometheus + Pushgateway + Grafana + Python jobs + `obs-api`).
+- Probe host: local dev → **Linux VM in Quality 1 sub, East US 2** for prod. Three fate-sharing mitigations baked in (UptimeRobot dead-man switch, region+sub separation, Tailscale-in-Azure with dead-man-switch independence).
+- Single `docker-compose.yml` runs identically on laptop and prod VM.
+- Slack: `#observability-dev` for dev, `#observability` for prod (created at cutover). Single Slack app **"ALDC Observability"** holds both webhooks.
+- Alert severities: **P1** page-now, **P2** within-day, **P3** weekly digest. Correlation IDs end-to-end.
+- Plane 3 `check_eclipse_templates.py` seeds from Steven's `query-cosmos-schedules.py` — preserve the two Cosmos queries + status-count state machine verbatim, extend the four §F1 gaps.
+- Support-inbox v1: Mailjet inbound parse → `aldcprodfnapsupport1c01` Azure Function → Jira REST. Keyword router with stable `classify(email) -> Classification` seam for v2 agent swap.
+- v2 agent-queryable interface acknowledged: `obs-api` is the v2 read surface; `OBSERVABILITY.JOB_RUNS` schema is the load-bearing v2 commit; `classify()` is the v2 swap point.
+
+## Querying this project
+
+When working on observability:
+- Read [[observability-architecture]] for the design itself (component diagram, data flows, alert topology, schemas, rejected alternatives).
+- Read the workstream tracker (`processes/distributed-workflow/active/observability-platform.md`) for current phase, blockers, and the Execution Boot Prompt for the next implementation session.
+- Tool pages for [[uptime-kuma]] / [[prometheus]] / [[grafana]] are written when those components are first stood up (Week 1–2).
+- Runbook (`processes/operations/observability-runbook.md`) is written when the platform is live (post-Week 3).
+
+## Cross-cutting impact
+
+This platform changes how a number of existing processes are run. None of those pages are edited by this workstream — instead, write a *Cross-Lane Request* in the tracker if behaviour needs to change:
+
+- [[flight-check]] — today's manual operational validation; v1 automates pieces of it. Future cross-lane work folds the Plane 3 checks into the runbook as the canonical pre-deploy step.
+- [[powerbi-secret-refresh]] — the 30-day expiry countdown becomes a P3 weekly-digest entry rather than an Outlook calendar reminder.
+- [[GP-PENDING-data-share-stability]] — `check_data_share.py` provides Option C (proactive monitoring) of that ticket's recommended approaches; covers detection while Option A (future grants) is the longer-term prevention.
+- [[connector-timeout-outage]] — queue-depth alerting on `aldcprodstacqueue1c01` is in v1 scope.
+- [[executive-snapshot-email]] — sibling weekly-Slack pattern, different VM. Reference only; not consumed.
+
+## See Also
+
+- [[observability-architecture]] — component diagram, data flows, schemas, rejected alternatives.
+- `processes/distributed-workflow/active/observability-platform.md` — workstream tracker, Decisions Log, Session Log, Boot Prompts.
+- [[eclipse_exp]] — reference implementation for app-level health (`/ping`, `/health`, `/metrics`, structlog, `ops/grafana-dashboard.json`).
+- [[flight-check]] — today's manual observability runbook.
+- [[aldc-naming-convention]] — label vocabulary for metrics + Snowflake rows.
+- [[deployment-groups]] — per-env Azure resource inventory; source of truth for what to probe.
+- [[azure-environments]] — subscription model.
+- [[local-network]] — Tailscale + Covenant + NPM context for on-prem probes.
+- [[mailjet]] — inbound-email mechanism for support inbox.
+- [[aldc-scripts]] — sibling weekly-Slack prior art (`send_slack.sh`); status unverified, do not depend on.
+- [[connector-timeout-outage]], [[powerbi-secret-refresh]], [[GP-PENDING-data-share-stability]], [[snowflake-data-share-refresh]] — incidents motivating specific v1 monitors.

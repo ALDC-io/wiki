@@ -1,8 +1,8 @@
 ---
 tags: [index, navigation]
-updated: 2026-04-21
-last_ingest: 2026-04-17
-last_runbook_update: 2026-04-17
+updated: 2026-04-28
+last_ingest: 2026-04-27
+last_runbook_update: 2026-04-24
 ---
 
 # Wiki Index
@@ -42,6 +42,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 
 ### Repos
 - [[clients-repo]] — Primary ALDC repo. Per-client Eclipse configs + Snowflake warehouse SQL. 19 active clients, 150+ connections, 300+ templates, 200+ warehouse views.
+- [[aldc-shipyard]] — Workflow automation infrastructure (deploy/validate scripts, PBI XMLA wrapper, per-client manifests, `setup.py` bootstrap, multi-root workspace). Decoupled from `clients`/`connector` CI/CD. Status: **implementation complete** — Tranche H dogfood shipped 2026-04-26. Renamed from `aldc-automation` 2026-04-29.
 - [[eclipse_exp]] — Next-gen ALDC platform. Contract-first, AI-native, multi-tenant. FastAPI + Next.js 15 + PostgreSQL RLS. 50 connectors, 87 migrations, AI onboarding, strangler-fig migration from [[Eclipse]] + [[core_api]].
 - [[entities/repos/eclipse|eclipse (repo)]] — Legacy Next.js 14 (Pages Router) portal UI. Auth, account management, connection/template config, iframe app hosting. Every API call proxies to [[core_api]]. Being replaced by [[eclipse_exp]]. *(Note: [[Eclipse]] = platform concept page; this = UI repo page.)*
 - [[core_api]] — ALDC core API service. Eclipse backend (control plane). Hosts warehouse-rebuild functions; reads Eclipse configs from CosmosDB.
@@ -59,6 +60,8 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[Eclipse]] — Connector platform. JSON-based connections + templates. Pulls from APIs/DBs, loads into Snowflake.
 - [[Power BI]] — Reporting layer. Consumes report_common views. Refresh cadence per semantic model (GEP Test: scheduled daily; ad-hoc refresh available). See [[Power BI]] § Model Refresh.
 - [[Prefect]] — Workflow orchestration replacing Eclipse. PRE-000 migration: 47 legacy connectors to Prefect flows.
+- [[prefect-v3-reference]] — Prefect v3 core concepts reference (flows, tasks, blocks, work pools, deployments, schedules, states). Extracted from official docs.
+- [[prefect-v3-patterns]] — Prefect v3 development patterns (retries, caching, concurrency, testing, logging, secrets, Docker/ACI deployment). ALDC connector checklist.
 - [[Azure]] — Primary cloud host. Subscriptions = environments. Hosts web apps (Eclipse, core_api), CosmosDB, storage accounts, function apps.
 - [[CosmosDB]] — Azure NoSQL store for Eclipse connection/template configs. `schema` container is a common source of stale-template bugs.
 - [[Cloudflare]] — DNS and domain registration. All hosted sites' CNAMEs live here; most point to Azure web apps.
@@ -77,6 +80,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[dax-media-app]] — DAX Media App (Flight Management web app for Fusion92). Replaces legacy Firebase Flight Check app. Built on Eclipse 2.0. Phases 1–2, PRJ505/538/537, NetSuite PO sync.
 - [[dax-ai]] — DAX AI dashboard suite for Fusion92. Activation Model (client testing), Performance Summary + Financial Reporting (ON HOLD), External Dashboard (deferred).
 - [[cce]] — Claude Code Enhanced. Auto-updating wrapper with hooks, Zeus memory integration, and cross-machine messaging.
+- [[observability-platform]] — Lightweight, company-wide observability & monitoring platform (3-plane self-host: Uptime Kuma + Prom/Grafana + Python job-health + obs-api + Mailjet→Jira). Week 1 complete 2026-04-25.
 - [[factoria]] — Autonomous data engineering platform. Docker runner-split architecture, agent operating model.
 - [[ai-driven-dev-workflow]] — AI-assisted development workflow research. Multiple versions (v2, v3, v3.1). ALDC Agentic Coding Guidelines.
 - [[zeus-memory]] — Zeus Memory (OpenTribe) product. Knowledge integrity platform: cross-source drift detection, auto-sync proposals, human approval. Streamlit prototype built against Lululemon use case.
@@ -95,7 +99,9 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[periodicity]] — ALDC periodicity system: SHARED_DIM_PERIODICITY Snowflake view + DAX SWITCH dispatch pattern for MTD/YTD/YoY/etc. in Power BI models. Sources, validated FBA identities (TOTAL and WAREHOUSE formulas), placeholder columns, and out-of-scope items.
 
 ### Architecture
+- [[observability-architecture]] — v1 design: component diagram, data flows, full alert system (throttle/escalation/recovery/grouping/blast-radius/staleness), OBSERVABILITY.JOB_RUNS schema, fate-sharing mitigations, rejected alternatives. Week 1 complete 2026-04-25.
 - [[data-pipeline-flow]] — End-to-end: Eclipse/connector → Azure Storage → Snowflake source schemas → WAREHOUSE_SOURCE → WAREHOUSE → REPORT_COMMON → (SQL Server) → Power BI.
+- [[flight-check-engineering-guide]] — Consolidated engineering + onboarding guide for the Flight Management app (DAX Media App). Synthesises [[entities/repos/flight-check|flight-check]] + [[workflows]] + [[dax-media-app]] with architecture/data-flow Mermaid diagrams, full integration table, and an end-to-end local dev setup walkthrough.
 - [[repo-integration-map]] — Cross-repo map of ALDC's 12-repo estate: current data flow, dependency graph, strangler-fig overlay (eclipse_exp absorption + Prefect migration), and per-repo integration notes.
 - [[azure-environments]] — Subscription-to-environment mapping (Production 2, TEST 1, Quality 1, Development 2, QA for Prefect, etc.). Deployment-slot flow. Access state.
 - [[deployment-groups]] — Per-environment Azure resource inventory for Canada DGs (Prod2, QA1, Test1, Demo1, Dev DG1–4). Resource names, deployment playbook, credential vault pointers.
@@ -120,6 +126,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[connector-token-refresh]] — OAuth token refresh runbook. Bing Ads 90-day cycle (automated daily + manual PowerShell). Facebook 60-day long-lived token.
 - [[connector-development-standards]] — Canonical ALDC/Prefect connector pattern: typed attribute hierarchy (ConnectorConnectionBase/OptionsBase), migration steps, PartitionScheme/MergeScheme selection, reference implementation.
 - [[sandbox-feature-delivery]] — Per-feature Snowflake schema pattern (`WAREHOUSE_TEST_<TICKET_ID>`) for isolating in-flight warehouse changes.
+- [[pbi-xmla-automation]] — Programmatic PBI metadata changes via XMLA + TOM + Roslyn (`pbi_model_apply.exe`) + Snowflake-schema-derived column generator. The PBI sibling of sandbox-feature-delivery; validated end-to-end on GP-208 2026-04-24.
 - [[adversarial-investigation-skill]] — `/investigate-adversarial` Claude Code skill (Vlad). 6-phase adversarial protocol: ANCHOR → OUTSIDE-IN → FORENSIC EVIDENCE → PROVE/DISPROVE/BLIND-SPOT → QUANTIFY → CONVERGE. For bugs, arch decisions, tech evals, concept validation.
 
 ### Connectors (entities/tools/connectors/)
@@ -139,6 +146,8 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 ### Deployment
 - [[model-deploy-production]] — Production model deployment checklist: connections/templates, Snowflake views, PBI publish, client user access grant.
 - [[gep-snowflake-pbi-deployment]] — End-to-end GEP deployment runbook: 11 phases from data source registration through production deploy. 7 documented pitfalls with exact error messages and fixes.
+- [[pbi-xmla-model-changes]] — PBI model changes via XMLA/Tabular Editor: TE3 CLI hang diagnosis, GEP M expression conventions (PARAM_SHORT_CODE), partition type gotcha, manual workaround.
+- [[pbi-model-apply-wrapper]] — Phase 6 Option A plan: thin .NET 8 console wrapper around TOM that runs TE3-compatible C# scripts via Roslyn. Resolves the TE3 CLI subprocess hang documented in [[pbi-xmla-model-changes]].
 - [[client-release-checklist]] — Generic client-agnostic release checklist (branch gating, Cosmos prod sync, Snowflake update with data-share re-share, Power BI, Jira/Service Request hygiene).
 - [[new-client-setup]] — First-time new-client onboarding runbook (load account/capacity → `setup/azurestorage` → `setup/capacity` → load connections/templates/tasks → create agent → trigger Scan → Snowflake SQL load → Power BI reports → Eclipse groups).
 - [[azure-environment-bootstrap]] — End-to-end bringup of a new ALDC Azure environment: Powershell-driven (`deployment.ps1`, `configuration_api.ps1`, `configuration_portal.ps1`), Function App + Portal deploy, storage/capacity setup, authorization + agent creation. Credentials at `vault/infra-credentials.md`.
@@ -172,10 +181,13 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[processes/distributed-workflow/orchestration-pattern]] — Lanes, write isolation, shared-file protocol, performance techniques.
 - [[processes/distributed-workflow/session-lifecycle]] — Boot → plan-mode → approval → implementation → checkpoint → handoff. Includes the consolidated when-to-enter-plan-mode table.
 - [[processes/distributed-workflow/tracker-template]] — Copy this when starting a new workstream.
+- [[processes/distributed-workflow/active/observability-platform]] — Active workstream tracker (execution phase: company-wide lightweight observability & monitoring platform — app health, data jobs, on-prem + Azure infra, support inbox). Week 1 complete 2026-04-25.
 - [[processes/distributed-workflow/active/confluence-migration]] — Active workstream tracker (session coordinator for the Confluence ingest; mechanics in [[confluence-migration]]).
 - [[processes/distributed-workflow/active/client-workflow-automation]] — Active workstream tracker (design phase: sandboxed feature-delivery flow for GEP-style work).
+- [[processes/distributed-workflow/active/navira/README|navira]] — Active workstream: Navira/GEP integration roadmap. 6 phased workflows (1A–4), 17 interfaces, credentials tracker, 8 dashboard recs, Phase 1A data dictionary, credential validation toolkit. Priority order: Marketing Ad Platforms → Social/Emerging → Agency Sales → Inventory → Competitor → Unstructured.
 - [[processes/distributed-workflow/active/phase6-pbi-automation-plan]] — Phase 6 PBI model automation plan. XMLA-scripted sandbox dataset via Tabular Editor CLI + PBI REST refresh. Resolves "Multi-feature conflict in TEST / PBI" blocker. Level 2 for v1; Deployment Pipelines (Level 3) + TMDL version control deferred to v2.
 - [[processes/distributed-workflow/archive/dv-444-dashboard-rename]] — ✅ Archived 2026-04-21: DV-444 Navira-demo sidebar app rename "Dashboard" → "SKU Profitability". Pure CosmosDB data change on `application_metadata`; no eclipse-2.1 code commits.
+- [[processes/distributed-workflow/active/azure-deploy-automation]] — Active workstream tracker (Phase 1–3: automate CI → stage deploy → Playwright E2E → slot swap for eclipse + core_api). Phased to-do with boot prompts per phase.
 - [[processes/distributed-workflow/archive/repo-documentation]] — ✅ Archived 2026-04-20: Repo documentation workstream complete. 9 ALDC repos documented + cross-repo [[repo-integration-map]]. 10 new wiki pages, 4 memories, 1 potential ticket (`.pbip` migration), 11 stale cross-references flagged.
 
 ---
@@ -214,6 +226,14 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 Handwritten notes inbox. Copy `daily/_template.md` as `daily/YYYY-MM-DD.md`, add notes throughout the day using `## Note` blocks with `type:` tags, then ask Claude to "ingest today's notes."
 
 - [[_template]] — Note format reference and type guide
+
+---
+
+## Stand-Up
+
+End-of-day summaries for next-morning team standup. Generated by scanning `log.md`, updated wiki pages, and session context. Three sections: What I Did Today, Blockers, Plan for Tomorrow.
+
+- [[standup/2026-04-28]] — Navira roadmap cross-reference, Phase 0 E2E proven, UK PPC auth blocker
 
 ---
 

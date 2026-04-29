@@ -39,6 +39,7 @@ wiki/
 │   ├── gep/
 │   └── fusion92/
 ├── daily/                 # Daily notes, POAs
+├── standup/               # Generated stand-up notes (end-of-day summaries)
 └── assets/                # Images
 ```
 
@@ -179,6 +180,38 @@ For large ingests (hundreds of pages — e.g., Confluence migration, full Obsidi
 3. **Main agent** merges proposals, resolves overlaps where two subagents touch the same page, applies writes sequentially, updates `index.md` once with the union of entries, and appends a single `log.md` row for the whole batch.
 
 **Why:** Subagents editing shared files (`index.md`, `log.md`, high-traffic entity pages) would produce lost updates. Centralizing writes eliminates that class of bug. Reading and proposing is the expensive part and parallelizes cleanly — structured proposals also force subagents to surface decisions (page name, section placement, wikilink targets) where the main agent can spot-check them before committing.
+
+### 5. Stand-Up (End of Day)
+
+At the end of a work session (or when Paul asks for a standup), generate a daily stand-up note at `standup/YYYY-MM-DD.md`:
+
+1. **Scan `log.md`** for all entries dated today
+2. **Scan wiki pages** with `updated:` date of today (check frontmatter)
+3. **Review conversation context** for work done in the current session
+4. **Generate** the standup note with three sections:
+
+```markdown
+---
+tags: [standup, daily]
+date: YYYY-MM-DD
+---
+
+# Stand-Up — YYYY-MM-DD
+
+## What I Did Today
+<!-- Group by workstream/ticket. Each item: one sentence of what was done + outcome. -->
+
+## Blockers
+<!-- Anything blocked on someone else. Include who and what's needed. -->
+
+## Plan for Tomorrow
+<!-- 2-4 bullet points. Concrete next actions, not vague goals. -->
+```
+
+5. **If a standup already exists for today**, update it rather than creating a duplicate
+6. **Do not append to log.md** for standup generation (it's a report, not an operation)
+
+The standup is Paul's cheat sheet for the next morning's team standup. Keep it scannable — bullet points, not paragraphs. Prioritize "what changed" and "what's blocked" over process details.
 
 ## Rules
 

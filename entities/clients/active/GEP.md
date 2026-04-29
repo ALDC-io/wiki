@@ -3,7 +3,7 @@ tags: [entity, client, gep, navira, e-commerce]
 aliases: [GEP, Navira, Global E-commerce Partners]
 sources: [clients repo GEP/ directory, CGEP/1233092873, CGEP/1233289293]
 created: 2026-04-16
-updated: 2026-04-18
+updated: 2026-04-27
 ---
 
 # GEP (Navira)
@@ -213,8 +213,15 @@ Attendees: Johanna, Lindsey, Shannon, Christina Taylor, Cory Hanna, Sean, Karen.
 - Vendor invoices (e.g. Google) cover multiple clients and campaign lines
 - Next steps: Christina + Sean to align on platform-level detail; Flight Check ID + NetSuite media project as line-level inputs
 
+## Navira Integration Roadmap
+
+A comprehensive integration roadmap covering 17 new data interfaces across 6 phases is tracked at [[processes/distributed-workflow/active/navira/README|Navira Workflow Hub]]. Source: 5 interactive HTML documents in `eclipse_exp/frontend/public/navira/`. Includes credentials tracker, 8 dashboard recommendations, and Phase 1A data dictionary.
+
+Current production interfaces: Sellercloud, Amazon US, Shopify, Corporate Data (7 tables). Amazon UK in progress. New interfaces span Marketing (Google Ads, Facebook, TikTok, Email, Amazon PPC UK/CA), Agency Sales (multi-tenant Seller Central), Inventory, Competitor (SmartScout), and Unstructured Data.
+
 ## See Also
 
+- [[processes/distributed-workflow/active/navira/README|Navira Workflow Hub]] — active integration roadmap + phase workflows
 - [[clients-repo]] — repo structure and conventions
 - [[star-schema-convention]] — ALDC warehouse naming
 - [[data-pipeline-flow]] — Eclipse → Snowflake → PBI pipeline

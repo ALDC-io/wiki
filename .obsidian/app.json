@@ -3,5 +3,6 @@
   "newLinkFormat": "shortest",
   "attachmentFolderPath": "assets",
   "showFrontmatter": true,
-  "strictLineBreaks": false
+  "strictLineBreaks": false,
+  "showUnsupportedFiles": true
 }

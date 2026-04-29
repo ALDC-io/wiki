@@ -1,9 +1,9 @@
 ---
 tags: [entity, repo, connector, aldc, prefect, data-plane]
 aliases: [connector, connector-repo, Eclipse connector runtime]
-sources: [daily/2026-04-17.md, entities/tools/prefect.md, entities/tools/eclipse.md, ~/.claude/CLAUDE.md, Confluence TECH/1769177102 (Old Connectors, Brayden Offboarding)]
+sources: [daily/2026-04-17.md, entities/tools/prefect.md, entities/tools/eclipse.md, ~/.claude/CLAUDE.md, Confluence TECH/1769177102 (Old Connectors v3, Brayden Offboarding), TECH/1772421124 (On-Prem Servers)]
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-04-27
 ---
 
 # connector
@@ -40,6 +40,8 @@ From the Prefect migration notes (see [[Prefect]] for full detail):
 | Prefect bootstrap | `main.py → DeploymentRunner.serve_local()` | Registers block schemas, serves deployments from `connector/accounts/<account>/deployments/` |
 | Reference implementation | `connector/accounts/ALDC_QA/deployments/exchange_rates.py` | Senior dev example of target Prefect pattern |
 | Output handling | `BaseConnector.add_response()` | Parquet write, Azure blob upload, Snowflake staging / merge |
+| Test framework | `tests/conftest.py` + `tests/test_*.py` | Session-scoped `prefect_test_harness`, mocked Block/Azure/Snowflake fixtures. `pytest tests/` required on every PR |
+| CI quality gate | `.github/workflows/quality-gate.yml` | Semgrep · TruffleHog · pytest · PyTestArch · Claude Opus review. All checks must be green before merge to `operation-fiasco` |
 
 ## Docker deployment
 
@@ -87,6 +89,37 @@ Work items sit across **multiple** Azure Storage accounts named `aldcprodstac1c<
 5. Connector Agents poll `/work/pick` via the `aldcprodfnapcore1c03` [[core_api]] instance → pick work items → execute
 
 This is the architecture the [[Prefect]] migration is replacing. See [[connector-timeout-outage]] for the `/work/pick` incident that exposed the global-queue-sweep scaling limit.
+
+### Deploying Connector Agents (legacy)
+
+Source: Confluence TECH/1769177102 (Old Connectors v3, updated 2026-04-22).
+
+1. SSH into the workstation-agent VM (`wks-agent`, IP `192.168.31.210`). See [[local-network]] § Virtual Machine Reference.
+2. Navigate to `docker_build/agent-template-env`
+3. `ls` to find the config file for the target environment → `cp config-prod-kamloops.json config.json`
+4. Run `sudo ./build.sh` — follow prompts, push to GHCR when asked
+5. SSH into the target Docker host (Kamloops or Coquitlam)
+6. Navigate to the directory with the build scripts (location varies by host)
+7. Run `sudo ./run.sh` — follow prompts
+8. Verify the new agent is running, then stop the old agent
+
+See [[connector-docker-deployment]] for the full Docker runbook.
+
+### Sellercloud VPN Agent
+
+Source: Confluence TECH/1769177102 (Old Connectors v3, updated 2026-04-22).
+
+A special connector agent runs on the **Kamloops host only** for GEP's Sellercloud SQL connection. It is a separate agent because it must connect to Sellercloud's VPN to reach their SQL database.
+
+**Building the VPN agent image:**
+- When running `build.sh`, enter agent ID `gep-sellercloudvpn` (instead of the default). This creates a separate image with a different agent ID so it only picks up Sellercloud SQL templates.
+
+**Deploying the VPN agent:**
+1. Run `./run.sh` as normal
+2. When prompted for **Script Option**, enter `openvpn`
+3. When prompted for environment variables, enter the VPN credentials from Dashlane → Secrets → "GEP Sellercloud SQL VPN" one at a time (e.g., `OVPN_USERNAME` → `GEP_Chris.Verde`)
+4. After all variables, type `exit` to start the container
+5. Check container logs — look for a VPN connection success message near the top
 
 ## Development Standards
 

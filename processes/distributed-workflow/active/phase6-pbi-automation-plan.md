@@ -3,7 +3,7 @@ tags: [distributed-workflow, active, client-workflow-automation, implementation-
 aliases: [Phase 6 PBI Automation Plan, Phase 6 Plan]
 sources: []
 created: 2026-04-21
-updated: 2026-04-21 (revised after Paul's Q&A — auth path changed from SPN to user OAuth, seed scripted)
+updated: 2026-04-26 (added §6.9 Tranche G — first full end-to-end dogfood, sandbox complete)
 ---
 
 # Phase 6 — Power BI Model Automation Plan
@@ -454,9 +454,13 @@ Authentication: acquire bearer token via §I. Pass via `Authorization: Bearer <t
 
 On any HTTP error: print response body verbatim; follow §B-style fallback (print warning, save failing payload to `_mcp_queued/`, ask whether to continue). PBI REST failures should NOT block sandbox validation silently — they are different from Jira MCP failures because they are on the critical path, not a side channel. Distinguish the two: §B for Jira (non-blocking), §H for PBI (blocks Sub-step 1b).
 
-**§I — Azure CLI bearer token helper (shared by §G and §H)**
+**§I — Azure CLI bearer token helper (§H only — NOT for XMLA/§G)**
 
-One-shot: returns a PBI access token. Caches in-memory for the session.
+> **REVISED 2026-04-23** — §I now applies to **REST calls (§H) only**. XMLA calls (§G /
+> `pbi_model_apply`) use MSAL device-code auth managed internally by the wrapper. Do NOT
+> pass a §I token to §G. See [[pbi-model-apply-wrapper]] §3.2b for the MSAL pattern.
+
+One-shot: returns a PBI access token for REST. Caches in-memory for the session.
 
 1. Run `az account get-access-token --resource https://analysis.windows.net/powerbi/api --query accessToken -o tsv` via Bash. Capture stdout.
 2. On non-zero exit or empty stdout (not logged in):
@@ -464,9 +468,9 @@ One-shot: returns a PBI access token. Caches in-memory for the session.
    ⚠️  Not logged in to Azure CLI. Run `az login` in a terminal, then retry.
    (retry / abort)
    ```
-   On `retry`: re-run. On `abort`: raise — callers (§G, §H) follow their respective failure paths.
+   On `retry`: re-run. On `abort`: raise — callers (§H) follow their respective failure paths.
 3. On success: cache the token in session memory, return it.
-4. Callers detect 401 and call `invalidate_token()` + re-invoke §I once before giving up.
+4. On 401 from §H: call `invalidate_token()` + re-invoke §I once before giving up.
 
 Never log or echo the token value. When displaying commands to Paul, always substitute the literal string `<bearer>` for the token in the printed command.
 
@@ -598,7 +602,13 @@ Tranche A or B.
 
 ### 5a. Revised auth plan (replaces prior SPN-based approach)
 
-User OAuth via Azure CLI bearer token is the v1 auth path:
+> **CORRECTION 2026-04-23** — Azure CLI bearer token works for REST but **not for XMLA**.
+> Live repro confirmed: `az account get-access-token` returns `appid=04b07795-...` (Azure CLI),
+> which the PBI XMLA endpoint rejects. XMLA uses MSAL device-code with PBI public client ID
+> `ea0616ba-638b-4df5-95b9-636659ae5121` — managed internally by `pbi_model_apply`. The split
+> is: **§H (REST) → `az` bearer via §I; §G (XMLA) → MSAL inside wrapper, no §I call.**
+
+User OAuth via Azure CLI bearer token is the v1 auth path **for REST**:
 
 ```
 # One-time (per machine):
@@ -730,6 +740,8 @@ B.5. Add rules 9–11 to `## Rules`.
 
 ### 6.3 Tranche C — Sub-step 1b and TEST tail (main behaviour change)
 
+> **Status (2026-04-22): ✅ COMPLETE.** All four items implemented in `.claude/commands/gep-feature.md` (+153 lines). Dry-run ticket: GP-208 (Inventory Feed Intake & Modelling, Phase 1 current-snapshot). Start from scoping with `/gep-feature GP-208`.
+
 C.1. Extend the `scoped` stage PBI question to capture `visual_required` (§3.9).
 C.2. Insert Sub-step 1b into the `implementing` stage (§3.3).
 C.3. Extend Sub-step 2 TEST deploy with the TE CLI apply + refresh tail (§3.5).
@@ -753,6 +765,240 @@ E.5. Update `workflow-automation.md` §2.4 and §3.6 to reflect that the PBI man
 E.6. Close out the "Multi-feature conflict in TEST / PBI" blocker with a link to `pbi-xmla-automation.md`.
 
 ---
+
+## 6.6 Tranche A+ — TOM schema-discovery gap (added 2026-04-24 after GP-208 validation run)
+
+Discovered during the GP-208 wrapper validation session that TOM does **not** auto-discover
+column schema from M queries. `Model.AddTable()` + M partition + `SaveChanges()` produces
+tables with zero user columns; REST refresh reports `Completed` but tables remain empty and
+DAX queries fail with `AnalysisServicesErrorCode 3241804132`. This is an architectural
+constraint of TOM, not a wrapper bug — only Power BI Desktop's Power Query editor does
+M-query schema inference.
+
+Full technical write-up: [[pbi-xmla-model-changes]] § TOM Schema-Discovery Constraint.
+Session decision log: [[client-workflow-automation]] 2026-04-24 entry.
+
+**Added deliverable — `GEP/scripts/pbi_generate_columns.py` (Option B):**
+
+- Takes `--env <sandbox|test|prod>` and `--tables <t1,t2,...>`.
+- Queries Snowflake `INFORMATION_SCHEMA.COLUMNS` for each table in the deployed sandbox DB
+  (`SANDBOX_DG1_GEP_<ticket>.WAREHOUSE.<TABLE>` for sandbox).
+- Maps Snowflake types to TOM `DataType` values (table in the wiki page above).
+- Emits a C# fragment with `new DataColumn { Name, SourceColumn, DataType }` entries ready
+  to paste into `pbi_model_script.cs` immediately before `Model.AddTable(...)`.
+- Reusable across every PBI-touching ticket that adds or replaces a table.
+
+Rejected alternatives (documented for future reference):
+- **Option A — hand-code columns per script.** Fast to ship but puts manual schema authoring
+  on every future ticket.
+- **Option C — extend wrapper with `--infer-columns` flag.** Adds Snowflake.Data .NET
+  dependency + ODBC creds management to the wrapper; deferred. Revisit if Option B proves
+  awkward in practice.
+
+Scope: helper script (~100–200 LOC Python), ships in the same branch as the wrapper fix.
+GP-208 sandbox validation is the acceptance test.
+
+## 6.7 Wrapper fix — `Mode=ModeType.Import` (applied 2026-04-24)
+
+Separate from the schema-discovery constraint, `TabularExtensions.AddTable()` originally
+created partitions with `ModeType.Default`. Confirmed via `_diag_partitions.cs` that working
+GEP model tables use `ModeType.Import` explicitly. Partitions with `Default` mode
+refresh-Complete with no visible effect. Fixed in `pbi_model_apply/TabularExtensions.cs`
+(committed 2026-04-24).
+
+## 6.8 Tranche F — Sandbox hardening (added 2026-04-25)
+
+> **Status (2026-04-25): ✅ COMPLETE.** `/gep-feature GP-208 force` ran Sub-step 1b
+> end-to-end through the skill with zero manual rescue. F.1 validation links emit at
+> §G exit-0 and §H poll_refresh Completed. One new gotcha found and fixed in-session:
+> TOM does not cascade-delete relationships on `Model.Tables.Remove()` — pre-drop
+> relationship cleanup added to `pbi_model_script.cs`. Four hardening items shipped to
+> the skill (dry-run compile check, script hash mismatch warning, poll timeout branch,
+> sandbox null-guard). Sandbox only — TEST tail and Tranche D explicitly deferred.
+
+### Goal
+
+Make `/gep-feature GP-208 force` produce a populated sandbox model + a clickable
+validation link with zero manual rescue. The 2026-04-24 acceptance test proved the
+primitives work; Tranche F proves the *skill* works.
+
+### Why this is a separate tranche
+
+Skill changes that landed after the 2026-04-24 run but have not been exercised on
+GP-208 (or any ticket):
+
+- §G rewritten to call `pbi_model_apply.exe` directly. MSAL device-code is now
+  managed *inside* the wrapper; the skill no longer constructs or sees a token.
+  Discrete exit-code handling (0/2/4/5/...) replaces the old generic non-zero path.
+- MODEL SCAN block added before PRE-FLIGHT — calls `pbi_scan.py`, presents
+  Options A/B/C (update existing hidden / drop & replace / add alongside), records
+  `scan_option_chosen` + `scan_completed_at`.
+- GENERATE COLUMN DEFINITIONS block added — calls `pbi_generate_columns.py` and
+  documents the `#load` + `AddColumns_T(t)` wiring.
+- `warn_only: true` validate-manifest support shipped in `validate.py`; new
+  scoping Group C edge-case question; new "Validate manifest review" sub-block in
+  `implementing` that classifies failures (genuine bug / too strict / documented
+  expected).
+- New artifact fields: `scan_completed_at`, `scan_option_chosen`.
+
+None of these have been driven through end-to-end on a real ticket. Tranche F is
+that dogfood.
+
+### F.1 — Sandbox validation link emission
+
+Touchpoints in `.claude/commands/gep-feature.md`:
+
+- §G success branch (after `pbi_model_apply.exe` exits 0): print the dataset
+  details URL.
+- §H `poll_refresh` Completed branch: print the workspace + dataset URLs and the
+  per-table refresh status from the response body.
+- Existing MANUAL VISUAL CHECK block in Sub-step 1b: replace the bare "Open GEP
+  Sandbox Models workspace in Power BI Service" text with the constructed URL.
+
+URL format:
+
+- Workspace: `https://app.powerbi.com/groups/<workspace_id>/list`
+- Dataset:   `https://app.powerbi.com/groups/<workspace_id>/datasets/<dataset_id>/details`
+
+IDs come from `pbi_config.workspaces.sandbox.id` and `dataset_id`. Skill should
+fail loudly if either is null (sandbox seed has not run).
+
+**Scope:** sandbox only. TEST and PROD link emission lands when those tranches are
+worked. Building it now risks bit-rot before either flow is exercised.
+
+### F.2 — MODEL SCAN decision for the dogfood
+
+`pbi_scan.py`'s TE3 path is currently `if False`-gated due to a TE3 subprocess
+hang under bash/PowerShell. `pbi_config.yaml` now points `tabular_editor_path` at
+TE3, but the hang fix has not been verified.
+
+Two options:
+
+- **A. Skip the scan for GP-208's dogfood.** The skill already falls back to
+  wiki/notes context and prints a clean "Model scan unavailable" message. GP-208
+  doesn't need a fresh scan — its current sandbox state is known.
+- **B. Diagnose the TE3 hang now.** Try `start /B`, headless mode, `cmd.exe /c`,
+  or a TOM-based `pbi_model_scan` script invoked through `pbi_model_apply.exe`.
+
+**Decision: A.** Tranche F is about hardening the *flow*, not extending coverage.
+File the TE3 hang fix (or TOM-based replacement) as a separate follow-up filed in
+`potential-tickets`.
+
+### F.3 — Reset GP-208 sandbox state
+
+The 2026-04-24 run left the two GP-208 tables populated. To prove a cold-start
+flow, reset before re-running:
+
+- **Easiest:** re-run the existing `pbi_model_script.cs` — drop-if-exists guards
+  make it idempotent. The drop+recreate cycle is the cold path, just compressed.
+- **Cleaner:** ad-hoc one-liner script that removes both tables, then run the full
+  per-ticket script. Ensures the recreate is observed, not just the drop-of-stale.
+
+Either way the script must end with `Model.SaveChanges()` for the changes to land.
+
+### F.4 — End-to-end skill run on GP-208
+
+`/gep-feature GP-208 force` (the `force` arg lets us re-enter Sub-step 1b despite
+`sandbox_validated: true` — see the existing gate at line ~684 of the skill).
+
+Confirm in order:
+
+1. MODEL SCAN gracefully skips per F.2.
+2. PRE-FLIGHT finds the existing `pbi_model_script.cs`.
+3. GENERATE COLUMN DEFINITIONS recognises columns are wired and skips (or reruns
+   idempotently and produces an identical fragment).
+4. §H `update_parameters` rebinds sandbox to `SANDBOX_DG1_GEP_GP208`.
+5. §G applies via `pbi_model_apply.exe` (MSAL device-code on first run; cached
+   thereafter).
+6. §H `refresh_dataset` + `poll_refresh` → Completed.
+7. F.1 link is printed; Paul clicks and validates.
+8. Artifact updated with new `sandbox_applied_at`, `sandbox_refresh_id`,
+   `script_hash`.
+
+### F.5 — Capture every gap, fix in-session
+
+Likely gaps and how to handle them:
+
+- **MSAL token cache stale** → wrapper exits 2 → §G's `--clear-token-cache`
+  prompt fires (untested code path).
+- **`pbi_model_apply.exe` not built** → §G's "build it once with `dotnet build -c
+  Release`" prompt fires (also untested).
+- **§H 20-min poll timeout** → currently aborts; may need a "keep polling?"
+  branch.
+- **Skill prompts that interrupt the flow needlessly** → tighten or auto-confirm
+  where safe (per [[feedback_workflow_design_principles]]: "structured choices
+  over free-form").
+
+**Discipline rule:** every gap goes into the 2026-04-25 session log entry as it
+surfaces, not reconstructed afterward. If a gap requires a code change, fix it,
+re-run from F.3, and log the diff. Repeat until a cold run is fully clean.
+
+### F.6 — Wiki consolidation (sandbox-only)
+
+After F.4–F.5 produce a stable cold-run flow:
+
+- This file (`phase6-pbi-automation-plan.md`) — flip §6.8's status note to ✅
+  COMPLETE with a date and a one-line summary of the gaps closed.
+- `concepts/patterns/pbi-xmla-automation.md` — add a "Validation links"
+  sub-section to "The Pattern"; annotate "Required Pieces" §4 step 8 with link
+  emission. Sandbox only — TEST/PROD links land when those tranches are worked.
+- `processes/distributed-workflow/active/client-workflow-automation.md` — fill in
+  the 2026-04-25 session log entry's Execution log with what shipped, every gap
+  found in F.5, and the resolution.
+- `processes/deployment/pbi-xmla-model-changes.md` — append any new gotchas
+  surfaced in F.5 to the existing reference page.
+
+### Done criteria
+
+- `/gep-feature GP-208 force` runs Sub-step 1b end-to-end with zero manual rescue.
+- The validation link is printed and works.
+- GP-208 artifact has fresh `sandbox_applied_at` + `sandbox_refresh_id` timestamps
+  from a skill-driven run (not a manual one).
+- Every gap surfaced during F.4/F.5 is either fixed or filed as a follow-up.
+- Wiki updates from F.6 are committed (or staged for Paul to commit).
+
+### Explicitly deferred
+
+- **Sub-step 2 TEST promotion dogfood.** Skill code exists but `workspaces.test.*`
+  in `pbi_config.yaml` is null. Filling it + dogfooding TEST is the next tranche
+  after F.
+- **Tranche D — `prod-deployed` conditional auto-apply** (§6.4 / §3.7). Plan §6.4
+  already requires Tranche C dogfood on a second ticket beyond GP-208 first.
+- **`pbi_scan.py` TE3 hang fix or TOM-based replacement.** Filed in
+  `potential-tickets`; do not pull into Tranche F.
+- **Naming-convention reconciliation** on GP-208 tables (Title Case vs
+  SCREAMING_SNAKE). Per the artifact's 2026-04-23 decision, deferred to the next
+  inventory ticket.
+
+---
+
+## 6.9 Tranche G — First full end-to-end dogfood: scoping → sandbox → Sub-step 1b (2026-04-26)
+
+**Status: ✅ SANDBOX COMPLETE. TEST deploy pending (next session).**
+
+**Goal:** dogfood the complete `/gep-feature GP-208` flow from scoping through sandbox (Snowflake + PBI). First time the skill drives a full ticket lifecycle from a deleted artifact.
+
+**What shipped:**
+- Fast-path scoping confirmed in one "yes" — wiki as source, no re-asking.
+- `extract_inventory_current.sql` completed: velocity + unsellable columns added and staged.
+- `pbi_model_script.cs` hardened with legacy Snowflake-named table cleanup guards (section 0). Correctly drops old SCREAMING_SNAKE tables then adds "Inventory Current".
+- Snowflake sandbox: 9/9 ✅, 18,992 rows. Sandbox torn down.
+- PBI sandbox: `Inventory Current` (Title Case, EXTRACT excluded) applied + refreshed. 18,992 rows confirmed in Explore Data ✅.
+
+**Gaps captured (→ full detail in [[client-workflow-automation]] §Tranche G):**
+- G.1a: Branch switch in Claude Code bash removed deploy.py from shared working tree.
+- G.1b: deploy.py git ref shows automation branch HEAD, not ticket branch.
+- G.1c: Share health check "continue" was wrong — DAG deps block even for non-GP-208 objects. Skill needs smarter blocking logic.
+- G.1d: Script hash mismatch fired correctly per Rule 9. Working as intended.
+- G.1e: workflow-automation branch had stale pbi_model_script.cs; wrong script applied first. Root cause: script not ported to automation branch.
+
+**Next session:**
+1. Commit all GP-208 staged changes.
+2. Run `/gep-feature GP-208` fresh → sandbox → TEST → PBI apply to GEP Test Models.
+3. `test_applied_at` + `test_refresh_id` set for first time.
+4. Evaluate Tranche D if TEST is clean.
+
+**Architecture gate:** Move workflow automation to a permanent branch-agnostic location before next dogfood. See [[client-workflow-automation]] "Near-term Architecture Goal".
 
 ## 7. What this plan does NOT change
 

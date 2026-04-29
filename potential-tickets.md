@@ -3,7 +3,7 @@ tags: [potential-tickets, improvements, pre-jira, index]
 aliases: [Potential Tickets, Improvement Tickets, Pre-Jira Catalog]
 sources: []
 created: 2026-04-21
-updated: 2026-04-21
+updated: 2026-04-29
 ---
 
 # Potential Tickets
@@ -38,6 +38,16 @@ When you run into a gap or bug that isn't in scope for your current work:
 ---
 
 ## Open
+
+### CI gate: require `pytest tests/` to pass on connector PRs — connector repo
+
+- **Surfaced:** `2026-04-29` during [[phase-0-prefect-foundation]] Sprint 0B (pytest framework built, reliability gap identified)
+- **Category:** improvement / tech-debt
+- **Priority:** medium
+- **Description:** The pytest framework (`tests/conftest.py` + 15-test `test_exchange_rates.py` + `conftest_template.py`) exists and passes, but nothing enforces that tests are written or green before a connector PR merges. A developer can ship a new connector with no tests and the pipeline will still accept it.
+- **Root cause / evidence:** No GitHub Actions workflow exists in the `connector` repo for running pytest. The `operation-fiasco` / `feature/paulrussell/phase-0/prefect-foundation` branch has no `.github/workflows/` directory. The test framework was intentionally designed to run without a Prefect server or real credentials (env-var pre-seeding + mocks), so a CI step is now practical.
+- **Proposed fix:** Add `.github/workflows/test.yml` to the connector repo that: (1) runs on PR to `operation-fiasco` / `main`; (2) sets the four required env vars (`CORE_URL`, `CORE_API_TOKEN`, `ENVIRONMENT_LEVEL`, `ENVIRONMENT_DEPLOYMENT_GROUP`) as CI secrets or hardcoded test values; (3) installs deps from `requirements.txt`; (4) runs `.venv/Scripts/python -m pytest tests/ -v`. Gate merges on this check passing. Pairs with G6 scaffold (which would auto-generate a stub test file per connector, ensuring the gate has something to catch).
+- **Estimated effort:** S
 
 ### `_BASE_ACT_SALE_RET` DAX measure references a missing column — GEP PBI
 
@@ -115,9 +125,29 @@ When you run into a gap or bug that isn't in scope for your current work:
 - **Category:** improvement / ops
 - **Priority:** medium
 - **Description:** The `PROD_DG1_GEP` outbound share silently loses tables — either when Eclipse refreshes a table via `CREATE OR REPLACE TABLE` (drops object-level grant) or when a new table is added to PROD but never added to the share. Gaps only surface at runtime when the task chain fails, not at deploy time.
-- **Root cause / evidence:** Three known incidents in 6 weeks (CURRENT_MAIN_INVENTORY_PANDL, CURRENT_MAIN_PURCHASEITEM, CURRENT_REPORT_ALL_ORDERS_UK). Confirmed object exists in PROD but is absent from share. See [[GP-PENDING-data-share-stability]] for full research with four solution options.
+- **Root cause / evidence:** Five known incidents across 6 weeks. `CURRENT_REPORT_ALL_ORDERS_UK` has now dropped from the share on at least two separate occasions (2026-04-21 and again 2026-04-22), confirming this is a recurring pattern and not a one-off. `CURRENT_FORECAST_CSV` (`SUPPLEMENT` schema) newly missing as of 2026-04-22 — first time this object has appeared in a share health check failure. Both discovered via `deploy.py --check-share` during [[GP-208]] sandbox pre-flight. Re-added manually by Paul. See [[GP-PENDING-data-share-stability]] for full research with four solution options.
 - **Proposed fix:** Option A — replace per-table share grants with schema-level `FUTURE` grants (ACCOUNTADMIN required, one-time fix, prevents recurrence). Fall back to Option B — `deploy.py --check-share` scan (now implemented) as detection layer. Full option analysis in [[GP-PENDING-data-share-stability]].
 - **Estimated effort:** S (Option A — one SQL statement per schema if ACCOUNTADMIN access confirmed)
+
+### pbi_scan.py requires TE3 — TE2 hangs headless — workflow automation
+
+- **Surfaced:** `2026-04-22` during [[GP-208]] Sub-step 1b PBI model scan attempt
+- **Category:** bug / improvement
+- **Priority:** medium
+- **Description:** `pbi_scan.py` and `pbi_model_scan.cs` use the `/x <connection_string>` CLI flag which is Tabular Editor 3 (TE3) only. The free TE2 binary configured in `pbi_config.yaml` does not support this flag and hangs silently waiting for a GUI dialog when invoked headlessly. The workspace is on dedicated capacity (XMLA is available), so the fix is upgrading to TE3, not changing the approach.
+- **Root cause / evidence:** `tabular_editor_path` in `GEP/scripts/pbi_config.yaml` points to `C:\Program Files (x86)\Tabular Editor\TabularEditor.exe` (TE2). TE3 installs to `Tabular Editor 3\TabularEditor3.exe`. `pbi_scan.py` now detects this and exits with a clear error. Workspace `8545f3cb` confirmed on dedicated capacity via REST API.
+- **Proposed fix:** Install TE3 (free for individuals at tabular.io/te3 or GitHub releases). Update `tabular_editor_path` in `GEP/scripts/pbi_config.yaml`. All `pbi_scan.py`, `pbi_seed_sandbox.py` (§G helper in gep-feature skill), and `pbi_model_script.cs` will then work as designed.
+- **Estimated effort:** XS (install + one config line change)
+
+### gep-feature skill: PBI table naming convention not followed — GEP
+
+- **Surfaced:** `2026-04-23` during [[GP-208]] Sub-step 1b PBI model script execution
+- **Category:** improvement / process
+- **Priority:** medium
+- **Description:** The `pbi_model_script.cs` generated by the skill used Snowflake identifiers as table names (`INVENTORY_FCT_BALANCE`, `EXTRACT_INVENTORY_CURRENT`). The GEP PBI model convention is user-friendly Title Case display names (`Inventory Balance`, `Order Line`, `Marketplace`). The skill's PRE-FLIGHT / MODEL SCAN steps do not check for existing naming conventions before drafting the TE script, and the pbi_model_script.cs template uses the SQL table name directly.
+- **Root cause / evidence:** Existing tables found in sandbox: `Inventory Balance`, `Inventory Measures` (prior implementation). Script added new tables with Snowflake names alongside these, creating duplicates. The scan (`pbi_scan.py`) also queries by Snowflake name and would miss an existing table named differently.
+- **Proposed fix:** (1) Add a naming-convention discovery step to the MODEL SCAN section: after confirming which tables are NOT in the model by Snowflake name, also check whether a plausible display-name variant exists (e.g. title-case, spaces for underscores). (2) When drafting `pbi_model_script.cs`, prompt Paul for the intended display name rather than defaulting to the Snowflake identifier. (3) Update `pbi_scan.py` to accept `--alias` mappings for the REST check step.
+- **Estimated effort:** S–M
 
 ---
 

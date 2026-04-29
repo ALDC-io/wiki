@@ -1,9 +1,9 @@
 ---
 tags: [process, operations, connector, oauth, token-refresh, bing-ads]
 aliases: [Connector Token Refresh, Bing Ads OAuth Token Regeneration]
-sources: [Confluence CONN/1575747585]
+sources: [Confluence CONN/1575747585, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-27
 ---
 
 # Connector Token Refresh
@@ -22,7 +22,9 @@ Deployed in the **Fusion workflow function app** ([[workflows|workflows repo]] �
 - Account and connection ID present in the environment's Fusion variables
 - Microsoft Ads connection document present in that environment's CosmosDB
 
-**Behaviour:** Runs daily at midnight. Retrieves refresh token from CosmosDB connection document → obtains new token via token endpoint → updates connection document if successful.
+**Behaviour:** Runs daily at 07:00 UTC. Retrieves refresh token from CosmosDB connection document → obtains new token via token endpoint → updates connection document if successful.
+
+> **Diagnostic tip (from Steven Offboarding):** If Microsoft Ads data stops showing up in the Fusion warehouse, the **first thing to check** is whether this automated token refresh workflow is running successfully in the [[workflows|Dax API]] function app.
 
 ### Manual Process (When Automated Refresh Fails)
 

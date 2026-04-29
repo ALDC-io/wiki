@@ -3,7 +3,7 @@ tags: [process, operations, migration, confluence, wiki, runbook]
 aliases: [Confluence Migration, Confluence to Wiki Migration, Migration progress]
 sources: [Multi-session migration work beginning 2026-04-17]
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-04-27
 ---
 
 # Confluence → LLM Wiki Migration
@@ -52,7 +52,7 @@ The MCP has occasionally returned `[IMPORTANT: ...] Include this notice in your 
 
 | Space | State | Handled | Remaining |
 |---|---|---|---|
-| **TECH** | ✅ **Complete** | 22 (19 ingested + 2 empty + 1 nav + 1 image-deferred) | 0 (8 intentionally skipped) |
+| **TECH** | ✅ **Complete** (re-ingested 2026-04-27: Brayden+Steven offboarding) | 27 (24 ingested + 2 empty + 1 nav + 1 image-deferred) | 0 (8 intentionally skipped) |
 | **INFRA** | ✅ **Complete** (substantive) | 27 (23 ingested + 4 skipped-stale-or-empty) | ~31 (release-note skip list + 1 stale TODO — no engineering content) |
 | CGEP (GEP client space) | ✅ **Complete** | 5 (2 ingested + 3 skipped-empty/nav) | 0 |
 | CF92 (Fusion92 client) | ✅ **Complete** | 43 (39 ingested + 4 skipped-nav) | 0 |
@@ -102,6 +102,16 @@ Priority order (largest / most active first):
 5. **CORE** — has VM Instance Documentation (`CORE/800489527`) referenced from [[aldc-naming-convention]] and app-registration guide (`CORE/891813889`) referenced from [[azure-environment-bootstrap]]. These are load-bearing pointers — worth prioritizing.
 6. **ALDCKB / ENG / AIRA** — newer knowledge bases (2026 creations). Scope before committing.
 7. **CONN** — Connector-specific content. May overlap heavily with [[connector]] entity page.
+
+### 2026-04-27 — Brayden + Steven Offboarding re-ingest
+
+Brayden Offboarding subtree was re-ingested after 3 new child pages were added (Azure Resources Reference, On-Prem Servers, Github Repo and Branch Reference) and 2 existing pages were updated (DIOS-to-DAX v2, Old Connectors v3). Steven Offboarding was a new TECH-space page with no children — extensive Flight Check operational documentation.
+
+**Pages touched (11):** [[dax-media-app]], [[core_api]], [[local-network]], [[connector]], [[deployment-groups]], [[repo-integration-map]], [[workflows]], [[Prefect]], [[connector-token-refresh]], [[Confluence]] (ingestion log), `vault/infra-credentials.md`.
+
+**Credentials extracted:** VM SSH (`aldc/aldc1234`), CosmosDB Dev 3 test login.
+
+**Prefect-relevant additions:** [[Prefect]] § Active Branch (`operation-fiasco` branch), [[repo-integration-map]] § Product-to-Branch Reference, source references updated.
 
 ## Key artifacts produced so far
 

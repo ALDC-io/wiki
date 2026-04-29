@@ -1,9 +1,9 @@
 ---
 tags: [entity, repo, core-api, aldc, eclipse, api, azure-functions]
 aliases: [core_api, core-api, core api]
-sources: [daily/2026-04-17.md, ~/.claude/CLAUDE.md, CORE/1467940876, CORE/1048248321, CORE/238387201, CORE/7929869, CORE/886603777, CORE/885620774, CORE/909737996, CORE/892796955]
+sources: [daily/2026-04-17.md, ~/.claude/CLAUDE.md, CORE/1467940876, CORE/1048248321, CORE/238387201, CORE/7929869, CORE/886603777, CORE/885620774, CORE/909737996, CORE/892796955, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-17
-updated: 2026-04-18
+updated: 2026-04-29
 ---
 
 # core_api
@@ -107,6 +107,10 @@ Most endpoints have converged, but if a bug is reported against an endpoint only
 ## Deployment
 
 core_api deploys like other ALDC [[Azure]] web apps / function apps: [[GitHub Actions]] builds the container and pushes it to the staging slot, then a manual **swap** in the Azure Portal points production traffic at the new slot. See [[eclipse-azure-deployment]] for the full flow (same pattern as Eclipse) and [[GitHub Actions]] for the workflow-level detail.
+
+> **⚠ No real deploy workflow (as of 2026-04-29).** All three GitHub Actions deploy workflows in `ALDC-io/core_api` are **dummy stubs** (just echo statements): `deploy_az_webapp_container.yaml`, `build_docker_image.yaml`, `deploy_on_premise.yaml`. There is no `deploy_az_webapp.yaml` equivalent. The backend deploy mechanism needs to be clarified — it may use Azure Portal Deployment Center, `az webapp deploy` CLI, or manual SCM push.
+
+> **Default branch changed to `eclipse-2.1` (2026-04-29).** Previously `main`. Changed after an incident where deploying from `main` caused the dummy workflow to overwrite the Actions UI. See [[eclipse-azure-deployment]] § Incident: 2026-04-29 wrong-branch deploy.
 
 ## Access
 
@@ -409,6 +413,44 @@ Source: Confluence CORE/892796955 (2021-12).
 4. Ctrl+click desired columns → **Remove Other Columns**
 
 Result: clean table with keys as headers, values as rows.
+
+## Client Data Query Endpoints — Usage Patterns
+
+Source: Confluence TECH/1777106945 (Steven Offboarding). Supplements the technical endpoint spec in § Datasets API above.
+
+Three query patterns exist for clients to access warehouse data:
+
+### `dataset/request` with `dataset_id` (primary — Eclipse 2.1)
+
+The primary endpoint Eclipse 2.1 uses. Queries go to the **Power BI API** and get data from the semantic model, ensuring clients see exactly what they'd see in a pivot table or visualization. Requests use a JSON body to describe desired data (fields, filters, measures), which core_api transforms into a DAX query (the Power BI query language, not Fusion92's "DAX" product name) and sends to the Power BI model API.
+
+**Limitations:**
+- Data size limits on returned responses
+- Filters only support AND operations between them
+- Filter operators limited to simple comparisons (equals, greater than, etc.)
+
+### `dataset/request` with `capacity_id` (direct Snowflake SQL)
+
+Allows clients to send **raw Snowflake SQL** as a payload. More powerful but requires the client to know schema and table names.
+
+- Some safeguards against dangerous operations, but access should be granted sparingly
+- GEP uses this for querying raw Amazon Ad `EXTRACT_*` tables not available through the Power BI model
+- Data size limits apply; no server-side pagination — clients must design queries to split large datasets
+- GEP also uses the older `dataset/query` endpoint for some `EXTRACT_` tables, but this endpoint is preferred
+
+### `dataset/query` (legacy — older filter-based SQL generation)
+
+Uses the same filter structure as `dataset/request` (with `dataset_id`) but accepts schema and table parameters to generate a simple SQL query against Snowflake directly.
+
+- Older API; should not be offered to new clients
+- Used internally by the [[workflows|Dax API]] where direct Snowflake access is needed
+- Could be expanded with security improvements, but better to expand the `capacity_id` request pattern instead
+
+### Client API documentation
+
+User-facing API documentation exists at the [Postman Documenter](https://documenter.getpostman.com/view/42132163/2sAYXCmKTz#568b210a-7321-4f2d-bdc1-64e41d950ba9). May be somewhat out of date — always verify against the current code.
+
+---
 
 ## Emergency contact
 

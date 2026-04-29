@@ -1,9 +1,9 @@
 ---
 tags: [concept, architecture, azure, deployment-group, infra, canada]
 aliases: [Deployment Groups, Azure Deployment Groups, Canada Deployment Groups, DG1, DG2]
-sources: [Confluence INFRA/944373761, INFRA/973012993, INFRA/922615840, INFRA/937885723, INFRA/945782785, INFRA/947486721, INFRA/947486737, INFRA/948142081, CORE/800489527]
+sources: [Confluence INFRA/944373761, INFRA/973012993, INFRA/922615840, INFRA/937885723, INFRA/945782785, INFRA/947486721, INFRA/947486737, INFRA/948142081, CORE/800489527, TECH/1772126209 (Azure Resources Reference, Brayden Offboarding)]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-27
 ---
 
 # ALDC Azure Deployment Groups (Canada)
@@ -54,6 +54,34 @@ Documented here: the Canada (`c`) deployment groups as of mid-2022. Resource nam
 | DNS — General API | `general.api.canada.prod.aldc.io` |
 
 Prod 2 provisions only the General API Function App instance; Portal and Data API instances not deployed. Credentials: `vault/infra-credentials.md` § Production 2.
+
+**Additional production resources** (Source: Confluence TECH/1772126209, Azure Resources Reference):
+
+| Component | Resource | Notes |
+|---|---|---|
+| Eclipse-2.1 Storage | `aldcprodstaceclipse1c01` | Blob storage for Eclipse 2.1 (account logos). One blob container per account ID. |
+| Old Core API (DG3, connector instance) | `aldcprodfnapcore1c03-appsvc` | App Service plan instance — the Core API that **connectors** talk to (not `aldcprodfnapcore1c01` which serves Eclipse 1). Connector config.json URL points here. |
+| Old Core API (DG3, deprecated consumption) | `aldcprodfnapcore1c03` | Consumption plan Function App — **no longer in use**, replaced by the App Service instance above. |
+| Task Trigger | `aldcprodfnaptrigger1c01` | Calls `/task/scan` → queues tasks onto `aldcprodstacqueue1c01`. See [[connector]] § Legacy architecture. |
+| Queue Trigger | `aldcprodfnapqueuetrigger1c01` | Drains task queue → executes `/work/scan`. See [[connector]] § Legacy architecture. |
+| Connector blob storage | `aldcprodstac1c<account-id>` | Per-account storage. Holds connector staging data + per-connection work queues. |
+| Old Eclipse blob storage | `aldcprodstacportal1c01` | Login page background images. |
+| Old Core task queue | `aldcprodstacqueue1c01` | Task queue for the Task Trigger → Queue Trigger dispatch cycle. |
+| DAX API (Flight Check backend) | `aldcprodfnapf921c01` | Function App hosting the [[workflows\|Dax API]]. See [[dax-media-app]] § Azure Resources. |
+| Flight Check frontend | `aldcprodwbapflightcheck1c01` | App Service for the [[dax-media-app\|Flight Check]] web app. |
+| Eclipse 2.0 (Flight Check host) | `aldcprodwbapnode1c01` | App Service — Eclipse 2 instance used exclusively for Flight Check auth/hosting. |
+
+**CosmosDB instances (all environments):**
+
+| Instance | Env | Notes |
+|---|---|---|
+| `aldcprodcsdb1c01` | Production | — |
+| `aldctestcsdb1c01` | Test | — |
+| `aldcqacsdb1c01` | QA | — |
+| `aldcdevcsdb2c01` | Dev 2 | Previously used by Lawrence Young for development/testing |
+| `aldcdevcsdb3c01` | Dev 3 | Used by Brayden Marshall for development. Contains test visuals and dashboards. Test credentials → `vault/infra-credentials.md` § CosmosDB Dev 3. |
+
+> **Note:** Prefect resources are in the `aldcprodrsgpconnector1c` resource group (separate from the main deployment groups). See [[Prefect]] § Azure resources (production) for the full inventory.
 
 > **Eclipse vs Eclipse-2.1**: Two parallel prod deployments on **different brand domains** — not a pending DNS cutover of the same hostname. `aldcprodwbapportal1c01` is the legacy Next 14 Pages Router deploy at `https://eclipse.aldc.io` (the `aldc.io` brand). `aldcprodwbapeclipse1c01` is the Next 15 App Router rewrite at `https://eclipse.analyticlabs.io/` (the `analyticlabs.io` brand) — this is the current production product, running out of the `eclipse-2.1` branch, paired with prod core_api at `https://api.eclipse.analyticlabs.io/v2/`. Verify eclipse-2.1 changes via `https://eclipse.analyticlabs.io/` — the Azure default URL is reachable but CORS-blocked for auth because only `.analyticlabs.io` is in the origin allowlist. See [[entities/repos/eclipse|eclipse (repo)]] disambiguation for the full context.
 

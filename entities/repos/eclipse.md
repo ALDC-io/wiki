@@ -3,7 +3,7 @@ tags: [entity, repo, eclipse, nextjs, react, frontend, ui]
 aliases: [Eclipse UI, Eclipse portal, eclipse repo, Eclipse Next.js]
 sources: [repos/eclipse/README.md, repos/eclipse/package.json, repos/eclipse/authOptions.ts, repos/eclipse/middleware.ts, repos/eclipse/next.config.mjs, repos/eclipse/Dockerfile, repos/eclipse/compose.yaml, repos/eclipse/compose_test.yaml, repos/eclipse/.env.template, repos/eclipse/pages/api/coreAPI.tsx, repos/eclipse/.github/workflows/ci.yml, repos/eclipse/.github/workflows/PR_checks.yaml, repos/eclipse/.github/workflows/deploy_az_webapp.yaml, repos/eclipse/.github/workflows/quality-gate.yml]
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-29
 ---
 
 # Eclipse (repo)
@@ -338,7 +338,7 @@ Required status check: `gate` (aggregator job).
 
 **`deploy_on_premise.yaml`** — **Stub** (echoes placeholder on self-hosted runner). Unfinished.
 
-> **Summary:** only `deploy_az_webapp.yaml` performs a real deployment. The three stub workflows are placeholders pending implementation.
+> **Summary:** only `deploy_az_webapp.yaml` performs a real deployment. The three stub workflows are placeholders pending implementation. **Always deploy from `eclipse-2.1`** (now the default branch as of 2026-04-29). See [[eclipse-azure-deployment]] § Incident: 2026-04-29 wrong-branch deploy for why `main` must not be used.
 
 ### Rollback
 

@@ -3,7 +3,7 @@ tags: [entity, tool, confluence, documentation, wiki]
 aliases: [Confluence]
 sources: [daily/2026-04-17.md]
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-04-27
 ---
 
 # Confluence
@@ -524,6 +524,40 @@ No credentials found. **AIRA space: MIGRATION COMPLETE** (2 ingested, 1 skipped)
 Credential extraction to `vault/infra-credentials.md`: Google Analytics support@aldc.io password, Facebook Marketing API support@aldc.io password + sandbox access token.
 
 **CONN space: MIGRATION COMPLETE** (11 ingested + 27 skipped). All active ad platform connectors documented under `entities/tools/connectors/` with Prefect migration notes.
+
+**2026-04-27 — Brayden Offboarding re-ingest (3 new pages + 2 updated pages) via Atlassian MCP:**
+
+The Brayden Offboarding subtree was originally ingested on 2026-04-17 (5 child pages). Since then, 3 new pages were added and 2 existing pages were updated.
+
+| Confluence page | Wiki destination |
+|---|---|
+| Azure Resources Reference (TECH/1772126209) — NEW, 2026-04-21 | [[deployment-groups]] § Additional production resources + § CosmosDB instances; [[dax-media-app]] § Azure Resources. CosmosDB Dev 3 test creds → vault. |
+| On-Prem Servers (TECH/1772421124) — NEW, 2026-04-21 | [[local-network]] § Virtual Machine Reference + § Publicly Accessible Services. SSH creds → vault. |
+| Github Repo and Branch Reference (TECH/1774256132) — NEW, 2026-04-22 | [[repo-integration-map]] § Product-to-Branch Reference; [[Prefect]] § Active Branch. |
+| DIOS-to-DAX API (TECH/1766031362) — v2, updated 2026-04-24 | [[custom-fusion-92-audience-api]] — content already fully covered by prior ingestion + repo review. No update needed. |
+| Old Connectors (TECH/1769177102) — v3, updated 2026-04-22 | [[connector]] § Deploying Connector Agents + § Sellercloud VPN Agent (new content in v3). |
+
+Previously ingested pages checked for updates — no changes:
+- Prefect parent (TECH/1766260745) — v2 (URL added), already in wiki
+- Switching Environments (TECH/1768882177) — v1, unchanged
+- Prefect Architecture Overview (TECH/1769046017) — v1, unchanged
+- Brayden Offboarding parent (TECH/1767014406) — v1, empty body
+
+Credential extraction to `vault/infra-credentials.md`: On-prem VM SSH (`aldc/aldc1234`), CosmosDB Dev 3 test login (`brayden.marshall@aldc.io/aldc1234`).
+
+**2026-04-27 — Steven Offboarding (1 page, no children) via Atlassian MCP:**
+
+| Confluence page | Wiki destination |
+|---|---|
+| Steven Offboarding (TECH/1777106945) — NEW, 2026-04-24 | Major multi-target ingest: |
+| — Flight Check section | [[dax-media-app]] § Architecture + § Flight Metrics Table + § Pacing + § Admin Features + § Known Issues and Gotchas |
+| — Dax API section | [[workflows]] § NetSuite Authentication Setup + diagnostic note on MicrosoftAdsTokenRefreshWorkflow |
+| — Data Query Endpoints section | [[core_api]] § Client Data Query Endpoints |
+| — Notification/pacing/sync detail | [[connector-token-refresh]] diagnostic tip; [[dax-media-app]] § Notifications System (cross-ref) |
+
+No hard-coded credentials found in Steven's page. NetSuite access and Microsoft Ads credentials referenced as "in Dashlane" — vault pointers not needed.
+
+---
 
 ## Open follow-ups
 

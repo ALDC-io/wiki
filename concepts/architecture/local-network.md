@@ -1,9 +1,9 @@
 ---
 tags: [concept, architecture, local-network, infra, tailscale, vpn, storage, proxy, truenas, nginx]
 aliases: [Local Network, ALDC Local Network, Nginx Proxy Manager, TrueNAS, Covenant, kookiet]
-sources: [Confluence INFRA/1630371841, INFRA/1024622602, INFRA/961576965, CORE/1749811201]
+sources: [Confluence INFRA/1630371841, INFRA/1024622602, INFRA/961576965, CORE/1749811201, TECH/1772421124 (On-Prem Servers, Brayden Offboarding)]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-27
 ---
 
 # ALDC Local Network Infrastructure
@@ -99,6 +99,43 @@ sudo mount -t cifs -o username=agent //192.168.35.10/Storage/ /mnt/covenant
 ```
 
 Credentials: `agent` / `{{COVENANT_AGENT_PASSWORD}}` — see `vault/infra-credentials.md` § Covenant credentials.
+
+## Virtual Machine Reference
+
+Source: Confluence TECH/1772421124 (On-Prem Servers, Brayden Offboarding). Updated 2026-04-24.
+
+SSH credentials for all machines: `aldc/aldc1234` — see `vault/infra-credentials.md` § On-Prem VM SSH credentials. Proxmox host login credentials are in Dashlane.
+
+| Common Name | VM Name | IP | Proxmox Host | Portainer | Purpose |
+|---|---|---|---|---|---|
+| Production Docker Host (Kamloops) | `aldcproddock1c01` | 192.168.35.70 | Nostromo (192.168.30.80:8006) | Production (192.168.31.20:9446) | Production [[connector]] agents. Also runs the Sellercloud VPN agent. |
+| Production Docker Host (Coquitlam) | `aldcproddock1c03` | 192.168.22.70 | Infinity (192.168.22.71:8006) | Production (192.168.31.20:9446) | Secondary production [[connector]] agents (no Sellercloud VPN). |
+| Support Docker Host | `aldcsuptdock1c01` | 192.168.31.20 | Nostromo (192.168.30.80:8006) | Support (192.168.31.20:9444) | Testing/QA resources + [[custom-fusion-92-audience-api|DIOS API]]. All publicly accessible on-prem services run here. |
+| Workstation agent | `wks-agent` | 192.168.31.210 | Nostromo (192.168.30.80:8006) | N/A | Building and pushing [[connector]] Docker images. See [[connector-docker-deployment]]. |
+| Galactica SQL Server | `server-galactica` | 192.168.35.138 | Nostromo (192.168.30.80:8006) | N/A | SQL Server for miscellaneous connector data. Local domain: `galactica.prod.site3.aldc`. |
+| Brayden's Workstation VM | `wks-brayden-marshall` | 192.168.31.218 | Nostromo (192.168.30.80:8006) | N/A | Legacy dev workstation. Useful for accessing the Support Docker host (not reachable via VPN). Password: `aldc1234`. |
+
+## Publicly Accessible Services
+
+Source: Confluence TECH/1772421124 (On-Prem Servers, Brayden Offboarding).
+
+Only the **Support Docker host** (`aldcsuptdock1c01`) is configured for public internet access. Currently the [[custom-fusion-92-audience-api|DIOS API]] is the only production service exposed this way.
+
+### How it works
+
+Three parts:
+1. **Run the service** on the Support Docker host, mapped to a specific unused port
+2. **Configure a Proxy Host** in Nginx Proxy Manager with the target domain and the internal IP:port (e.g., `audience-fusion92-app.aldc-ca-w1.com` → `192.168.31.20:7000`)
+3. **Configure a CNAME** in [[Cloudflare]] pointing the domain to the public IP of the on-prem server (`173.180.33.21`)
+
+### Adding a new public-facing service (Nginx Proxy Manager)
+
+1. Go to Nginx Proxy Manager at `http://192.168.31.20:81/` and log in (credentials in Dashlane)
+2. Go to **Proxy Hosts**
+3. Click **Add Proxy Host** (top-right)
+4. Fill in the form: domain name (subdomain of `aldc-ca-w1.com`), IP address, and port of the service on the Support host
+
+> **Note:** Images in the Confluence source show the NPM UI forms but are not extractable via the MCP API.
 
 ## See Also
 

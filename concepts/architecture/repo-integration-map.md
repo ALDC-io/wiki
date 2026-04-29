@@ -2,6 +2,7 @@
 tags: [concept, architecture, repo-integration, integration-map, strangler-fig]
 aliases: [Repo Integration Map, Cross-Repo Map, Repo Relationship Diagram]
 sources:
+  - Confluence TECH/1774256132 (Github Repo and Branch Reference, Brayden Offboarding)
   - entities/repos/eclipse_exp.md
   - entities/repos/eclipse.md
   - entities/repos/core_api.md
@@ -58,6 +59,26 @@ ALDC is mid-flight on two overlapping consolidations. Both are active, both are 
 | [[entities/repos/power_bi\|power_bi (repo)]] | Data artefact | Binary artefact store for ~94 `.pbix` + 3 `.pbit` + 6 CosmosDB report JSON + theme files. Git LFS (~16 GB). No code. | Canonical. `.pbip` migration is the biggest opportunity (per-model, not bulk). Archival of frozen client folders (DISH_DUER, BOOK_DEPOT, KIT_ACE) recommended but uncommitted. | N/A for tool; `.pbip` migration has no blocker, just prioritisation |
 | [[claude_code_enhanced]] | Internal tooling | 20-hook runtime enforcement + 195-skill library + `cce` Bash launcher. Per-developer install. Consumes [[zeus-memory]] via HTTPS API + MCP. | Canonical dev tooling; active development. No migration. | N/A |
 | [[aldc-scripts]] | Internal tooling (likely legacy) | 3 commits (all Lori Beck). Fusion92 ticket-status PDF (`f92_ticket_report.py`), generic Slack webhook (`send_slack.sh`), weekly corporate cost dashboard on Server4. | **Likely legacy — verify before relying on.** `#the-olds` Slack channel invisible to Paul, suggesting cron is dead. Cost-monitoring is a candidate for [[Prefect]] or [[eclipse_exp]] ops dashboard absorption if confirmed active. | `crontab -l` on Server4 to confirm live status before any migration investment |
+
+---
+
+## Product-to-Branch Reference
+
+Source: Confluence TECH/1774256132 (Github Repo and Branch Reference, Brayden Offboarding). Snapshot as of 2026-04-22.
+
+| Product/Service | Repository | Branch |
+|---|---|---|
+| Eclipse 2.1 | `eclipse` | `eclipse-2.1` |
+| Core API 2.1 | `core_api` | `eclipse-2.1` |
+| [[Prefect]] / New Connectors | `connector` | `operation-fiasco` |
+| Old/Current Connectors | `connector` | `main` |
+| Eclipse 2.0 | `eclipse` | `main` |
+| Flight Check | `flight-check` | `main` |
+| Eclipse 1 (Old Eclipse) | `portal` | `main` |
+| Core API 1 (Old Core) | `core_api` | `main` |
+| DIOS API | `custom-fusion-92-audience-api` | `main` |
+
+> **Key Prefect note:** The Prefect migration work lives on the `operation-fiasco` branch of the `connector` repo, not `main`. The `main` branch continues to serve the old/current connector agents.
 
 ---
 
