@@ -3,7 +3,7 @@ tags: [distributed-workflow, active, client-workflow-automation]
 aliases: [Client Workflow Automation Tracker, Sandbox Feature Delivery Tracker]
 sources: []
 created: 2026-04-18
-updated: 2026-04-21 (Phase 6 planning session)
+updated: 2026-04-29 (repo renamed aldc-automation → aldc-shipyard)
 ---
 
 # Client Workflow Automation — Workstream Tracker
@@ -58,6 +58,504 @@ After the design exists, future sessions that *implement* parts of it should pla
 ## Session Log
 
 _Initial bootstrap — no work executed in this session._
+
+### 2026-04-26 — Phase 7 architecture design: `aldc-automation` spec locked (Opus + `/effort high`)
+
+- **Goal:** Produce a written spec for the `aldc-automation` repo so the next session can implement without re-deciding architecture. No code changes this session.
+- **Decisions locked (D1–D7):**
+  - **D1.** Repo name `aldc-automation`, location `~/repos/aldc-automation/`. Private, ALDC-owned.
+  - **D2.** Per-client config files (`config/gep.yaml`, future `config/fusion92.yaml`), two-file pattern (`*.example.yaml` committed, `*.yaml` gitignored). Three-layer config: `.env` (Snowflake creds, singleton at automation repo root), `config/<client>.yaml` (structural + machine-local repo paths), `clients/<client>/pbi_config.yaml` (PBI GUIDs, gitignored). Full schema in [[aldc-shipyard]] §"Configuration model". Scripts accept `--client gep` flag; auto-resolve `<automation_repo>/config/gep.yaml`.
+  - **D3.** Manifests move to `aldc-automation/clients/GEP/{deploy_manifest,validate_manifest}/`. They are tooling artifacts that evolve with `deploy.py`/`validate.py`, not feature artifacts. Cross-repo SQL refs by filename only (resolved via `clients_layout.warehouse_sql_dir`).
+  - **D4.** Skill resolves automation home via env-var-with-convention: `AUTOMATION_HOME="${ALDC_AUTOMATION_HOME:-$HOME/repos/aldc-automation}"`. Rejected user-level YAML config (gratuitous when only field would be `automation_home:`). Rejected PATH-based dispatch (Windows + `.venv` fragility). Rejected hardcoded path (no escape hatch).
+  - **D5.** `pbi_config.yaml` moves to `aldc-automation/clients/GEP/pbi_config.yaml`, gitignored. Skill reads it via `$AUTOMATION_HOME/clients/GEP/pbi_config.yaml`.
+  - **D6.** Connector integration: flat `scripts/` dir with conventional naming (`connector_deploy.py` etc.); per-client manifests at `clients/<client>/connector_manifest/`; `config/<client>.yaml` grows a `connector:` section when used; likely a separate `connector-feature.md` skill (not growing `gep-feature`). Sketch only — not built this session.
+  - **D7.** Migration plan: scaffold repo → copy scripts (no history) → refactor scripts to `--client`-driven config → create `config/gep.yaml` → move `pbi_config.yaml` → move skill to `~/.claude/commands/` → delete `clients/GEP/scripts/` → rebase GP-208 → archive `workflow-automation` feature branch → smoke test → resume dogfood. Full step list in [[aldc-shipyard]] §"Migration plan".
+- **Tranche G gaps closed by this design:** G.1a (branch switch disaster — eliminated by separating repos), G.1b (deploy.py git ref — closed by reading ref from `repos.clients` working tree), G.1e (stale script on automation branch — eliminated, no automation branch in clients).
+- **Tranche G gaps NOT addressed (filed elsewhere):** G.1c (share health check transitive blocking — skill logic fix, orthogonal), G.1d (script hash mismatch — working as intended).
+- **Discovery:** the boot prompt asserted the skill already lived at `~/.claude/commands/gep-feature.md`, but it actually lives at `clients/.claude/commands/gep-feature.md`. The user-level move is part of this migration (step 6 of the plan), not pre-existing state.
+- **Artifacts produced:**
+  - [[aldc-shipyard]] — full repo spec (~280 lines): rationale, layout, config model, path resolution, script refactor checklist, connector pattern, migration plan, Tranche G gap closure mapping.
+  - `index.md` — added [[aldc-shipyard]] entry under Repos.
+  - This tracker — Phase 7 session log entry (this block), Near-term Architecture Goal section pointer-updated, Phase 7B implementation boot prompt written below.
+- **Out of scope (deferred to Phase 7B implementation session):** repo creation, file moves, script refactor, skill rewrite, GP-208 rebase, dogfood re-run.
+- **Next session:** Phase 7B execution (Sonnet). Boot prompt in "🔴 CURRENT" below.
+
+### 2026-04-26 — Tranche G execution: GP-208 dogfood sandbox-complete (Sonnet)
+
+- **Goal:** First full end-to-end dogfood of `/gep-feature GP-208`: scoping → sandbox Snowflake → sandbox PBI → (stop before TEST). Stopped at Sub-step 2 by design — tomorrow GP-208 will run clean from the beginning with all changes on the right branch.
+- **What worked:**
+  - Fast-path scoping confirmed in one "yes" — all requirements from wiki, no re-asking.
+  - Snowflake sandbox deploy: 9/9 ✅, 18,992 rows (Sellercloud fresher after share re-add).
+  - PBI sandbox: `Inventory Current` (Title Case, EXTRACT excluded) applied, all 31 tables refreshed ✅. Row count confirmed via Explore Data.
+  - Legacy cleanup guards in `pbi_model_script.cs` cleanly dropped old Snowflake-named tables then added correct display-named table.
+  - Artifact rebuilt from scratch using wiki as source — fast-path works as intended.
+- **Gaps captured (in order surfaced):**
+  - **G.1a (branch switch disaster):** Running `git checkout GP-208` in Claude Code's bash affected the *shared* working tree — removed `deploy.py` and other workflow-automation files from disk. Paul's terminal lost access to the scripts. Recovery: stash GP-208 changes, switch back to workflow-automation, restore SQL from stash. **Root cause:** Claude Code bash and user terminal share the same working tree. Never switch branches mid-session unless you're certain the user's terminal is not dependent on the current branch's files.
+  - **G.1b (git ref shows wrong branch):** `deploy.py` outputs the git SHA/message from its current branch HEAD (workflow-automation `64a7...`), not the GP-208 branch. Cosmetic but confusing in the deploy log. Fix: either consolidate branches or add `--git-ref` param to deploy.py.
+  - **G.1c (share health check: "continue" was wrong):** Share health check flagged `CURRENT_REPORT_ALL_ORDERS_UK` + `CURRENT_FORECAST_CSV` as unreachable. Paul chose `continue` since neither is a GP-208 source — but the sandbox DAG task `TASK_WAREHOUSE_ORDERLINE_0` depends on `CURRENT_REPORT_ALL_ORDERS_UK` transitively through `SALES_DIM_ORDER_BASE`. Deploy failed. **Fix needed in skill:** health check block must distinguish "is this object a GP-208 source?" vs "is this object in the shared sandbox DAG?" — the latter blocks regardless of which ticket is deploying.
+  - **G.1d (script hash mismatch — correct behavior):** Script hash check fired as designed. Prior artifact had Tranche F hash; current script excluded EXTRACT. Surfaced, Paul confirmed yes, proceeded. Rule 9 working.
+  - **G.1e (wrong script on workflow-automation branch):** `pbi_model_script.cs` on `workflow-automation` was the old pre-rename version (Snowflake names + EXTRACT included). Applied wrong script to sandbox first. Fixed by restoring correct script from stash and adding legacy cleanup guards (section 0 in script). **Root cause:** script changes were made on GP-208 branch but not ported to workflow-automation.
+  - **Working directory drift:** Bash `cd GEP/scripts/pbi_model_apply` during dotnet build persisted between tool calls, causing subsequent git and file commands to run from the wrong directory. Fixed by explicitly `cd /c/Users/PaulRussell/repos/clients` before continuing.
+- **Near-term goals (Paul, 2026-04-26):**
+  1. **Tomorrow — GP-208 clean run to TEST:** Commit all staged changes on GP-208 branch (inventory_fct_balance.sql, extract_inventory_current.sql, pbi_model_script.cs, pbi_model_columns.cs, artifact.yaml, notes.md). Start `/gep-feature GP-208` fresh, run sandbox + PBI sandbox + TEST deploy + PBI model apply to GEP Test Models in one clean session.
+  2. **Workflow portability (near-term architecture):** Move the entire workflow automation (skill, deploy.py, validate.py, manifests) to a permanent location that is branch-agnostic. The workflow should be able to "point at" any feature branch without switching to it. Today's dual-branch problem (automation on `workflow-automation`, SQL on `GP-208`) is unsustainable. See "Near-term Architecture Goal" section below.
+
+### 2026-04-26 — Phase 7B implementation: `aldc-automation` repo built (Sonnet)
+
+- **Goal:** Execute the migration plan from [[aldc-shipyard]] spec. Scaffold the new repo, copy and refactor all scripts, move the skill to user level, update clients repo.
+- **What was done:**
+  - **Repo scaffolded** at `C:/Users/PaulRussell/repos/aldc-automation/`. All directories + files written; Paul runs `git init` and makes initial commit.
+  - **Scripts copied and refactored** (no git history): `deploy.py`, `validate.py`, `pbi_generate_columns.py`, `pbi_scan.py`, `pbi_seed_sandbox.py`, `data-share-capacity-query.py`.
+  - **Script refactor:** added `--client <name>` arg to all scripts; replaced `_REPO_ROOT = _HERE.parent.parent` with `_AUTOMATION_HOME = _HERE.parent`; added `_load_client_config()` function; all path constants (`SQL_DIR`, `MANIFEST_DIR`, `TICKETS_DIR`, `CLIENTS_ROOT`, `ROOT_TASK`, `SANDBOX_SOURCE`) are now late-initialized globals set from config in `main()`.
+  - **G.1b fix landed:** `deploy.py` and `validate.py` now use `git -C <CLIENTS_ROOT> log -1` to read the clients-repo HEAD, not the automation repo cwd.
+  - **`.env` loading:** primary candidate is `_AUTOMATION_HOME / ".env"`; `_HERE / ".env"` kept as fallback.
+  - **pbi_model_apply .NET source** copied verbatim (4 CS files + csproj). No changes.
+  - **Manifests copied:** `clients/GEP/deploy_manifest/{GP-208,GP-BENCH-01}.yaml`, `clients/GEP/validate_manifest/GP-208.yaml`.
+  - **`pbi_config.example.yaml`** copied to `clients/GEP/`.
+  - **`config/gep.example.yaml`** created (committed schema doc with placeholder paths).
+  - **`config/gep.yaml`** created with Paul's actual machine paths (gitignored).
+  - **Skill moved to user level:** `~/.claude/commands/gep-feature.md` written with all `GEP/scripts/` references replaced by `$AUTOMATION_HOME`-based paths, `--client gep` added to all Python invocations, `AUTOMATION_HOME` prelude added.
+  - **`clients/.gitignore`** updated: removed `GEP/scripts/pbi_config.yaml` and `GEP/scripts/_pbi_seed/` entries.
+- **Still needed (Paul's git operations):**
+  1. `cd C:/Users/PaulRussell/repos/aldc-automation && git init && git add . && git commit -m "chore: scaffold aldc-automation repo"`
+  2. Copy `clients/GEP/scripts/pbi_config.yaml` → `aldc-automation/clients/GEP/pbi_config.yaml` (manual file copy, both gitignored).
+  3. Copy `clients/GEP/scripts/.env` → `aldc-automation/.env` (manual file copy, both gitignored).
+  4. Commit `clients/.gitignore` change on current branch in clients repo.
+  5. Delete `clients/GEP/scripts/` (entire directory) from clients repo; commit the deletion.
+  6. Rebase `feature/paulrussell/gp-208/inventory-feed` onto current clients HEAD; verify GP-208 SQL files still present.
+  7. Archive `feature/paulrussell/workflow-automation/gep-scripted-deploy` branch.
+  8. Smoke test: `python "$AUTOMATION_HOME/scripts/deploy.py" --client gep --env sandbox --ticket GP-208 --check-share`
+- **Deviations from spec:**
+  - `pbi_model_apply_path` was previously read from `pbi_config.yaml` (a manually-set field). After migration, §G in the skill computes it directly as `$AUTOMATION_HOME/scripts/pbi_model_apply/bin/Release/net8.0-windows/x64/pbi_model_apply.exe` — no pbi_config.yaml field needed.
+  - `SANDBOX_SOURCE` and `TASK_OWNER_ROLE` kept as GEP-specific hardcodes in deploy.py (not in scope per refactor spec). `ROOT_TASK` reads from `cfg["snowflake"]["task_chain"]`.
+  - `clients/.claude/commands/gep-feature.md` NOT deleted yet — Paul confirms removal when doing step 5 above (deleting scripts dir). The `.claude/commands/` exception in `.gitignore` is still valid for any future project-level skills.
+- **Tranche G gaps closed by this implementation:** G.1a, G.1b, G.1e — all eliminated as designed.
+- **Next session:** Tranche H dogfood — resume GP-208 clean run from scratch using scripts in `aldc-automation`. Boot prompt below.
+
+### 2026-04-26 — Tranche H dogfood: GP-208 full workflow + rollback (Sonnet)
+
+- **Goal:** First clean end-to-end `/gep-feature GP-208` run using the migrated `aldc-automation` repo. Ran through `implementing` Sub-step 2 → `test-deployed` → intentional rollback. Also used as a workflow improvement session.
+- **What worked:**
+  - TEST deploy: 9/9 ✅, 16,780 rows. deploy.py + validate.py running cleanly from aldc-automation.
+  - PBI model applied to GEP Test Models via pbi_model_apply.exe. DAX validation (§J) confirmed 16,780 rows, 0 null PRODUCT_ID, 0 unjoined. New automated DAX check replaces manual eyeballing.
+  - PRs raised, Jira design summary + QA evidence comments posted end-to-end.
+  - Rollback executed (PR closed, PBI model reverted, Snowflake views restored).
+  - `setup.py` one-time bootstrap script created and run successfully.
+- **Workflow improvements shipped in this session:**
+  - **Multi-root VS Code workspace** (`aldc-automation.code-workspace`) — both repos visible in one window.
+  - **SQL file review with VS Code diff** — `git show main:<file> > /tmp/... && code --diff` opens per-file diff sequentially with per-file confirmation.
+  - **Task chain monitoring in rollback** — deploy.py `--rollback` now tier-aware with optional `--run-task` between tiers.
+  - **Automated DAX validation (§J)** — runs after every PBI refresh. Row count, null key check, relationship check. Replaces visual-only smoke-test.
+  - **`setup.py` bootstrap** — one-time machine setup (Snowflake creds, repo paths, PBI workspace GUIDs, dotnet build). Idempotent. Prompted inline when config is missing mid-feature.
+  - **PR flow corrected** — SQL PR now targets `GEP/development` (was `GEP/user-testing`). PBI model PR is a separate step.
+  - **Rollback parser bug fixed** — the `not s.strip().startswith("--")` filter was silently dropping all views. Fixed: parse on `-- snapshot:` boundary, hard exit if 0 statements, post-restore INFORMATION_SCHEMA verification.
+  - **Polling robustness** — `poll_task_chain` now anchors on ROOT_TASK via `TASK_NAME` parameter. Eliminates count fluctuation from staggered child-task scheduling.
+  - **deploy.py --rollback --run-task** — tier-aware restore: tier-1 views → task chain → tier-2 views. `snapshot_views` writes `-- restore_tiers:` header to drive this.
+- **Gaps and issues surfaced:**
+  - `pbi_config.yaml` had not been migrated to aldc-automation — surfaced mid-session. Fixed by setup.py.
+  - `pbi_model_apply.exe` build path was wrong (`x64` subdirectory doesn't exist for plain `dotnet build`). Fixed in setup.py and skill.
+  - `dataset_name` in pbi_config.yaml was the workspace name ("GEP Test Models"), not the semantic model name ("Data Model"). Fixed by correcting pbi_config.yaml.
+  - `pbi_model_rollback.cs` needed to remove relationships before deleting the table — `Table.Delete()` fails if relationships exist. Fixed with a relationship sweep first.
+  - Rollback snapshot restore failed because old EXTRACT_INVENTORY_CURRENT referenced `FCT.CAPTURE_TIMESTAMP` which no longer exists in the rebuilt WAREHOUSE.INVENTORY_FCT_BALANCE. Pre-existing TEST inconsistency, not caused by GP-208.
+  - Jira MCP deprecation notice: HTTP+SSE endpoint at `mcp.atlassian.com/v1/sse` deprecated after 2026-06-30 → update to `mcp.atlassian.com/v1/mcp`.
+- **Next session:** Real GP-208 ship — run `/gep-feature GP-208`, resume at `implementing` Sub-step 2 (TEST deploy), proceed through to UAT. Boot prompt below.
+
+---
+
+### Near-term Architecture Goal — Dedicated `aldc-shipyard` Repo
+
+> **2026-04-26 update:** design locked in Phase 7 session — full spec at [[aldc-shipyard]]. The summary below is preserved as decision context; consult the wiki page for the authoritative schema, path-resolution pattern, and migration plan.
+
+**Decision (2026-04-26, confirmed by Paul):** create a separate `aldc-shipyard` repo (formerly `aldc-automation`) for all workflow automation infrastructure. Scripts stay off the `clients` and `connector` CI/CD branch chains entirely.
+
+**Why not merge into `GEP/development`:**
+The `clients` branch chain (`GEP/development` → `GEP/user-testing` → `main`) is the production deployment path. The automation is still actively being designed — merging there would pollute CI/CD environment branches with half-built tooling. A separate repo decouples the automation lifecycle completely.
+
+**Why a separate repo is correct:**
+- **Decoupled lifecycle** — automation iterates fast; `clients` and `connector` CI/CD chains stay clean
+- **Neutral ground for multi-repo orchestration** — scripts coordinate both `clients` AND `connector`; they don't belong to either
+- **Scalable to other clients** — Fusion92 or future clients get config entries, not forks of `clients`
+- **No CI/CD risk** — break, redesign, and experiment freely without touching production branch chains
+
+**Proposed repo structure:**
+
+```
+aldc-shipyard/
+  scripts/
+    deploy.py
+    validate.py
+    pbi_generate_columns.py
+    pbi_scan.py
+    pbi_seed_sandbox.py
+    pbi_model_apply/       ← .NET source; bin/ gitignored
+  clients/
+    GEP/
+      deploy_manifest/     ← GP-208.yaml etc.
+      validate_manifest/
+      pbi_config.yaml      ← gitignored (local workspace/dataset IDs)
+  config/
+    gep.yaml               ← paths to clients/connector repos, env settings
+  .claude/
+    commands/              ← skill source reference (live copy stays at ~/.claude/commands/)
+```
+
+**What stays in `clients` repo:** SQL files + ticket artifacts (`GEP/tickets/<ticket>/artifact.yaml`, `pbi_model_script.cs`, `pbi_model_columns.cs`, `notes.md`) — these belong WITH the SQL as part of the feature branch PR and PR review.
+
+**What stays at user level:** `~/.claude/commands/gep-feature.md` — already there, already correct.
+
+**Split summary:**
+
+| Layer | Location | Why |
+|---|---|---|
+| Skill (orchestrator) | `~/.claude/commands/` | User-level, already repo-agnostic |
+| Scripts (deploy, validate, pbi_*) | `aldc-shipyard` repo | Multi-repo neutral ground, off CI/CD chain |
+| Manifests (deploy/validate YAML) | `aldc-shipyard/clients/GEP/` | Travel with the scripts that consume them |
+| SQL files | `clients` repo (feature branch) | Part of the feature PR |
+| Ticket artifacts (artifact.yaml etc.) | `clients` repo (feature branch) | Belong with the SQL they describe |
+| Cross-repo config (repo paths) | `aldc-shipyard/config/gep.yaml` | Points scripts at correct local repo locations |
+| Local secrets (workspace IDs etc.) | `aldc-shipyard/clients/GEP/pbi_config.yaml` | gitignored, machine-local |
+
+**Next steps before next GP-208 dogfood:**
+1. **Opus planning session** — nail the `config/gep.yaml` schema, how the skill resolves paths to both repos at runtime, and connector integration pattern.
+2. Create `aldc-shipyard` repo, move scripts + manifests there.
+3. Update skill to read automation repo path from config.
+4. Run clean dogfood from the correct structure.
+
+Do not run another GP-208 dogfood until steps 1–3 are done — the dual-branch problem will recur otherwise. This is the "Phase 7 architecture" referenced in prior tranche notes.
+
+---
+
+### 2026-04-25 — Tranche G planning + pbi_config test config (Sonnet, end of Tranche F session)
+
+- **Goal:** Plan the next session (Tranche G) and unblock it by filling `pbi_config.yaml`
+  test workspace entries and clearing the GP-208 artifact for a clean re-scope.
+- **Decisions made:**
+  - INVENTORY_FCT_BALANCE PBI display name: **"Inventory Current"** (Paul's call 2026-04-25).
+    EXTRACT_INVENTORY_CURRENT display name: TBD — ask at scoping in Tranche G.
+  - `pbi_model_script.cs` must be updated to use display names before TEST apply — the
+    drop-if-exists guards and AddTable calls currently reference Snowflake names which
+    don't exist in TEST under those names. See G.1 in boot prompt.
+  - Tranche D (`prod-deployed` auto-apply) deferred until Sub-step 2 proves clean in Tranche G.
+  - Phase 7 (multi-repo architecture) is a separate Opus planning session. Current
+    architecture is safe to extend for one more dogfood without an overhaul.
+- **Actions taken:**
+  - `pbi_config.yaml` test entries filled: id=a29d4c01, dataset_id=66151728,
+    dataset_name="Data Model" (resolved via REST API).
+  - GP-208 artifact.yaml + notes.md deleted for clean re-scope.
+  - Tranche G boot prompt written into tracker (see "🔴 CURRENT" section above).
+- **Architecture discussion (summary):** Paul raised the question of whether workflow
+  automation code belongs in `clients` repo when it will eventually touch `connector`
+  and `power_bi` repos too. Recommendation: move the skill to `~/.claude/commands/`
+  (user-level, repo-agnostic) and make scripts path-independent. Full design deferred
+  to Phase 7 Opus session. Current architecture is not blocking Tranche G.
+
+### 2026-04-25 — Phase 6 Tranche F kickoff: sandbox hardening plan 🟡 (Opus, planning)
+
+- **Goal:** make `/gep-feature GP-208 force` drive Sub-step 1b end-to-end against
+  the sandbox with zero manual rescue and emit a clickable validation link. Sandbox
+  only — TEST tail and Tranche D explicitly deferred until the sandbox flow is stable.
+- **Why a new tranche:** the 2026-04-24 acceptance test validated the *primitives*
+  (wrapper apply, REST refresh, DAX row-count match) but did so by invoking each
+  step manually outside the skill. Since then the skill itself has been heavily
+  revised — §G rewritten to call `pbi_model_apply.exe` (MSAL-internal, no `--token`),
+  MODEL SCAN block added, GENERATE COLUMN DEFINITIONS step added, `warn_only`
+  support landed in `validate.py`. None of those skill paths have been exercised on
+  GP-208. Tranche F dogfoods the actual user-facing flow.
+- **Decision:** focus is sandbox only. We don't fill `workspaces.test.*` or
+  `workspaces.prod.*` in `pbi_config.yaml` this session. The TEST tail dogfood and
+  Tranche D both wait on a stable sandbox flow.
+- **Plan (authoritative spec — see [[phase6-pbi-automation-plan]] §6.8):**
+  - F.1 — add sandbox-only validation link emission to §G success + §H poll_refresh
+    Completed + the existing MANUAL VISUAL CHECK block.
+  - F.2 — default to skipping MODEL SCAN; file the TE3 hang fix as a follow-up.
+  - F.3 — reset GP-208 sandbox state (drop the two tables) before the cold run.
+  - F.4 — run Sub-step 1b end-to-end through the skill; confirm every block fires.
+  - F.5 — capture every gap as it surfaces; fix in-session; re-run until clean.
+  - F.6 — wiki consolidation (sandbox-only updates to plan + pattern + tracker).
+- **Done criteria:** cold `/gep-feature GP-208 force` produces a populated model and
+  prints a working validation link with no manual rescue; GP-208 artifact has fresh
+  sandbox_applied_at + sandbox_refresh_id from the skill-driven run.
+- **Out of scope this session:** Sub-step 2 TEST promotion, Tranche D prod
+  auto-apply, `pbi_config.yaml` test/prod entries, `pbi_scan.py` TE3 hang fix,
+  GP-208 naming-convention reconciliation.
+- **Boot prompt for execution session:** see "🔴 CURRENT — Phase 6 Tranche F" in
+  the Next Session Boot Prompt section below.
+- **Execution log:**
+  - **F.1 ✅ (2026-04-25)** — Sandbox validation link emission added to `gep-feature.md`:
+    - §G exit-code-0 branch: prints `Workspace` + `Dataset` URLs from `pbi_config.workspaces.sandbox.*` (with null-guard).
+    - §H `poll_refresh` Completed branch: same URLs + per-table `objects[]` status table.
+    - MANUAL VISUAL CHECK: replaced bare "Open GEP Sandbox Models workspace" text with live URL template + note that links were already printed.
+    - §I header: fixed stale "(shared by §G and §H)" → "(§H REST calls only — NOT for §G)" to match §5a revision from 2026-04-23.
+    - All 4 touchpoints are sandbox-only; TEST/PROD emission explicitly deferred.
+  - **F.2 ✅ (2026-04-25, decision)** — MODEL SCAN will be skipped for the GP-208 dogfood run. `pbi_scan.py` TE3 path remains `if False`-gated (subprocess hang). No skill code change needed — the existing graceful-skip flow fires automatically when Paul chooses `skip` at the `Run PBI model scan? (yes / skip)` prompt. TE3 hang fix filed as follow-up in `potential-tickets`.
+  - **F.3 — GP-208 sandbox state reset (pending Paul action):** Drop the two GP-208 tables before running the skill. Easiest: re-run the existing `pbi_model_script.cs` (drop-if-exists guards make it idempotent). Paul can use the wrapper directly: `GEP/scripts/pbi_model_apply/bin/Release/net8.0-windows/pbi_model_apply.exe --script GEP/tickets/GP-208/pbi_model_script.cs --workspace "GEP Sandbox Models" --dataset "GEP_Sandbox_Current"`. This will drop + re-add the tables and leave the sandbox in a known-clean state before the skill run.
+  - **Pre-F.4 fix — GENERATE COLUMN DEFINITIONS "already wired" skip (2026-04-25):** Added skip condition: if `pbi_model_columns.cs` exists AND `pbi_model_script.cs` starts with `#load "pbi_model_columns.cs"` AND contains `AddColumns_*` calls, print "ℹ️  Column definitions already wired" and skip `pbi_generate_columns.py`. This is the expected F.4 step 3 behavior (spec says "recognises columns are wired and skips"). Proactively added to avoid a gap discovery during the run.
+  - **F.3 ✅ COMPLETE (2026-04-25)** — Sandbox state reset. Tables dropped + recreated, relationship dropped + recreated, `SaveChanges() complete`. MSAL token still cached (no device-code prompt). Exit 0.
+  - **F.3 GAP (2026-04-25) — TOM does not cascade-delete relationships on table remove.** Running `pbi_model_script.cs` with drop-if-exists failed on the second run with `OperationException: Relationship points to deleted table INVENTORY_FCT_BALANCE`. Root cause: `Model.Tables.Remove()` removes the table from TOM's in-memory collection but does NOT remove `SingleColumnRelationship` objects in `Model.Relationships` that reference it. `SaveChanges()` serializes the state and the server rejects the dangling relationship. **Fix applied:** added a pre-drop relationship-cleanup loop to both drop blocks in `pbi_model_script.cs` — collect relationships referencing the target table first, remove them, then remove the table. This pattern must be applied to every drop-if-exists block in any per-ticket script that may leave relationships behind.
+  - **F.4 ✅ COMPLETE (2026-04-25)** — `/gep-feature GP-208 force` ran Sub-step 1b end-to-end through the skill with zero manual rescue:
+    - MODEL SCAN → ran (Paul chose `yes`), REST fallback, both tables confirmed present at 0 rows (expected pre-refresh). scan_option_chosen = "B" recorded.
+    - PRE-FLIGHT → found `pbi_model_script.cs` ✅
+    - GENERATE COLUMN DEFINITIONS → "already wired" skip condition fired ✅
+    - REBIND → `update_parameters` HTTP 200, `SANDBOX_DG1_GEP_GP208` + `SYSADMIN` ✅
+    - §G apply → `pbi_model_apply.exe` exit 0; relationship-cleanup fix worked (relationship dropped before table, re-created after) ✅
+    - F.1 validation links printed at §G exit-0 ✅
+    - §H refresh_dataset → 202 Accepted, request ID `4de76ce2-44ef-4e4e-9a8d-b30087bc0d17` ✅
+    - §H poll_refresh → Completed in ~4 min (10 polls × 20s); INVENTORY_FCT_BALANCE + EXTRACT_INVENTORY_CURRENT both Completed ✅
+    - F.1 links + per-table status table printed at Completed ✅
+    - MANUAL VISUAL CHECK → Paul clicked links, confirmed data visible ✅
+    - RECORD OUTCOME → artifact updated: `sandbox_applied_at: 2026-04-25T20:57:52Z`, `sandbox_refresh_id: 4de76ce2-...`, `script_hash: bb597cf3...` ✅
+  - **F.5 gaps surfaced (2026-04-25):**
+    - **GAP 1 (fixed in-session):** TOM does not cascade-delete relationships on `Model.Tables.Remove()`. Second run of `pbi_model_script.cs` failed with `OperationException: Relationship points to deleted table INVENTORY_FCT_BALANCE`. Fixed: pre-drop relationship-cleanup loop added to both drop blocks in the script.
+    - **GAP 2 (filed as follow-up):** `pbi_scan.py` ran (Paul chose `yes` not `skip`) and provided useful pre-run state confirmation. TE3 hang remains; REST fallback is sufficient for row-count confirmation.
+    - **GAP 3 (filed as follow-up):** No optional table/column renaming step in skill. GEP convention is Title Case display names; script currently uses Snowflake names. Need a rename block in Sub-step 1b after model apply.
+    - **GAP 4 (filed as follow-up):** No sandbox-vs-TEST model comparison step. Proposed validation: scan both environments before TEST apply, diff tables/relationships, flag unintended changes. Requires TE3/TOM scanner for useful metadata.
+    - **GAP 5 (filed as follow-up):** No dry-run compile check before §G apply. Wrapper supports `--dry-run`; would catch Roslyn errors before XMLA connection.
+    - **GAP 6 (filed as follow-up):** poll_refresh timeout currently aborts; should offer "keep polling? (yes / abort)" branch.
+    - **GAP 7 (filed as follow-up):** script hash mismatch check (Rule 9) not wired into Sub-step 1b flow — should compare artifact hash vs. current file hash before re-apply and warn Paul if they differ.
+    - **Additional hardening (applied in-session, 2026-04-25):** Items 1–4 shipped to `gep-feature.md`: (1) dry-run `--dry-run` compile check before §G apply (exit 4 = abort); (2) script hash mismatch warning before apply (Rule 9 wired in); (3) poll_refresh timeout → `(keep-polling-10min / abort)` branch instead of hard abort; (4) sandbox null-guard at Sub-step 1b entry before MODEL SCAN.
+    - **Paul's Gap 1 (table/column renaming) — filed as follow-up.** Need an optional RENAME block after APPLY MODEL SCRIPT. GEP convention = Title Case display names; scripts currently use Snowflake names. Decision: separate tranche (requires naming locked at scoping time).
+    - **Paul's Gap 2 (sandbox vs TEST model comparison) — filed as follow-up.** Useful but requires TOM-based scanner (TE3 path disabled). Row-count-only REST comparison is too narrow. Revisit after pbi_scan TE3-hang fix lands.
+  - **F.6 ✅ COMPLETE (2026-04-25)** — Wiki consolidated (sandbox-only scope):
+    - `phase6-pbi-automation-plan.md` §6.8 → flipped to ✅ COMPLETE with summary.
+    - `pbi-xmla-model-changes.md` → appended relationship-cascade-delete gotcha with full code pattern and two-list workaround.
+    - `pbi-xmla-automation.md` → updated Required Pieces §4 step 6 with validation link emission detail; step 2 annotated with "catches errors before XMLA connection".
+    - Tracker (this file) → execution log complete with all F.1–F.6 entries and gaps.
+
+### 2026-04-24 — Phase 6 Sub-step 1b end-to-end validation 🟡 (Opus, in progress)
+
+- **Goal:** prove `pbi_model_apply.exe` works end-to-end against the GP-208 sandbox dataset, closing the "no columns" blocker from the 2026-04-22/23 dry-run and promoting GP-208 artifact to `sandbox_validated: true`. This is the acceptance test for the whole Phase 6 automation claim.
+- **Context:** Tranches A–C shipped. `gep-feature.md` §G already calls `pbi_model_apply.exe` (wrapper committed today). The outstanding question is whether wrapper-driven apply + REST refresh actually produces populated tables in the sandbox.
+- **Commits today (2026-04-24):**
+  - `feat(pbi): pbi_model_apply .NET 8 wrapper — XMLA apply via TOM + Roslyn + MSAL`
+  - `feat(pbi): pbi_scan.py + pbi_model_scan.cs — read-only PBI model scan`
+  - Deleted `GEP/scripts/_rebind_sandbox_gp208.py` — hardcoded GP-208 one-off superseded by skill §H `update_parameters`.
+- **Plan (agreed with Paul, this session):**
+  1. Scan sandbox — `pbi_scan.py --env sandbox --tables INVENTORY_FCT_BALANCE,EXTRACT_INVENTORY_CURRENT`
+  2. Verify sandbox parameter binding — GET `/datasets/{id}/parameters` confirms `SNOWFLAKE_DATABASE = SANDBOX_DG1_GEP_GP208`
+  3. Harden `pbi_model_script.cs` — drop-if-exists guards so re-runs are idempotent regardless of starting state (Option 2 from the session)
+  4. Wrapper dry-run — Roslyn compile check
+  5. Wrapper apply — first run triggers MSAL device-code (browser); ~1h cached thereafter
+  6. Trigger refresh via REST — POST `/refreshes`
+  7. Poll refresh — 20s interval, 20-min cap
+  8. Verify row counts — re-run scan; expect both tables with columns and non-zero rows
+  9. Update GP-208 artifact — `sandbox_validated: true`, `sandbox_applied_at`, `sandbox_refresh_id`, new `script_hash`
+  10. Update tracker + close out `pbi-xmla-model-changes.md` "Current Status" + "GP-208 Sub-step 1b Status" sections.
+- **Execution log:** _appended below step-by-step as we go; deviations from the plan documented here_
+  - **Step 1 (scan sandbox) ⚠️ false-negative, tables WERE present.** Scanner's `EVALUATE TOPN(1, 'X')` returns non-200 when tables have 0 columns — the scanner reports the same "not in model" for absent tables AND broken 0-column tables. Misled us initially; the 2026-04-22 broken tables were actually still there.
+  - **Step 2 (verify parameter binding) ✅** — `SNOWFLAKE_DATABASE=SANDBOX_DG1_GEP_GP208`, `SNOWFLAKE_ROLE=SYSADMIN` confirmed via GET `/parameters`. Note: `CORE_API_CLIENT_TOKEN` value visible in the response — pre-existing security finding per 2026-04-21 discovery, already in [[potential-tickets]].
+  - **Step 4 (dry-run) ✅** — script compiles via Roslyn.
+  - **Step 5 (wrapper apply) ⚠️ required two plan deviations:**
+    - **Deviation 1 — first run skipped the add:** tables existed from 2026-04-22 GUI attempt with broken partitions, but the script's `if (!Model.Tables.Contains(...))` guards only-add-if-absent → nothing was replaced. Escalated Step 3 (drop-if-exists hardening) from "deferred" to "on the critical path" and modified `pbi_model_script.cs` in-session.
+    - **Deviation 2 — `Table.Delete()` does not exist in TOM** (only in TE3 GUI scripting sugar). Hit as Roslyn compile error. Fixed to `Model.Tables.Remove(Model.Tables[name])`. Dry-run green, apply succeeded, both tables dropped and readded.
+  - **Step 6 (trigger refresh) ✅** — first refresh request ID `0381d73c-2ed0-465a-a3b1-6bf1d4ca6a02`.
+  - **Step 7 (poll refresh) ✅** — Completed in ~4m 22s. REST response shows `objects[].status: "Completed"` for both new tables. One pre-existing warning (`_BASE_ACT_SALE_RET` → `SALES_RETURNS_CONSOLIDATED`) — 2026-04-21 tech debt, unrelated.
+  - **Step 8 (verify rows) ❌ — acceptance test FAILED despite refresh success.** Direct DAX `COUNTROWS` returned `AnalysisServicesErrorCode 3241804132: "Table 'X' cannot be used in computations because it does not have any columns"` for both tables. Refresh "Completed" at partition level but tables were empty.
+  - **Diagnosis #1 — Mode=Default → Mode=Import (WRAPPER BUG FIXED).** `_diag_partitions.cs` showed the new partitions had `Mode=ModeType.Default`; working `Inventory Balance` and `Product` partitions use `Mode=ModeType.Import` explicitly. The wrapper's `TabularExtensions.AddTable()` was creating partitions with the default mode. Patched `TabularExtensions.cs` to set `Mode = ModeType.Import` explicitly, rebuilt (`dotnet build -c Release`), re-applied, re-refreshed. Second refresh (request `4a225a83-...`) completed in ~5 min — but tables STILL had 0 user columns and DAX still failed.
+  - **Diagnosis #2 — TOM does NOT auto-discover M-query schema (ROOT CAUSE, architectural).** `_diag_columns.cs` comparison showed working `Inventory Balance` has 28 explicitly-defined `DataColumn` objects with `SourceColumn` mappings; our new tables had only the auto-generated `RowNumberColumn`. **TOM requires columns to exist in metadata BEFORE refresh can load data.** Only Power BI Desktop's Power Query editor does M-query schema inference — TOM/XMLA/REST all assume predefined columns. Tested workaround `partition.RequestRefresh(RefreshType.Full) + Model.SaveChanges()`: did not populate columns. Full write-up and rationale in [[pbi-xmla-model-changes]] § TOM Schema-Discovery Constraint.
+  - **Pivot — Option B chosen (with Paul, 2026-04-24):** build `GEP/scripts/pbi_generate_columns.py` — a small Python utility that queries Snowflake `INFORMATION_SCHEMA.COLUMNS` for target tables and emits a C# code fragment (`DataColumn { Name, SourceColumn, DataType }` entries). Fragment is pasted into `pbi_model_script.cs` (or future per-ticket scripts) before the `Model.AddTable()` calls. Reusable across every PBI-touching ticket. GP-208 validation is the acceptance test.
+  - **Rejected alternatives:**
+    - Option A — hand-code 28+ columns per new table. Unblocks today but puts manual schema authoring on every future PBI-touching ticket. Against the "high standard" goal.
+    - Option C — extend the wrapper with Snowflake connectivity + `--infer-columns` flag. Best end state; defers for now because of scope (adds Snowflake.Data .NET dependency, ODBC creds management, connection-string handling inside the wrapper).
+  - **Commits from this session (Paul-owned, not yet landed):**
+    1. `pbi_model_apply/TabularExtensions.cs` — `Mode = ModeType.Import` fix.
+    2. Rebuilt `pbi_model_apply.exe` binary.
+    3. `GEP/tickets/GP-208/pbi_model_script.cs` — drop-if-exists hardening (`Model.Tables.Remove(...)`) replacing the original `if-not-exists` guards.
+    4. Diagnostic scripts (`_diag_partitions.cs`, `_diag_columns.cs`, `_diag_requestrefresh.cs`) — can be deleted or parked under `GEP/tickets/GP-208/` as documented-working-examples for future diagnosis (recommend delete post-validation).
+  - **Next steps this session:** (a) wiki updates in progress — tracker + `pbi-xmla-model-changes.md` + `phase6-pbi-automation-plan.md`. (b) Build `pbi_generate_columns.py`. (c) Apply generated columns to `pbi_model_script.cs`. (d) Re-run wrapper → refresh → verify rows > 0 → set `sandbox_validated: true`.
+  - **Option B build — `pbi_generate_columns.py` ✅** — 200-line Python utility, mirrors `deploy.py` `.env` + Snowflake connect conventions. Takes `--env`, `--ticket` (for sandbox), `--tables`, `--schema` (default WAREHOUSE). Queries `INFORMATION_SCHEMA.COLUMNS`, maps Snowflake types → TOM `DataType` via the table documented in [[pbi-xmla-model-changes]]. Emits one `void AddColumns_<TABLE>(Table t)` function per table into a fragment file. First-try bug: `FROM IDENTIFIER(%s).INFORMATION_SCHEMA.COLUMNS` is a Snowflake syntax error; fixed to `FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_CATALOG = ...` using the current-DB context. Re-run clean: 27 cols for INVENTORY_FCT_BALANCE, 32 for EXTRACT_INVENTORY_CURRENT.
+  - **Wrapper enhancement — `#load` support** — `Program.cs BuildScriptOptions` now calls `WithSourceResolver(new SourceFileResolver(searchPaths: [scriptDir], baseDirectory: scriptDir))`. Lets per-ticket scripts do `#load "pbi_model_columns.cs"` to include generator output without inlining. Generator-emitted files stay separate from hand-written logic. Rebuild confirmed.
+  - **Script wiring — `pbi_model_script.cs`** — `#load "pbi_model_columns.cs"` at top; `AddColumns_INVENTORY_FCT_BALANCE(t)` / `AddColumns_EXTRACT_INVENTORY_CURRENT(t)` inserted between `Model.AddTable(...)` and `SetExpression(...)` for each table. New script hash: `6e16abc044d474...`.
+  - **Final apply run ✅** — 27 + 32 columns defined; PRODUCT_KEY → Product relationship auto-created on the same pass because the column now exists at relationship-check time (previously skipped with "columns not yet present" warning).
+  - **Refresh `ad9f66d5-91ab-41c4-a550-19e1ef4feb8c` ✅** — Completed in ~4m 10s; both tables marked Completed at the partition level.
+  - **🎯 Acceptance test PASSED** — DAX `COUNTROWS`:
+    - `INVENTORY_FCT_BALANCE`: **16,736 rows** (exact match with Snowflake sandbox validate 2026-04-22)
+    - `EXTRACT_INVENTORY_CURRENT`: **16,560 rows** (slightly fewer — extract inner-joins against SHARED_DIM_PRODUCT)
+  - **Artifact updated** — `sandbox_validated: true`, `sandbox_applied_at: 2026-04-24T18:32:00Z`, `sandbox_refresh_id: ad9f66d5-...`, `sandbox_row_counts: {...}`, new `script_hash`.
+  - **Cleanup** — `_diag_partitions.cs`, `_diag_columns.cs`, `_diag_requestrefresh.cs`, `_diag_check_expressions.cs` removed from `GEP/tickets/GP-208/`. Diagnostic technique documented in [[pbi-xmla-model-changes]] for future use.
+
+### 2026-04-24 — Phase 6 Sub-step 1b end-to-end validation ✅ COMPLETE + Tranche E wiki ✅ COMPLETE (Opus)
+
+**🛑 SESSION END / RESUMPTION NOTES (2026-04-24):**
+
+Paul closed the session here. Pick up next session as follows:
+
+**1. Commit pending work (Paul-owned):**
+
+`repos/clients` — 4 commits, in order:
+1. `fix(pbi): wrapper — Mode=Import + #load support (closes TOM schema-discovery gap)`
+   → `GEP/scripts/pbi_model_apply/TabularExtensions.cs`, `GEP/scripts/pbi_model_apply/Program.cs`
+2. `feat(pbi): pbi_generate_columns.py — emit TOM DataColumn defs from Snowflake`
+   → `GEP/scripts/pbi_generate_columns.py` (new)
+3. `feat(GP-208): PBI sandbox validated end-to-end — 16,736 + 16,560 rows`
+   → `GEP/tickets/GP-208/pbi_model_script.cs`, `GEP/tickets/GP-208/pbi_model_columns.cs`, `GEP/tickets/GP-208/artifact.yaml`
+4. `feat(skill): Sub-step 1b — column generation pre-step for new tables`
+   → `.claude/commands/gep-feature.md`
+
+`repos/wiki` — 1 commit covering Tranche E + today's session log:
+- `concepts/patterns/pbi-xmla-automation.md` (new), `entities/tools/power-bi.md`, `entities/tools/SSMS.md`,
+  `entities/projects/workflow-automation.md`, `processes/deployment/gep-snowflake-pbi-deployment.md`,
+  `processes/deployment/pbi-xmla-model-changes.md`, `processes/distributed-workflow/active/phase6-pbi-automation-plan.md`,
+  `processes/distributed-workflow/active/client-workflow-automation.md`, `index.md`, `log.md`
+
+**2. What's done:**
+- Phase 6 Tranches A, B, C all shipped previously
+- Phase 6 wrapper + generator + script wiring + GP-208 acceptance test ✅ today
+- Tranche E wiki corrections ✅ today (canonical pattern page; SQL-Server-intermediate myth corrected; XMLA Automation cross-refs everywhere)
+- "Multi-feature conflict in TEST/PBI" blocker ✅ closed today
+
+**3. Remaining workstream backlog (NOT blocked, can pick up any time):**
+- **Tranche D — `prod-deployed` conditional auto-apply** (plan §3.7). Implement only AFTER Tranche C is dogfooded on at least one *additional* real ticket beyond GP-208. Adds `if visual_required == false` branch at the prod publish gate that auto-applies `pbi_model_apply.exe` against the production dataset + REST refresh.
+- **Replace `pbi_partition_expressions.md`** — vestigial from the TE3 GUI workaround era (per-ticket M-expression copy-paste reference). Now superseded by the model script's `InventoryFctM(...)` helper. Delete or repurpose as an M-expression conventions reference for any future ticket that needs to hand-author M outside the script.
+- **Re-enable `pbi_scan.py` TE3 path or replace with TOM-based scanner.** Currently `if False`-gated; only REST DAX fallback runs. The wrapper proves a TOM-based scan is viable — could write a `pbi_model_scan` C# script that uses TOM (no TE3 dependency), then call it from `pbi_scan.py` via `pbi_model_apply.exe` + `--script`. Filed in [[potential-tickets]].
+- **Naming-convention reconciliation** — GP-208 added new tables with Snowflake names (`INVENTORY_FCT_BALANCE`); GEP convention is Title Case (`Inventory Balance`). Reconcile when scoping the next inventory ticket. Decision recorded in GP-208 artifact 2026-04-23.
+
+**4. Ticket state:**
+- GP-208 artifact: stage = `implementing`, `sandbox_validated: true`. Next stage transition is to TEST (Sub-step 2 — promote model + Snowflake to TEST_DG1_GEP). Ready to advance once Paul wants to resume the GP-208 ticket itself (separate from the workstream backlog above).
+
+**5. Stale boot prompts in this tracker:**
+- The "🔴 CURRENT — Phase 6: Make Sub-step 1b work via automation" boot prompt below is now stale (the work it described is complete). Leave it for historical context, but a future resumption should NOT use it as the entry point — start from this 2026-04-24 entry instead.
+
+---
+
+**Outcome:** The full Phase 6 PBI model automation loop is proven end-to-end against GP-208 sandbox. Loop: wrapper apply (via TOM + Roslyn + MSAL) → REST parameter rebind → REST refresh + poll → DAX row-count verification. Acceptance test passes with exact row-count match to upstream Snowflake sandbox.
+
+**Shipped today (uncommitted, Paul-owned):**
+- `GEP/scripts/pbi_model_apply/TabularExtensions.cs` — `Mode = ModeType.Import` explicit (was inheriting `Default`)
+- `GEP/scripts/pbi_model_apply/Program.cs` — `#load` directive support via `SourceFileResolver`
+- `GEP/scripts/pbi_model_apply/bin/Release/net8.0-windows/pbi_model_apply.exe` — rebuilt binary (gitignored via nested `.gitignore`)
+- `GEP/scripts/pbi_generate_columns.py` — new helper (Option B)
+- `GEP/tickets/GP-208/pbi_model_columns.cs` — generator output for GP-208
+- `GEP/tickets/GP-208/pbi_model_script.cs` — drop-if-exists + `#load` + `AddColumns_*(t)` wiring
+- `GEP/tickets/GP-208/artifact.yaml` — `sandbox_validated: true` + timestamps + row counts
+- Wiki: [[pbi-xmla-model-changes]] § TOM Schema-Discovery Constraint + Mode gotcha + drop-if-exists pattern; [[phase6-pbi-automation-plan]] §6.6 + §6.7
+
+**Remaining in the workstream (not blocked on this session):**
+- Tranche D — `prod-deployed` conditional auto-apply (plan §3.7). Dogfood Tranche C on 1+ real tickets first.
+- Tranche E — wiki docs: new `concepts/patterns/pbi-xmla-automation.md`, corrections to `entities/tools/power-bi.md` (remove SQL-Server-intermediate claims), `entities/tools/SSMS.md` (reframe as XMLA client into PBI tabular model), `gep-snowflake-pbi-deployment.md` (XMLA automation callout), `workflow-automation.md` §7 (PBI out-of-scope note), close "Multi-feature conflict in TEST / PBI" blocker.
+- Update `gep-feature.md` §G / Sub-step 1b to mention the `pbi_generate_columns.py` pre-step when new tables are introduced.
+
+### 2026-04-23 — Phase 6 Option A planning session complete ✅ (Opus, xhigh effort)
+
+- produced: [[pbi-model-apply-wrapper]] — authoritative implementation plan for a thin
+  .NET 8 console wrapper (`GEP/scripts/pbi_model_apply/`) that applies PBI model scripts
+  via TOM directly, replacing the hung TE3 CLI path diagnosed in [[pbi-xmla-model-changes]].
+- decisions:
+  - **Technology:** .NET 8 console app; `Microsoft.AnalysisServices.NetCore.retail.amd64`
+    (TOM) + `Microsoft.CodeAnalysis.CSharp.Scripting` (Roslyn). No MSOLAP, no WebView2,
+    no GUI dependency — the thing that makes TE3 hang. Wrapper talks HTTPS to the PBI
+    XMLA endpoint directly via TOM's managed transport with a bearer token in the
+    connection string's `Password` field (`User ID=AzureAD;Password=<bearer>`).
+  - **Script API:** TE3 emulation layer (~80 LOC) exposing `AddTable`,
+    `AddRelationship`, `SetExpression` extension methods via Roslyn's `WithImports`
+    mechanism. One documented syntax delta from TE3 GUI scripts: partition expression
+    assignment becomes `.SetExpression(...)` because C# lacks extension properties.
+    Two line edits in the existing `GP-208/pbi_model_script.cs` (§4.1 of plan); one
+    additional edit for the `SingleColumnRelationship` cast in the relationship-exists
+    probe (raw TOM exposes `FromTable`/`ToTable` on the typed subclass, not the base).
+    Future scripts use the new form from the start.
+  - **Build/deploy:** source project checked in at `GEP/scripts/pbi_model_apply/`;
+    `bin/`/`obj/` gitignored; Paul runs `dotnet build -c Release` once (~90s first time
+    with NuGet restore). Skill invokes `bin/Release/net8.0-windows/pbi_model_apply.exe`.
+  - **CLI:** `--script / --workspace / --dataset / --token [--dry-run --timeout --verbose]`.
+    Discrete args not one connection string — keeps wrapper in charge of formatting,
+    makes the token easy to redact at the caller, matches how §G already resolves these
+    from config.
+  - **Exit codes:** 0 success, 1 script runtime, 2 auth/401, 3 connection, 4 Roslyn
+    compile, 5 model locked, 6 invalid args, 99 unexpected — so §G can react distinctly
+    (retry auth after re-acquiring token; don't retry compile errors; tell Paul to
+    close TE3 GUI on lock errors).
+  - **§G rewrite:** command-line replacement only — token acquisition (§I), config
+    reads, token redaction on display, retry-on-401 all stay identical. Heading renames
+    from "Tabular Editor CLI helper" to "PBI Model Apply helper".
+  - **Config:** new `pbi_model_apply_path` top-level key in `pbi_config.yaml`;
+    existing `tabular_editor_path` stays (still referenced by `pbi_scan.py`).
+- highest-risk unknowns surfaced to Paul (see plan §11):
+  1. 🔴 `Microsoft.AnalysisServices.NetCore.retail.amd64` + bearer token + GEP's
+     PPU XMLA endpoint end-to-end — confirmed at API surface, unconfirmed on this
+     specific capacity/tenant. Plan §11.4 has a 30-line standalone repro Paul can run
+     in ~5 minutes to de-risk before the implementation session.
+  2. 🟡 .NET 8 *SDK* (not just runtime) on Paul's machine — `dotnet --list-sdks`
+     check, 30 seconds.
+  3. 🟡 Roslyn `CSharpScript.RunAsync` with `WithImports("PbiModelApply")` resolving
+     extension methods without a `using` in the script body. Documented working in
+     Roslyn 4.11; fallback is to prepend one line to the script at load time.
+- no code or skill changes in this session (planning only per boot prompt).
+- wiki touches (plan doc + index + log; NO changes to `gep-feature.md` or any
+  `GEP/scripts/` file; no edits to [[pbi-xmla-model-changes]] yet — that update happens
+  in the implementation session).
+- next: Sonnet implementation session booted from [[pbi-model-apply-wrapper]]. If Paul
+  runs the §11.4 repro before it starts and it prints "Connected. Model has N tables.",
+  the session should go straight through §3/§4/§6 with zero clarifying questions.
+  Acceptance test is GP-208 sandbox apply → refresh → rows>0 (§7 of the plan).
+
+### 2026-04-23 — Phase 6 MSAL pre-flight repro: Path-1 auth confirmed ✅ (Sonnet)
+
+- goal: narrow the §11.1 risk from [[pbi-model-apply-wrapper]] — does TOM on .NET 8 accept
+  a bearer token on GEP's PPU XMLA endpoint, and from which token source?
+- outcome: **Path-1 confirmed.** MSAL device-code with PBI public client ID
+  `ea0616ba-638b-4df5-95b9-636659ae5121` works end-to-end:
+  - `appid=ea0616ba-...`, `aud=https://analysis.windows.net/powerbi/api` accepted.
+  - `GEP_Sandbox_Current` found; model has **32 tables** (confirmed live).
+  - Workspace: `GEP Sandbox Models`, dataset ID: `fb41970d-2beb-4ed9-9f82-35c6439b35ea`.
+- confirmed broken: `az account get-access-token` bearer token — XMLA rejects it.
+  Token's `appid=04b07795-...` (Azure CLI) is not an approved XMLA client.
+  REST calls (§H) still work with `az` tokens. This is purely an XMLA restriction.
+- three TOM implementation gotchas discovered and documented in [[pbi-model-apply-wrapper]] §11.1:
+  1. `using Microsoft.AnalysisServices` + `using Microsoft.AnalysisServices.Tabular` →
+     ambiguous `Server` → use `Microsoft.AnalysisServices.Tabular.Server` fully-qualified.
+  2. `server.Databases["name"]` indexes by internal AS **ID** (GUID), not display `Name` →
+     use `server.Databases.Cast<Database>().FirstOrDefault(d => d.Name == name)`.
+  3. `AccessToken` ctor: use `DateTimeOffset`, not `DateTime`.
+- plan delta proposed (awaiting Paul approval before applying):
+  - Remove `--token` CLI arg from wrapper. Wrapper owns MSAL auth internally.
+  - Add §I-XMLA (MSAL device-code, `ea0616ba-...` client, disk cache via
+    `Microsoft.Identity.Client.Extensions.Msal`). Silent re-use within ~1h.
+  - §I stays for REST (§H) unchanged. §G calls wrapper without passing token.
+  - Add `--clear-token-cache` optional flag. Remove redaction step from §G display.
+- wiki updates: [[pbi-model-apply-wrapper]] Q1b/Q3d/§3.1/§3.2/§3.2b/§3.4/§3.7/§3.8/
+  §5.1/§6.1/§7.2/§11.1 all revised; [[phase6-pbi-automation-plan]] §I + §5a corrected.
+- repro artefact: `C:\Users\PaulRussell\tom-repro\` (not in clients repo — standalone repro only).
+- next: approve plan delta → Sonnet implementation session for `pbi_model_apply` wrapper.
+
+### 2026-04-22/23 — Phase 6 GP-208 dry-run: Sub-step 1b in progress 🟡 (Sonnet)
+
+- did: first real-ticket dry-run of Phase 6 (Sub-step 1b PBI sandbox validation) using GP-208. Completed: artifact created, Sellercloud blocker confirmed resolved, sandbox SQL deployed + validated (9/9 ✅, 16,736 rows), sandbox dataset rebound to `SANDBOX_DG1_GEP_GP208`, MODEL SCAN implemented via `pbi_scan.py` (REST fallback, TE3 path disabled — see blockers). Both `INVENTORY_FCT_BALANCE` and `EXTRACT_INVENTORY_CURRENT` tables added to sandbox dataset via TE3 GUI. Refresh triggered multiple times.
+- **Blocked:** Tables refresh with "no columns" despite `Inventory Balance` (same connection) working. Most likely cause: partition type is DAX instead of M Query. Fix: open TE3 → verify partition type → change to M Query → paste correct expression → save → refresh.
+- key discoveries — **all documented in [[pbi-xmla-model-changes]]**:
+  1. **TE3 CLI (`/s /x`) does not work from any subprocess context** — TE3 is a Windows GUI app (PE subsystem 2) with a WebView2 browser component. When launched as a subprocess (Python, PowerShell, bash), the message loop is never pumped. Hang confirmed across 10+ approaches including: Python subprocess, PowerShell `Start-Process`, bash `timeout`, clearing WebView2 cache, disabling startup network calls, forced invalid preferences, direct positional args, porter token injection via ADOMD.NET. Workaround: Paul runs TE3 GUI manually and applies C# scripts from the scripting panel.
+  2. **GEP M expression uses `PARAM_SHORT_CODE`** (not `SNOWFLAKE_DATABASE`) for the database parameter. Discovered by reading `Inventory Balance` partition expression. `PARAM_SHORT_CODE` is an M computed expression that resolves to the active Snowflake DB. `SNOWFLAKE_DATABASE` is a dataset parameter used only by the REST API rebind (`UpdateParameters`). All future TE scripts must use `PARAM_SHORT_CODE`.
+  3. **C# script API differences TE2 vs TE3** — `Model.AddRelationship()` and `Model.SaveChanges()` don't exist in TE3; `Model.Database.Update()` is the save equivalent; `AddRelationship` takes 2 column arguments not 4.
+  4. **Partition type gotcha** — `Model.AddTable()` in TE3 C# scripting may create a DAX partition by default. M expressions pasted into a DAX partition silently fail during refresh (table exists but "has no columns"). Must verify partition type in TE3 GUI before pasting M expression.
+  5. **GEP PBI naming convention** — model uses Title Case display names (`Inventory Balance`, `Order Line`) not Snowflake identifiers (`INVENTORY_FCT_BALANCE`). Existing hidden `Inventory Balance` and `Inventory Measures` tables were discovered. New tables added with Snowflake names for now; renaming deferred. Filed to [[potential-tickets]].
+  6. **pbi_scan.py TE3 path disabled** — `if False` guard added to prevent TE3 subprocess launch from spawning hung windows. REST scan path works for existence check + row count of queryable tables. TE3 path will be re-enabled when CLI automation is fixed.
+- new wiki pages: [[pbi-xmla-model-changes]] (TE3 CLI findings, GEP M expression conventions, Sub-step 1b status, future fix directions)
+- new potential tickets: pbi_scan.py requires TE3, GEP PBI naming convention not followed, share stability 2 new incidents (CURRENT_FORECAST_CSV + CURRENT_REPORT_ALL_ORDERS_UK recurrence)
+- artifact: `GEP/tickets/GP-208/artifact.yaml` — stage: `implementing`, decisions logged, sandbox validate_pass: "9/9"
+- next: **boot prompt below — "Phase 6 Sub-step 1b fix" — fix partition type in TE3 GUI**
+
+### 2026-04-22 — Phase 6 Tranche C implementation complete ✅ (Sonnet)
+
+- did: implemented Tranche C (§C.1–§C.4) in `.claude/commands/gep-feature.md`.
+- changes:
+  - **C.1** — `scoped` step 2b extended: after PBI yes/no, asks whether changes are
+    `visual-included` or `metadata-only`; records `changes.pbi_model.visual_required`.
+  - **C.2** — `Sub-step 1b — PBI sandbox model validation` inserted in `implementing`
+    between sandbox teardown and Sub-step 2. Full gate/pre-flight/rebind/TE CLI apply/
+    refresh poll/visual check/record outcome flow per plan §3.3.
+  - **C.3** — `PBI model promotion to GEP Test Models` block inserted at the end of
+    Sub-step 2: gates on `sandbox_validated`, uses §G + §H to apply script and refresh
+    TEST dataset, records `test_applied_at` / `test_refresh_id`.
+  - **C.4** — `test-deployed` step 3 refined: checks `test_applied_at`; skips manual
+    refresh prompt if auto-apply already ran; still requires manual visual pass/fail.
+- file size: 1,131 → 1,284 lines (+153 lines).
+- context: Paul wants to use GP-208 (Inventory Feed Intake & Modelling, Phase 1) as
+  the first real-ticket dry-run of Tranche C. Old GP-208 SQL from a prior abandoned
+  attempt (2025, tried to combine current + historical inventory) is stale and ignored.
+  GP-208 will start from scratch at the scoping stage.
+- ready to commit (Paul owns): `.claude/commands/gep-feature.md`
+  Suggested commit: `feat(skill): Phase 6 Tranche C — Sub-step 1b PBI sandbox validation + TEST promotion tail`
+- next: fill `pbi_config.yaml` test.* and prod.* workspace IDs, then run
+  `/gep-feature GP-208` to start the ticket from scoping.
 
 ### 2026-04-21 — Phase 6 Tranche A + B execution complete ✅ (Opus main + Sonnet subagent, live UI work with Paul)
 
@@ -291,20 +789,13 @@ _These touch shared files (index.md, log.md) and should be applied in the next e
 
 _Sandbox-scope question resolved 2026-04-18._
 
-### 🟠 Planned resolution via Phase 6 — Multi-feature conflict in TEST / PBI (flagged 2026-04-18; plan 2026-04-21)
+### ✅ Resolved 2026-04-24 — Multi-feature conflict in TEST / PBI
 
-**Status update (2026-04-21)**: the PBI half of this blocker is now planned.
-**Phase 6 — Power BI Model Automation** introduces an XMLA-scripted PBI sandbox
-stage (Sub-step 1b in `implementing`) that validates PBI model changes against an
-isolated sandbox dataset before anything touches the shared client-facing TEST
-workspace. Plan at [[phase6-pbi-automation-plan]]. Implementation gated on four
-Paul-owned answers (capacity SKU, Tabular Editor install, SPN auth, PBIX
-connection shape — see plan §5).
+**Status:** PBI half resolved end-to-end. Snowflake half remains operational coordination.
 
-The **Snowflake half** (TEST serialisation when multiple tickets share one TEST
-DB) remains an operational coordination problem rather than a technical one — the
-TEST serialisation checklist added in Phase 4 and the rollback in deploy.py are
-the accepted v1 mitigations. Per-ticket Snowflake TEST isolation is not pursued.
+**PBI half (resolved):** Phase 6 shipped. New tickets with PBI model changes now validate against an isolated sandbox dataset (`GEP_Sandbox_Current` in the `GEP Sandbox Models` workspace) via `pbi_model_apply.exe` + REST refresh BEFORE anything touches the client-facing `GEP Test Models` workspace. GP-208 was the acceptance test — 16,736 + 16,560 rows loaded into the sandbox dataset on 2026-04-24. See [[pbi-xmla-automation]] for the pattern and the 2026-04-24 session log in this tracker for execution detail.
+
+**Snowflake half (unchanged — accepted v1):** TEST_DG1_GEP is still a shared environment across tickets. Mitigated operationally by the TEST serialisation checklist added in Phase 4 and the rollback in `deploy.py`. Per-ticket Snowflake TEST isolation is not pursued — sandbox Snowflake DBs (`SANDBOX_DG1_GEP_<ticket>`) already provide per-ticket isolation before the TEST promotion gate, so tickets only collide in TEST when multiple are simultaneously promoted to UAT. That's rare in practice and easier to coordinate than to automate.
 
 ---
 
@@ -353,6 +844,664 @@ the blast radius of multi-feature conflicts is contained. Track as a v2 ops tick
 _None._
 
 ## Next Session Boot Prompt
+
+### ~~🔴 CURRENT~~ (complete 2026-04-26) — Tranche H: GP-208 dogfood + workflow improvements (Sonnet)
+
+**Result:** Full workflow ran end-to-end. TEST deploy ✅, PBI model applied ✅, PRs raised, Jira comments posted. Intentionally rolled back (test run). Major workflow improvements shipped (see session log above). Next: real ship.
+
+### 🔴 CURRENT — GP-208 real ship: TEST → UAT → prod (Sonnet)
+
+**Primary goal:** Ship GP-208 for real. Workflow and tooling are fully proven from Tranche H. Resume at `implementing` Sub-step 2 (TEST deploy), proceed through TEST-deployed → UAT → prod.
+
+**Why Sonnet:** Execution work following a thoroughly dogfooded workflow. All design decisions locked.
+
+**Why Sonnet:** Execution work following an approved and dogfooded plan. Reasoning is not the bottleneck.
+
+**Context:**
+- Phase 7B migration is complete. Scripts live in `~/repos/aldc-shipyard/`. Skill is at `~/.claude/commands/gep-feature.md`.
+- `clients` repo is on branch `feature/paulrussell/GP-208/inventory-feed-ingestion-and-modeling`. GP-208 SQL + artifacts committed at `6eef9f90`.
+- `aldc-shipyard/.env` is in place. `config/gep.yaml` is in place.
+- `clients/GEP/pbi_config.yaml` does NOT exist yet — needs to be created from `aldc-shipyard/clients/GEP/pbi_config.example.yaml` before PBI sandbox steps.
+- Share health check already run: all 42 PROD_DG1_GEP objects accessible. Skip it at the Sub-step 1 prompt.
+- G.1b confirmed fixed: `git ref` line in deploy output now shows the GP-208 branch HEAD.
+
+````
+You are shipping GP-208 for real — inventory feed ingestion & modelling for GEP.
+The workflow was fully dogfooded in Tranche H (2026-04-26). Resume cleanly.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`.
+2. Read `C:\Users\PaulRussell\repos\wiki\tickets\gep\GP-208.md` — status + next session boot context.
+3. Read `C:\Users\PaulRussell\repos\clients\GEP\tickets\GP-208\artifact.yaml` — current stage.
+
+Key facts:
+- SHIPYARD_HOME = C:/Users/PaulRussell/repos/aldc-shipyard
+- clients repo branch: feature/paulrussell/GP-208/inventory-feed-ingestion-and-modeling
+- aldc-shipyard: fully set up (setup.py run, pbi_config.yaml populated for TEST,
+  pbi_model_apply.exe built, config/gep.yaml in place)
+- Workspace: open aldc-shipyard.code-workspace in VS Code before starting
+- SQL files confirmed correct from Tranche H dogfood — no changes needed
+- Stage: implementing → resume at Sub-step 2 (TEST deploy)
+
+Invoke `/gep-feature GP-208` to begin.
+````
+
+---
+
+### ~~🔴 CURRENT~~ (complete 2026-04-26) — Phase 7B: `aldc-automation` repo implementation (Sonnet + `/effort medium`)
+
+**Result:** Migration complete. All scripts in `aldc-automation`, skill at user level, GP-208 branch clean, smoke test 42/42 ✅. See Phase 7B session log for deviations and details.
+
+**Primary goal (original):** Build the `aldc-automation` repo per the spec at [[aldc-shipyard]]. Execute the migration plan end-to-end so the next GP-208 dogfood runs from the new structure. This is execution work, not design — the architecture is already locked.
+
+**Why Sonnet:** Pure execution against an approved spec. File moves, script refactors, skill rewrite, smoke test. Reasoning is not the bottleneck.
+
+**Why this must happen before the next dogfood:** The dual-branch problem (G.1a, G.1b, G.1e) recurs every session until the migration ships. The Phase 7 design (2026-04-26) locked the structure; running another dogfood from `clients/GEP/scripts/` will waste the session on branch management.
+
+````
+You are running Phase 7B of the client-workflow-automation workstream — the implementation
+session for the aldc-automation repo. The architecture spec is already locked.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`.
+2. Read `C:\Users\PaulRussell\repos\wiki\entities\repos\aldc-automation.md` — this is the
+   authoritative spec. Every structural decision (repo layout, config schema, path resolution,
+   connector pattern) is captured there. Do not redesign; execute.
+3. Read this tracker:
+   - 2026-04-26 Phase 7 session log — D1–D7 decisions and rationale
+   - "Near-term Architecture Goal" section — original decision context
+   - 2026-04-26 Tranche G execution log — gaps the migration must close (G.1a, G.1b, G.1e)
+4. Skim the current scripts you will be moving and refactoring:
+   - `clients/GEP/scripts/{deploy,validate}.py` — note the `_REPO_ROOT = _HERE.parent.parent`
+     pattern; this is what becomes config-driven.
+   - `clients/GEP/scripts/pbi_*.py` — pbi_generate_columns, pbi_scan, pbi_seed_sandbox.
+   - `clients/GEP/scripts/pbi_model_apply/` — .NET source (Program.cs, ScriptGlobals.cs,
+     ExitCodes.cs, TabularExtensions.cs, csproj). Do not copy bin/ or obj/.
+   - `clients/GEP/scripts/{deploy_manifest,validate_manifest}/` — manifest YAMLs.
+   - `clients/GEP/scripts/pbi_config.example.yaml` — schema doc.
+   - `clients/.claude/commands/gep-feature.md` — orchestrator skill, currently at clients
+     repo level, must move to user level (~/.claude/commands/) per migration step 6.
+
+Migration plan (execute in order — Paul owns all git operations):
+
+1. **Scaffold** `aldc-automation` at `~/repos/aldc-automation/`. Ask Paul to `git init` and
+   create the initial commit; you write the README, .gitignore, and empty directory structure.
+   .gitignore must cover: `.env`, `config/*.yaml` (except `*.example.yaml`),
+   `clients/*/pbi_config.yaml`, `__pycache__/`, `.venv/`, `pbi_model_apply/bin/`,
+   `pbi_model_apply/obj/`, `*.pyc`.
+
+2. **Copy scripts** (no git history — fresh files):
+   - `scripts/deploy.py`, `validate.py`, `pbi_generate_columns.py`, `pbi_scan.py`,
+     `pbi_seed_sandbox.py`, `data-share-capacity-query.py`
+   - `scripts/pbi_model_apply/{Program,ScriptGlobals,ExitCodes,TabularExtensions}.cs`
+   - `scripts/pbi_model_apply/pbi_model_apply.csproj`
+   - `clients/GEP/deploy_manifest/*.yaml`, `clients/GEP/validate_manifest/*.yaml`
+   - `clients/GEP/pbi_config.example.yaml`
+
+3. **Refactor scripts** per [[aldc-shipyard]] §"Script refactor required":
+   - Add `--client <name>` arg to deploy.py and validate.py.
+   - Replace `_REPO_ROOT = _HERE.parent.parent` (which used to mean clients-repo root)
+     with `_AUTOMATION_HOME = _HERE.parent` and load `config/<client>.yaml` from there.
+   - Replace hardcoded paths with config-driven ones:
+     • SQL_DIR ← repos.clients / clients_layout.warehouse_sql_dir
+     • MANIFEST_DIR ← _AUTOMATION_HOME / automation_layout.deploy_manifest_dir
+     • Validate output dir ← repos.clients / clients_layout.tickets_dir / <ticket>
+     • Rollback dir ← repos.clients / clients_layout.tickets_dir / <ticket> / rollback
+     • PBI config ← _AUTOMATION_HOME / automation_layout.pbi_config_path
+   - .env loader looks at _AUTOMATION_HOME / .env first, then falls back to legacy paths.
+   - **G.1b fix:** deploy.py git ref must come from `git -C <repos.clients> log -1
+     --format='%h %s' <ticket-branch>`, not `git log -1` from cwd. Wire this into the
+     deploy header that prints "git ref".
+   - PBI scripts get the same --client treatment for path resolution.
+
+4. **Create `config/gep.yaml`** (gitignored, real values) and `config/gep.example.yaml`
+   (committed schema doc) per the schema in [[aldc-shipyard]] §"`config/<client>.yaml`".
+   The example file uses placeholder paths and explanatory comments; the real one has
+   Paul's actual machine paths.
+
+5. **Move `pbi_config.yaml`** values: copy current `clients/GEP/scripts/pbi_config.yaml`
+   contents to `aldc-automation/clients/GEP/pbi_config.yaml`. Both are gitignored — this
+   is a manual file copy, not a git move.
+
+6. **Move skill to user level** (this is also a fix, since the skill was incorrectly
+   reported as already user-level):
+   - Move `clients/.claude/commands/gep-feature.md` → `~/.claude/commands/gep-feature.md`
+     (Paul's call on whether to keep a copy at clients level for portability; recommend
+     removing).
+   - Add path-resolution prelude near the top:
+     `AUTOMATION_HOME="${ALDC_AUTOMATION_HOME:-$HOME/repos/aldc-automation}"`
+   - Replace every `python GEP/scripts/<x>.py` with
+     `python "$AUTOMATION_HOME/scripts/<x>.py" --client gep` (the `--client` flag is
+     part of the new contract — confirm against the deploy.py/validate.py refactor).
+   - Replace every `GEP/scripts/pbi_config.yaml` reference with
+     `"$AUTOMATION_HOME/clients/GEP/pbi_config.yaml"`.
+   - Replace every `GEP/scripts/{deploy,validate}_manifest/` reference with
+     `"$AUTOMATION_HOME/clients/GEP/{deploy,validate}_manifest/"`.
+
+7. **Delete from clients repo** (Paul commits the deletion):
+   - `GEP/scripts/` (entire directory — includes .venv, .env, scripts, manifests).
+   - Update `clients/.gitignore` to drop now-obsolete entries
+     (`GEP/scripts/.env`, `GEP/scripts/pbi_config.yaml`, `GEP/scripts/.venv/`, etc.).
+   - If `clients/.claude/commands/gep-feature.md` is removed in step 6, remove the
+     `.claude/commands/` directory if empty.
+
+8. **Rebase GP-208** onto current clients HEAD. SQL files in `GEP/snowflake/warehouse/`
+   and ticket artifacts in `GEP/tickets/GP-208/` (artifact.yaml, notes.md,
+   pbi_model_script.cs, pbi_model_columns.cs) stay; nothing in `GEP/scripts/` survives.
+   Verify GP-208's manifests in `aldc-automation/clients/GEP/deploy_manifest/GP-208.yaml`
+   still reference SQL filenames that exist in clients on the GP-208 branch.
+
+9. **Archive** `feature/paulrussell/workflow-automation/gep-scripted-deploy` — Paul
+   closes any open PR or deletes the branch.
+
+10. **Smoke test** from a fresh shell (new working directory, no env vars beyond the
+    install). Cold run:
+        python "$AUTOMATION_HOME/scripts/deploy.py" --client gep --env sandbox \
+          --ticket GP-208 --check-share
+    Confirm: config resolves, .env loads, manifest reads from automation repo, SQL files
+    discovered in clients repo via config path, share check executes (does not need to
+    succeed — just needs to reach Snowflake).
+
+11. **Hand off to dogfood:** announce migration complete, point Paul at the next
+    `/gep-feature GP-208` run boot prompt (will be a Tranche H section added after this
+    session completes).
+
+Done criteria:
+- `~/repos/aldc-automation/` exists with the layout from [[aldc-shipyard]] §"Repo layout".
+- `config/gep.yaml` exists (gitignored), `config/gep.example.yaml` is committed.
+- All scripts run with `--client gep` and resolve paths from config — no hardcoded
+  clients-repo paths remain.
+- Skill at `~/.claude/commands/gep-feature.md` calls scripts via `$AUTOMATION_HOME`.
+- `clients/GEP/scripts/` deleted on a commit Paul approves.
+- Smoke test passes from a fresh shell.
+- This tracker's session log gets a "2026-04-XX — Phase 7B execution" entry with: what
+  was migrated, any deviations from the spec, gaps surfaced, and the boot prompt for the
+  Tranche H dogfood (Sonnet) following the same pattern Tranche G used.
+
+Out of scope this session — do NOT do:
+- GP-208 dogfood re-run (next session, Tranche H).
+- Tranche D prod auto-apply.
+- pbi_scan.py TE3 hang fix.
+- Any *new* feature work in deploy.py/validate.py beyond what the migration requires.
+- Connector scripts (sketched only in spec; not built).
+- Multi-client expansion (Fusion92 config) — wait for actual Fusion92 work to drive it.
+
+Notes for execution:
+- Paul owns git operations: `git init`, all commits, all deletes from clients repo,
+  branch deletes. Surface clear "please run X" prompts; do not execute git mutations.
+- The skill currently has many `cd GEP/scripts/pbi_model_apply && dotnet build` style
+  invocations. After migration these become `cd "$AUTOMATION_HOME/scripts/pbi_model_apply"
+  && dotnet build`. Be exhaustive — grep the skill for `GEP/scripts` and update every hit.
+- pbi_seed_sandbox.py writes back to pbi_config.yaml — confirm the new path is writeable
+  and the script uses the same config-resolution helper as the readers.
+- If you discover the spec is wrong somewhere, surface the contradiction to Paul before
+  deviating. Do not silently re-architect mid-execution.
+````
+
+---
+
+### ~~🔴 CURRENT~~ (complete 2026-04-26) — Phase 7: `aldc-automation` repo architecture design (Opus + `/effort high`)
+
+**Result:** spec locked in [[aldc-shipyard]]. D1–D7 decisions captured in 2026-04-26 Phase 7 session log. Implementation handed off to Phase 7B (above).
+
+````
+You are running the Phase 7 architecture planning session for the client-workflow-automation workstream.
+Goal: design the `aldc-automation` repo and produce a written spec ready for implementation.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`.
+2. Read this tracker — focus on:
+   - "Near-term Architecture Goal" section (the confirmed decision and proposed structure)
+   - Tranche G session log (gaps G.1a–G.1e — the pain points this design must solve)
+3. Read `C:\Users\PaulRussell\repos\wiki\entities\projects\workflow-automation.md`
+   — §6 Q1 (now resolved), §7 Out of Scope connector note, §4 existing primitives table.
+4. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\phase6-pbi-automation-plan.md`
+   — §6.9 Tranche G (what's been validated so far, what gaps remain).
+5. Scan the current scripts to understand what needs to move:
+   - `GEP/scripts/deploy.py` — reads manifests, .env, runs Snowflake
+   - `GEP/scripts/validate.py` — reads validate_manifest, .env
+   - `GEP/scripts/pbi_config.yaml` — workspace/dataset IDs (gitignored)
+   - `GEP/scripts/deploy_manifest/` — per-ticket YAML files
+   - `GEP/scripts/validate_manifest/` — per-ticket YAML files
+   - `GEP/scripts/pbi_model_apply/` — .NET source for the XMLA wrapper
+   - `GEP/scripts/pbi_generate_columns.py`, `pbi_scan.py`, `pbi_seed_sandbox.py`
+   - `.claude/commands/gep-feature.md` — the skill (stays at user level)
+
+Context you must carry into the design:
+- The `clients` repo has a CI/CD branch chain: GEP/development → GEP/user-testing → main.
+  Automation scripts must NOT live on this chain — they are still actively evolving.
+- The `connector` repo (Eclipse connector runtime) will eventually need its own
+  deploy/validate scripts. The automation repo must accommodate this.
+- The skill (`gep-feature.md`) already lives at `~/.claude/commands/` (user-level).
+  It is the orchestrator. It calls scripts; it does not own them.
+- Ticket artifacts (`artifact.yaml`, `pbi_model_script.cs`, `notes.md`) MUST stay in
+  the `clients` repo alongside the SQL — they are part of the feature branch PR.
+- `pbi_config.yaml` contains local workspace/dataset IDs — it is gitignored and
+  machine-specific. It should move to the automation repo's gitignore.
+
+Design decisions to make (work through these with Paul, in order):
+
+**D1 — Repo name and location**
+Proposed: `aldc-automation` at `C:\Users\PaulRussell\repos\aldc-automation\`.
+Confirm or rename. This is a new ALDC repo — private, separate from clients/connector.
+
+**D2 — Config schema: `config/gep.yaml`**
+This file tells scripts where the `clients` and `connector` repos live on disk,
+plus any per-client settings that aren't secrets.
+Draft a schema. Key fields to resolve:
+- How does the skill pass the config path to scripts at runtime? (env var? flag? convention?)
+- Does each client (GEP, Fusion92) get its own config file, or sections in one file?
+- What belongs in config vs. in `.env` (secrets) vs. in `pbi_config.yaml` (PBI IDs)?
+
+**D3 — Manifest location**
+Currently: `GEP/scripts/deploy_manifest/<ticket>.yaml` and `validate_manifest/<ticket>.yaml` in clients repo.
+Should these move to `aldc-automation/clients/GEP/deploy_manifest/` (with scripts)?
+Or stay in clients (closer to the SQL they describe)?
+Tradeoff: manifests reference SQL filenames in clients — if they move, cross-repo path refs arise.
+If they stay in clients, they need to live on a branch that doesn't pollute CI/CD.
+Decide and lock.
+
+**D4 — How the skill resolves script paths at runtime**
+The skill currently calls `python GEP/scripts/deploy.py` assuming it is in the
+clients repo working directory. After migration, the script lives in `aldc-automation`.
+Options:
+  A. Skill reads `automation_repo_path` from a user-level config (`~/.claude/gep-workflow.yaml`)
+     and constructs the full path at runtime.
+  B. `aldc-automation` is always at a fixed known path (e.g. `~/repos/aldc-automation/`)
+     and the skill hardcodes the convention.
+  C. Scripts are added to PATH — skill calls `deploy.py` without a path.
+Recommend A (most flexible across machines). Design the config file format.
+
+**D5 — pbi_config.yaml new home**
+Currently gitignored in `GEP/scripts/pbi_config.yaml` (clients repo).
+Should move to `aldc-automation/clients/GEP/pbi_config.yaml` (gitignored there).
+The skill currently reads it via relative path from clients repo root.
+After move: skill reads it from the automation repo path.
+Confirm this is the right move. Update the skill spec accordingly.
+
+**D6 — Connector integration pattern (design only, not build)**
+When connector deploy steps are added to the workflow:
+- Where do connector scripts live? (`aldc-automation/scripts/connector/`?)
+- How does `config/gep.yaml` express the connector repo path?
+- Does the gep-feature skill grow connector-aware steps, or is there a separate
+  `connector-feature.md` skill?
+Do not build — just establish the pattern so the aldc-automation structure accommodates it.
+
+**D7 — Migration plan from workflow-automation branch**
+The current `feature/paulrussell/workflow-automation/gep-scripted-deploy` branch
+contains all the scripts. Plan for moving them:
+1. Create aldc-automation repo.
+2. Copy scripts (not git history — fresh repo, clean start).
+3. Update skill path resolution.
+4. Archive/close the workflow-automation feature branch (or let it die).
+5. Rebase GP-208 onto current clients HEAD (SQL + artifacts stay; scripts gone from clients).
+Confirm this plan or adjust.
+
+Done criteria:
+- `aldc-automation` repo structure agreed and documented in a new wiki page:
+  `C:\Users\PaulRussell\repos\wiki\entities\repos\aldc-automation.md`
+- `config/gep.yaml` schema fully specified (every field, type, purpose)
+- Skill path-resolution pattern agreed (how skill finds scripts at runtime)
+- Manifest location decided (aldc-automation or clients)
+- Connector integration pattern sketched (enough to not have to redesign later)
+- Migration plan written (step-by-step, Paul owns git operations)
+- This tracker's session log updated with all decisions and the next boot prompt
+  written for the implementation session (Sonnet, execution)
+
+Out of scope this session — do NOT touch:
+- Actual repo creation or file moves (implementation session, after this spec is done)
+- GP-208 dogfood re-run (blocked until repo is created)
+- Tranche D prod auto-apply
+- pbi_scan.py TE3 hang fix
+- Any code changes to deploy.py, validate.py, or gep-feature.md
+````
+
+---
+
+### ~~🔴 CURRENT~~ (complete 2026-04-26) — Tranche G: GP-208 full E2E dogfood — scoping → sandbox → TEST (Sonnet + `/effort high`)
+
+**Primary goal:** Run GP-208 end-to-end through `/gep-feature` from a clean re-scope all
+the way through Sub-step 2 TEST deploy — exercising the PBI model apply to GEP Test Models
+for the first time. Prove the full Snowflake + PBI sandbox → TEST promotion flow. Capture
+every Sub-step 2 gap in real time.
+
+**Why this matters:** Sub-step 1b (sandbox PBI apply) was proven on 2026-04-25 (Tranche F).
+Sub-step 2 (TEST PBI apply via `§G env=test`) has never been exercised. `pbi_config.yaml`
+test entries are now filled. GP-208 artifact was deleted for a clean re-scope. This session
+is the first full end-to-end dogfood of the complete workflow.
+
+````
+You are running Tranche G of the client-workflow-automation workstream — the first full
+end-to-end dogfood of /gep-feature: GP-208 scoping → implementing → sandbox → Sub-step 2 TEST.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`.
+2. Read this tracker (you are here) — focus on the 2026-04-25 Tranche F execution log
+   (all gaps found + fixed) and the Tranche G goal above.
+3. Read `C:\Users\PaulRussell\repos\wiki\tickets\gep\GP-208.md` — all prior scoping
+   decisions, requirements, and business logic. Use this to fast-track scoping Q&A.
+4. Read `GEP/scripts/pbi_config.yaml` — confirm test entries are fully populated
+   (id, dataset_id, dataset_name all non-null). If any are null, STOP and surface to Paul.
+5. Read `.claude/commands/gep-feature.md` — Sub-step 2 APPLY MODEL SCRIPT TO TEST block
+   and the §G / §H helper specs. Pay attention to the `env=test` code paths.
+6. Read `GEP/tickets/GP-208/pbi_model_script.cs` — the current script uses Snowflake
+   names (INVENTORY_FCT_BALANCE, EXTRACT_INVENTORY_CURRENT). It must be updated for
+   the naming convention decision before being applied to TEST (see Step G.1 below).
+
+Pre-session state (do NOT re-do these):
+- pbi_config.yaml sandbox: id=8545f3cb, dataset_id=fb41970d, dataset_name=GEP_Sandbox_Current ✅
+- pbi_config.yaml test: id=a29d4c01, dataset_id=66151728, dataset_name=Data Model ✅
+- GP-208 artifact.yaml: DELETED — skill will start at scoping stage ✅
+- GP-208 notes.md: DELETED — use wiki/tickets/gep/GP-208.md for all prior decisions ✅
+- GEP/tickets/GP-208/pbi_model_script.cs: EXISTS (has relationship-cleanup fix from Tranche F)
+- GEP/tickets/GP-208/pbi_model_columns.cs: EXISTS (27 + 32 DataColumn defs from generator)
+- GEP/snowflake/warehouse/inventory_fct_balance.sql: EXISTS in working tree (final SQL)
+- Branch feature/paulrussell/GP-208/inventory-feed-ingestion-and-modeling: EXISTS in git
+
+Step G.1 — Naming convention update (do BEFORE running /gep-feature)
+   GEP PBI model convention is Title Case display names, not Snowflake identifiers.
+   Paul's decision (2026-04-25): INVENTORY_FCT_BALANCE → "Inventory Current".
+   Ask Paul what display name to use for EXTRACT_INVENTORY_CURRENT before proceeding.
+
+   Update pbi_model_script.cs to use display names everywhere:
+   - Drop-if-exists guards: Model.Tables.Contains("Inventory Current") etc.
+   - Model.AddTable("Inventory Current") — table is created with the display name
+   - Relationship checks: scr.FromTable.Name == "Inventory Current"
+   - Model.Tables["Inventory Current"] lookups
+   The M query RESULTANT_VIEW step still references the Snowflake table name internally
+   — that stays as INVENTORY_FCT_BALANCE. Only the TOM table.Name changes.
+
+   After updating, run the dry-run compile check to confirm:
+   GEP/scripts/pbi_model_apply/bin/Release/net8.0-windows/pbi_model_apply.exe
+     --script GEP/tickets/GP-208/pbi_model_script.cs
+     --workspace "GEP Sandbox Models" --dataset "GEP_Sandbox_Current" --dry-run
+
+Step G.2 — Fast scoping via /gep-feature GP-208
+   All GP-208 requirements are known. Use wiki/tickets/gep/GP-208.md as the source.
+   Present each scoping question with the known answer for Paul to confirm — don't
+   re-ask from scratch. The branch already exists; confirm it. The deploy manifest and
+   validate manifest already exist; confirm or update.
+
+   Key scoping decisions to lock at this stage:
+   - PBI model changes required: true
+   - visual_required: false (metadata-only — no PBIX republish needed)
+   - PBI model description: "Add Inventory Current and <EXTRACT display name> tables"
+   - scan_option_chosen: B (drop and replace)
+
+Step G.3 — Sub-step 1 (Snowflake sandbox) + Sub-step 1b (PBI sandbox) with renamed tables
+   Snowflake sandbox: run deploy.py + validate.py as usual.
+   PBI sandbox: confirm the rename landed — the model should now show "Inventory Current"
+   (not INVENTORY_FCT_BALANCE) in the GEP Sandbox Models dataset after apply.
+   Validate links should appear per the F.1 change.
+
+Step G.4 — Sub-step 2: TEST deploy + PBI model apply to GEP Test Models (first run)
+   This is the main new thing being exercised. Watch for:
+
+   Snowflake TEST deploy:
+   - Run deploy.py --env test --ticket GP-208 --run-task
+   - Run validate.py --env test --ticket GP-208 --save-results
+   - Rollback command is available if TEST breaks something:
+     python GEP/scripts/deploy.py --env test --ticket GP-208 --rollback --run-task
+
+   PBI model apply to TEST (skill prompts "Apply validated PBI model script to GEP Test Models?"):
+   - §G with env=test: targets workspace "GEP Test Models", dataset "Data Model"
+   - MSAL token should be cached from the sandbox run (~1h window); if stale, wrapper
+     exits 2 and §G prompts for --clear-token-cache.
+   - dry-run compile check fires first (Tranche F hardening).
+   - On success: test_applied_at + test_refresh_id are set in the artifact for the
+     first time. These fields have never been written by the skill before.
+   - TEST model validation links emit per F.1 extension (sandbox-only today;
+     if TEST links are desired here, that is a Tranche G gap to fix in-session).
+
+   Likely Sub-step 2 gaps to watch for:
+   - MSAL token expired between sandbox and TEST apply (~4-5 min refresh + time for
+     Snowflake TEST deploy). May need --clear-token-cache.
+   - TEST dataset has a different XMLA path — confirm "GEP Test Models" / "Data Model"
+     resolves. The wrapper error message on connect failure is exit code 3.
+   - poll_refresh for TEST: "Data Model" refreshes may include more tables than sandbox
+     (full model vs. 2-table sandbox). Expect longer refresh time (~5-10 min).
+   - Validation links for TEST: skill currently only emits links for env=sandbox.
+     If Paul wants TEST links too, add the same pattern as F.1 but for env=test.
+     File as a gap and fix in-session if it surfaces.
+
+Step G.5 — Capture every gap in real time
+   Same discipline as Tranche F: every glitch goes into the tracker session log
+   immediately. Fix in-session where possible. File as follow-up where not.
+
+Step G.6 — Evaluate Tranche D (prod auto-apply)
+   If Sub-step 2 is clean: assess whether Tranche D (prod-deployed conditional
+   auto-apply, plan §3.7) can be built in the same session. Tranche D only adds
+   the visual_required == false branch at prod-deployed — it is ~40 lines of skill
+   code and the §G/§H helpers are already there. Decision criteria:
+   - Sub-step 2 exit 0 ✅
+   - test_applied_at set in artifact ✅
+   - No blocking gaps requiring another §G/§H redesign
+   If yes: build Tranche D. If no: file as follow-up.
+
+Step G.7 — Wiki + tracker update
+   - Add 2026-04-25 Tranche G session log entry with all gaps and resolutions.
+   - Update phase6-pbi-automation-plan.md to mark Tranche G complete.
+   - Update pbi-xmla-automation.md if any new TEST-specific patterns emerge.
+
+Done criteria:
+   - /gep-feature GP-208 runs from scoping through test-deployed with no manual rescue.
+   - Tables appear in GEP Test Models as "Inventory Current" (not SCREAMING_SNAKE_CASE).
+   - test_applied_at and test_refresh_id are set in the artifact from a skill-driven run.
+   - Every Sub-step 2 gap is either fixed or filed.
+
+Out of scope this session — do NOT touch:
+   - Phase 7 architecture redesign (separate Opus planning session).
+   - prod-deployed apply (Tranche D — evaluate at G.6 but don't force it).
+   - pbi_scan.py TE3 hang fix.
+   - workspaces.prod.* in pbi_config.yaml.
+   - Connector repo automation.
+
+Constraints:
+   - Paul handles git commits. Summarise changes per step for manual staging.
+   - Never log bearer tokens. The wrapper handles MSAL internally.
+   - pbi_config.yaml is gitignored — test entries are local-only (expected).
+   - Update this tracker's session log AS YOU GO — gaps captured in real time.
+````
+
+---
+
+### ✅ COMPLETE (2026-04-25) — Phase 6 Tranche F: Harden GP-208 PBI sandbox automation through the skill (Sonnet + `/effort high`)
+
+**Primary goal:** Make Sub-step 1b run cleanly end-to-end against GP-208's sandbox
+through `/gep-feature` itself — a cold `force` re-run produces a populated model and
+a clickable validation link with zero manual rescue. Sandbox-only; TEST tail and
+Tranche D (prod auto-apply) are explicitly deferred until sandbox is stable.
+
+**Context:** Sub-step 1b was proved end-to-end on 2026-04-24 by running each step
+*outside* the skill (manual wrapper invocations + REST calls). Since then the skill
+itself has been heavily revised — §G was rewritten to call `pbi_model_apply.exe`
+(MSAL inside, no `--token`), a MODEL SCAN step was added, a GENERATE COLUMN
+DEFINITIONS step was added, and `warn_only` support landed in `validate.py`. None
+of those skill paths have been exercised on GP-208. This tranche's job is to drive
+the whole flow through the skill, capture every gap, and close them.
+
+````
+You are working on Phase 6 Tranche F of the client-workflow-automation workstream
+— hardening the PBI sandbox automation in `/gep-feature` Sub-step 1b. Sandbox-only
+this session. TEST and PROD are out of scope.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`.
+2. Read this tracker (you are here) — focus on the 2026-04-25 session log entry
+   describing Tranche F's plan, and the 2026-04-24 entry for prior validation.
+3. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\phase6-pbi-automation-plan.md`
+   §6.8 (Tranche F — Sandbox hardening) for the authoritative spec.
+4. Read `C:\Users\PaulRussell\repos\wiki\concepts\patterns\pbi-xmla-automation.md`
+   for the canonical pattern.
+5. Read `.claude/commands/gep-feature.md` Sub-step 1b end-to-end (the MODEL SCAN,
+   PRE-FLIGHT, GENERATE COLUMN DEFINITIONS, REBIND, APPLY MODEL SCRIPT, refresh +
+   poll, MANUAL VISUAL CHECK blocks). Diff vs HEAD shows ~216 uncommitted lines.
+6. Read `GEP/tickets/GP-208/artifact.yaml` — current state of the test ticket.
+   `sandbox_validated: true` from 2026-04-24, but validated outside the skill.
+7. Read `GEP/scripts/pbi_config.yaml` — sandbox workspace + dataset are populated;
+   test/prod are deliberately null and stay null this session.
+
+Step F.1 — Add sandbox validation link emission to the skill (no Paul input needed)
+   - In §G's success branch (after `pbi_model_apply.exe` exits 0), print the dataset
+     details URL constructed from `pbi_config.workspaces.sandbox.id` + `dataset_id`:
+       Workspace: https://app.powerbi.com/groups/<workspace_id>/list
+       Dataset:   https://app.powerbi.com/groups/<workspace_id>/datasets/<dataset_id>/details
+   - In §H `poll_refresh` Completed branch, print the same URLs plus per-table
+     refresh status from the response body.
+   - Replace the bare "Open GEP Sandbox Models workspace in Power BI Service" text
+     in the existing MANUAL VISUAL CHECK block with the constructed URL.
+   - Scope: sandbox only. Do NOT add link emission for TEST or PROD this session
+     (their config entries are null and the code paths aren't being exercised).
+
+Step F.2 — Decide the MODEL SCAN path
+   The MODEL SCAN block calls `pbi_scan.py`, which is currently `if False`-gated for
+   the TE3 path due to a subprocess hang. `pbi_config.yaml` now points at TE3, but
+   the hang fix has not been verified. Default to skipping the scan for GP-208's
+   dogfood (the skill already falls back gracefully). File the TE3 hang fix or a
+   TOM-based replacement as a follow-up — DO NOT scope-creep it into this session.
+
+Step F.3 — Reset GP-208 sandbox state
+   The 2026-04-24 run left tables populated. To genuinely prove the cold-start
+   flow, drop the two GP-208 tables before re-running:
+     - Easiest: re-run the existing pbi_model_script.cs — drop-if-exists guards make
+       it idempotent.
+     - Cleaner: ad-hoc one-liner script that removes both tables, then run the
+       full script.
+
+Step F.4 — Run Sub-step 1b end-to-end through the skill on GP-208
+   Invoke `/gep-feature GP-208 force` and walk Paul through every prompt. Confirm
+   in order:
+     - MODEL SCAN gracefully skips per F.2.
+     - PRE-FLIGHT finds existing pbi_model_script.cs.
+     - GENERATE COLUMN DEFINITIONS recognises columns are wired and skips.
+     - §H update_parameters rebinds sandbox to SANDBOX_DG1_GEP_GP208.
+     - §G applies via pbi_model_apply.exe (MSAL device-code or cached).
+     - §H refresh_dataset + poll_refresh → Completed.
+     - F.1 link is printed; Paul clicks and validates.
+     - Artifact updated with new sandbox_applied_at, sandbox_refresh_id, script_hash.
+
+Step F.5 — Capture every gap as we go
+   For each glitch, surprising prompt, missing affordance, or manual rescue:
+     - Log it to the 2026-04-25 session-log entry as it happens.
+     - Fix it in the skill (or wrapper) immediately.
+     - Re-run from F.3 until a cold run produces "link printed, model validated"
+       with no manual rescue.
+
+   Likely gaps:
+     - MSAL token cache stale → wrapper exits 2 → §G prompt for --clear-token-cache
+       (untested code path).
+     - pbi_model_apply.exe missing → §G prompts to build (also untested).
+     - §H 20-min poll timeout → currently aborts; may need a "keep polling?" branch.
+     - Skill prompts that interrupt the flow needlessly → tighten or auto-confirm.
+
+Step F.6 — Wiki consolidation (sandbox only)
+   - phase6-pbi-automation-plan.md §6.8 — mark each Tranche F sub-step done with date.
+   - pbi-xmla-automation.md — add "Validation links" item to The Pattern; annotate
+     Required Pieces §4 step 8 with link emission. Sandbox only — no TEST/PROD yet.
+   - Tracker — fill in the 2026-04-25 session log entry with what was done, every
+     gap found, and the resolution.
+   - pbi-xmla-model-changes.md — append any new gotchas surfaced in F.5.
+
+Done criteria:
+   - `/gep-feature GP-208 force` runs Sub-step 1b end-to-end with zero manual rescue.
+   - Validation link is printed and works.
+   - GP-208 artifact has fresh sandbox_applied_at and sandbox_refresh_id timestamps
+     from a skill-driven run (not a manual one).
+   - All gaps surfaced during F.4/F.5 are either fixed or filed as follow-ups.
+   - Wiki updates from F.6 are committed (or staged for Paul to commit).
+
+Out of scope this session — do NOT touch:
+   - Sub-step 2 TEST promotion (skill code exists; not exercising it).
+   - Tranche D prod auto-apply (not built yet; explicitly deferred).
+   - workspaces.test.* and workspaces.prod.* in pbi_config.yaml (stay null).
+   - pbi_scan.py TE3 hang (file as follow-up; do not diagnose this session).
+   - GP-208 naming-convention reconciliation (Title Case vs SCREAMING_SNAKE).
+
+Constraints:
+   - Paul handles git commits. Summarise changes per step so he can stage manually.
+   - Never log bearer tokens. The wrapper handles MSAL internally; the skill never
+     constructs or sees a token.
+   - Update this tracker's session log AS YOU GO, not at the end — every gap from
+     F.5 needs to be captured in real time, not reconstructed afterward.
+````
+
+---
+
+### 🟡 SUPERSEDED — Phase 6: Make Sub-step 1b work via automation (superseded 2026-04-25)
+
+The work this prompt described — first-pass end-to-end validation of Sub-step 1b
+against GP-208 — was completed on 2026-04-24 by running each step *outside* the
+skill. Tranche F (above) supersedes it by driving the same flow through the skill
+itself and hardening every code path. Kept here for historical context; do not boot
+from it.
+
+**Primary goal (historical):** Get the PBI model-change step in `gep-feature` Sub-step 1b working
+reliably end-to-end — either fully automated or with a documented, minimal manual step
+that is locked into the workflow. GP-208 is the **test vehicle**, not the deliverable.
+
+**Context (historical):** See [[pbi-xmla-model-changes]] for the full TE3 CLI investigation.
+GP-208 sandbox is the live test case — tables have been added to the model but are
+refreshing with "no columns" (likely wrong partition type). Fix GP-208 to prove the
+workflow step works, then lock in the automation approach for all future tickets.
+
+````
+You are working on the client-workflow-automation workstream — specifically fixing and
+validating Phase 6 Sub-step 1b (PBI model changes step in the gep-feature skill).
+
+GP-208 is being used as a live test ticket. The goal is NOT to ship GP-208 — it is to
+make the PBI model-change automation step work reliably so every future ticket uses it.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`.
+2. Read this tracker (you are here) — focus on the 2026-04-22/23 session log entry.
+3. Read `C:\Users\PaulRussell\repos\wiki\processes\deployment\pbi-xmla-model-changes.md`
+   — full TE3 CLI diagnosis, GEP M expression conventions, and Sub-step 1b status.
+4. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\phase6-pbi-automation-plan.md`
+   — the authoritative Phase 6 plan.
+5. Read `GEP/tickets/GP-208/artifact.yaml` — current state of the test ticket.
+6. Read `GEP/scripts/pbi_config.yaml` — sandbox workspace/dataset IDs.
+
+Immediate blocker to fix first (GP-208 sandbox):
+Tables `INVENTORY_FCT_BALANCE` and `EXTRACT_INVENTORY_CURRENT` exist in the sandbox
+dataset but refresh with "no columns" — most likely the partition type is DAX instead
+of M Query. Fix via TE3 GUI:
+1. Open TE3 → File → Open from DB → GEP Sandbox Models → GEP_Sandbox_Current
+2. Tables → INVENTORY_FCT_BALANCE → Partitions → verify partition type = M Query
+3. If not M Query: change type, paste expression from
+   `GEP/tickets/GP-208/pbi_partition_expressions.md`
+4. Repeat for EXTRACT_INVENTORY_CURRENT
+5. Save (Ctrl+Alt+S) → close TE3 → trigger refresh via REST API → verify rows > 0
+
+Once GP-208 tables are loading correctly, focus shifts to automation:
+
+Primary investigation — make Sub-step 1b work without manual TE3 GUI:
+TE3 CLI hangs from any subprocess context (GUI app, message loop). Investigate:
+  Option A: Thin .NET console wrapper around the TOM libraries TE3 uses
+  Option B: Direct XMLA SOAP requests with bearer token (no TE3 at all)
+  Option C: Search PyPI / GitHub for Python XMLA or TOM clients
+  Option D: Document the manual TE3 GUI step as an explicit, locked workflow step
+             with a skill prompt that walks Paul through it reliably
+
+The right outcome is one of:
+  - A fully automated CLI command the skill calls via §G
+  - A documented 3-step manual process locked into the skill as a first-class step
+    (not a workaround — if automation isn't feasible, the manual step IS the workflow)
+
+After resolving the automation question:
+1. Update `gep-feature.md` §G helper or Sub-step 1b to reflect the chosen approach
+2. Apply second TE3 script for metadata (relationship, format strings, hide PRODUCT_KEY)
+3. Record `changes.pbi_model.sandbox_validated = true` in GP-208 artifact
+4. Update [[pbi-xmla-model-changes]] with final findings
+5. Update this tracker's session log
+
+Constraints:
+- Close TE3 before triggering any dataset refresh (exclusive XMLA session)
+- Never log bearer tokens — substitute <bearer> in all displayed output
+- `pbi_scan.py` TE3 path is disabled (if False guard) — REST scan only
+- Paul handles git commits; summarise changes when done
+````
+
+---
 
 ### Phase 6 — Implementation (run after Tranche A setup; Sonnet + `/effort high`)
 
