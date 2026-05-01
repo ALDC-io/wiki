@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-4, unstructured, email, documents, vector-search,
 aliases: [Navira Phase 4, Unstructured Data]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-04-27
+updated: 2026-04-30
 ---
 
 # Phase 4 — Unstructured Data
 
-**Priority:** 4 · **Interfaces:** 3 · **Status:** Not Started
+**Priority:** 4 · **Interfaces:** 3 · **Status:** Tickets created — Backlog. Needs refinement. Legal/privacy hard blocker.
 
 ## Objective
 
@@ -60,6 +60,12 @@ Build a document ingestion and search layer that makes institutional knowledge �
 - [ ] Incremental sync runs daily without re-processing existing documents
 - [ ] Query response time under **5 seconds**
 - [ ] Privacy policy documented and approved before first production ingestion
+
+## Jira Tickets
+
+| Ticket | Summary | Sprint | Notes |
+|---|---|---|---|
+| GP-235 | Discovery & Architecture Design | Backlog | Scoped to discovery only — no implementation until legal/privacy blocker resolved |
 
 ## See Also
 

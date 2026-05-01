@@ -144,6 +144,12 @@ The 6 ad platform connector specs in `entities/tools/connectors/` document the l
 - [[google-oauth-python]] — shared Google OAuth pattern (used by GA4 + Google Ads)
 - [[connector-token-refresh]] — operational token refresh runbook (Bing 90-day, Facebook 60-day)
 
+## Fork — prefect-connectors (2026-05-01)
+
+On 2026-05-01 (GP-247), the `operation-fiasco` branch was forked into a new standalone repo: `ALDC-io/prefect-connectors`. All future Prefect connector development happens there. The `connector` repo **continues running in production** — the legacy BaseConnector / Eclipse agent architecture remains live until each connector is individually migrated, validated, and cut over. Do NOT archive this repo until that process is complete.
+
+See [[prefect-connectors]] for the new repo's branch model, Docker pipeline, and known issues.
+
 ## See Also
 
 - [[Prefect]] — the orchestration framework this repo is migrating to

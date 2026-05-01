@@ -3,7 +3,7 @@ tags: [workflow, navira, credentials, auth, questionnaire]
 aliases: [Navira Credentials, Navira Auth Questionnaire]
 sources: [eclipse_exp/frontend/public/navira/navira-auth-questionnaire.html]
 created: 2026-04-27
-updated: 2026-04-28
+updated: 2026-04-30
 audited: 2026-04-28
 ---
 
@@ -19,15 +19,16 @@ Credential-related communications from Navira. Newest first.
 
 | Date | From | To | Subject | Key Details |
 |---|---|---|---|---|
-| 2026-04-15 | Justin Shuster (jshuster@navira.io) | Lori Beck (lori.beck@aldc.io), CC: Heather Tabor (htabor@navira.io) | Google Ads - Requesting Access to our account | Navira MCC ID: **`728-582-8945`**. Step-by-step linking instructions: Google Ads Manager → Accounts → Link Existing Account → enter `728-582-8945` → Send Request → Justin approves. Grants access to main account + all linked children accounts. **Status: ALDC linking pending (Paul Russell to complete).** |
+| 2026-04-30 | Paul Russell (paul.russell@aldc.io) | Lori Beck (via Jira GP-238, GP-239) | Windsor auth links for Google Ads + Facebook Ads | Decision: use Windsor.ai (ALDC existing Plus account, $0 incremental cost). Auth links generated for Navira to click: Google Ads (`google_ads`) + Facebook Ads (`facebook`). Posted to GP-238 and GP-239. Pending Navira authorization. |
+| 2026-04-15 | Justin Shuster (jshuster@navira.io) | Lori Beck (lori.beck@aldc.io), CC: Heather Tabor (htabor@navira.io) | Google Ads - Requesting Access to our account | Navira MCC ID: **`728-582-8945`**. Step-by-step linking instructions: Google Ads Manager → Accounts → Link Existing Account → enter `728-582-8945` → Send Request → Justin approves. Grants access to main account + all linked children accounts. **Status: Superseded by Windsor approach (2026-04-30) — MCC linking no longer needed.** |
 
 ## Authentication Summary
 
 | Platform | Auth Method | Required IDs | Status | Phase |
 |---|---|---|---|---|
-| **Google Ads** | OAuth 2.0 + Developer Token | MCC Account ID(s) — Amazon vs D2C split TBD | In Progress — Navira provided MCC `728-582-8945` (2026-04-15); ALDC linking + dev token application pending | 1A |
+| **Google Ads** | Windsor.ai OAuth | MCC Account ID(s) — Amazon vs D2C split TBD | **Windsor auth link sent** (2026-04-30, GP-238). Navira to click: `https://onboard.windsor.ai/co-user-login?access_token=GIkEWABkIeIDb47F77mXBIGKUTnoske8Jn7TOu5Nxs&allowed_sources=google_ads`. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
 | **Amazon Advertising API** | LWA OAuth | US/UK/CA profile IDs | Have — GEP production refresh token active (US); UK/CA profile IDs needed | 1A |
-| **Meta (Facebook) Ads** | System User Token or OAuth | Business Manager ID, Ad Account ID(s) | Partial — ALDC has OAuth app + connector; Navira must provide BM ID + ad accounts | 1A |
+| **Meta (Facebook) Ads** | Windsor.ai OAuth | Business Manager ID, Ad Account ID(s) | **Windsor auth link sent** (2026-04-30, GP-239). Navira to click: `https://onboard.windsor.ai/co-user-login?access_token=5UFMADUyRlhi5TnnYXfwTzWDevTewQiCTlUFmqjybX&allowed_sources=facebook`. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
 | **TikTok for Business** | OAuth 2.0 | Business Center ID | Net New — no ALDC connector or credentials exist | 1B |
 | **Email Marketing Platform** | API Key or OAuth | Platform TBD (Klaviyo/Mailchimp/HubSpot?) | TBD — platform not yet identified | 1B |
 | **Target+** | API or SFTP | Seller account | TBD — platform not yet confirmed | 1B |
@@ -147,8 +148,8 @@ Items ALDC must resolve internally before involving Navira. Prevents asking unne
 | I-2 | **Sellercloud inventory endpoint permissions** | Test existing REST API credentials (`support@aldc.io` on team `globalecomp`) against inventory endpoints (Summary, Warehouse, FBA). Check rate limits. | Whether to ask Navira for a permissions upgrade or separate API user (Phase 2) |
 | I-3 | **Sellercloud VPN dependency for Prefect** | Evaluate whether ACI work pools can be configured with VPN connectivity to `10.13.0.113`, or whether REST-only path is sufficient for inventory. | Whether VPN access is a blocker or can be sidestepped |
 | I-4 | **Amazon Ads UK/CA profile auto-discovery** | Test multi-profile enumeration with existing LWA token — connector line 405–423 retrieves all profiles. If UK/CA profiles exist, they'll show up. | Whether to ask Navira for profile IDs at all, or just confirm regions |
-| I-5 | **Google Ads — full setup required** | ALDC has no Google Ads Manager Account (confirmed 2026-04-28, not in Dashlane). Token in vault is from Confluence sample code, Fusion92 used Windsor.ai not direct API. Must create Manager Account, link Navira MCC `728-582-8945`, then apply for developer token. See detail notes § "Google Ads" for full step-by-step. | ~1–2 week lead time for developer token approval after Manager Account creation + MCC linking |
-| I-6 | **Facebook App token status** | Verify ALDC sandbox access token in vault is still valid. Check if ALDC Facebook App requires re-verification. | Whether any ALDC-side prep is needed before requesting Navira BM access |
+| I-5 | ~~**Google Ads — full setup required**~~ | **RESOLVED 2026-04-30:** Using Windsor.ai instead of direct API. No Manager Account, developer token, or OAuth app needed. Windsor auth link sent to Navira via GP-238. Fallback to direct API only if Windsor field verification fails. | N/A — Windsor eliminates the 1–2 week developer token lead time |
+| I-6 | ~~**Facebook App token status**~~ | **RESOLVED 2026-04-30:** Using Windsor.ai instead of direct API. No ALDC Facebook App or token provisioning needed. Windsor auth link sent to Navira via GP-239. Eliminates 60-day token refresh burden. Fallback to direct API only if Windsor field verification fails. | N/A — Windsor handles token lifecycle |
 
 ### Pre-Filled Questionnaire
 
@@ -170,9 +171,9 @@ Audit of 4 sources: (A) GEP Eclipse connection configs (`clients/GEP/eclipse/con
 
 | Platform | ALDC Has | Reusable for Navira? | Navira Must Provide | ALDC Action Required |
 |---|---|---|---|---|
-| **Google Ads** | Developer token in vault is **unverified** (from Confluence sample code, likely Fusion92-era or test token); no GEP connection JSON; no connector implementation; Fusion92 used Windsor.ai, not direct API; **ALDC has no Google Ads Manager Account** | No — must build from scratch (Manager Account, dev token, OAuth app, connector) | ~~MCC Account ID~~ **already provided** (`728-582-8945`, 2026-04-15); clarify Amazon vs D2C split | Create ALDC Manager Account → link Navira MCC → apply for developer token (~1–2 week approval) → create OAuth app + refresh token → build `google_ads.py` Prefect connector |
+| **Google Ads** | **Windsor.ai** (ALDC Plus account, $0 incremental). Auth link sent 2026-04-30 (GP-238). Fusion92 Google Ads (23 accounts) already proven through Windsor. | Yes — via Windsor OAuth link | ~~MCC Account ID~~ **already provided** (`728-582-8945`, 2026-04-15); clarify Amazon vs D2C split; **click Windsor auth link** | Field verification post-auth (campaign.id, all_conversions, conversion_action_name, currency_code); configure Snowflake destination task |
 | **Amazon Ads API** | Production connector `amazon_ads.py` (857 lines, SP/SB/SD/STV/DSP); GEP connection `amazon_ads.json` with active refresh token (account `da8904db`); centralized ALDC OAuth app (Client ID `amzn1...3d878`) | Yes — **already in production for Navira US**; same OAuth app works for multi-profile | UK/CA profile IDs (if separate profiles exist); confirm multi-region advertising setup | Migrate connector to Prefect; extend to UK/CA profiles (multi-profile already supported); create Prefect block from existing connection |
-| **Meta (Facebook) Ads** | Production connector `facebook_business.py` (530+ lines, campaign + adset + insights); ALDC Facebook App ID `812919267215628` with app_secret; support@aldc.io dev account; sandbox token in vault | Yes — ALDC Facebook App reusable; add Navira's Business Manager as allowed business | Business Manager ID; Ad Account ID(s); system user token (preferred) or OAuth consent for long-lived token; admin access to assign ALDC app | Generate Navira long-lived access token (~60-day expiry); migrate connector to Prefect with automated token refresh; create Navira Prefect block |
+| **Meta (Facebook) Ads** | **Windsor.ai** (ALDC Plus account, $0 incremental). Auth link sent 2026-04-30 (GP-239). Fusion92 Meta Ads already proven through Windsor (`ad_insights_windsor.json`). Direct API connector `facebook_business.py` (553 lines) exists as fallback but has no token refresh logic and is generating failure alerts in observability-dev. | Yes — via Windsor OAuth link | **Click Windsor auth link**; BM ID + ad account IDs still useful for ALDC records | Field verification post-auth (campaign/ad set/ad breakdowns, spend, conversions, ROAS, custom events); configure Snowflake destination task |
 | **TikTok for Business** | Nothing — no connector, no connection configs, no wiki spec for any client | No — net-new build required | Business Center ID; TikTok Shops API status; clarify "Creator Connections" (TikTok feature or separate platform?); OAuth consent | Register ALDC TikTok for Business developer app; build connector from scratch; implement OAuth flow |
 | **Email Marketing** | Nothing — no Klaviyo/Mailchimp/HubSpot connectors | No — blocked until platform identified | Which platform (Klaviyo, Mailchimp, HubSpot, etc.); API key or admin OAuth access; what metrics matter | Build connector once platform identified |
 | **Target+** | Nothing | No — blocked until confirmed | Confirm Target+ marketplace seller status; API vs manual feed availability; account credentials | Evaluate API/SFTP access; build connector or file ingestion |

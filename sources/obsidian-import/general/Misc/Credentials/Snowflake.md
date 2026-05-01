@@ -18,10 +18,12 @@ Steven Deutekom  [2:25 PM]
 
 Steven Deutekom  [2:48 PM]  
 
-!!N7nTj&TNRF3!Mx - TEST
+!!N7nTj&TNRF3!Mx - TEST - not working
 
 
-
+Snowflake Support Login:
+paul.russell@aldc.io
+$ Reymysterio1a $
 
 
 

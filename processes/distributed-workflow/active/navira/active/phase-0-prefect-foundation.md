@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-0, prefect, foundation, connector, infrastructure
 aliases: [Navira Phase 0, Prefect Foundation]
 sources: [connector repo review 2026-04-27, entities/tools/prefect.md, concepts/patterns/connector-development-standards.md, prefect-v3-reference, prefect-v3-patterns]
 created: 2026-04-27
-updated: 2026-04-29 (session 2)
+updated: 2026-04-30 (session 4 — Jira alignment)
 ---
 
 # Phase 0 — Prefect Foundation & Connector Migration
 
-**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0C merged to `operation-fiasco`; G3 starting on new branch)
+**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged to `operation-fiasco`; G1 PR #118 merged 2026-04-30; Sellercloud migration next)
 
 This phase proves the Prefect connector pattern end-to-end by migrating 1–2 existing production connectors, then hardens the framework for the 17 new connectors in Phases 1A–4. All cross-cutting concerns (CC1–CC7) are resolved here.
 
@@ -154,32 +154,163 @@ PREFECT_API_URL=http://127.0.0.1:4200/api .venv/Scripts/prefect deployment run "
 curl -s http://127.0.0.1:4200/api/flow_runs/<id> | python -m json.tool
 ```
 
-### Boot prompt — next session: G3 Account auto-discovery
+### Boot prompt — G3 complete (merged 2026-04-29)
 
-**Goal:** Decouple `short_code` from the Python module path so adding a new account (e.g. `NAVIRA_PROD`) only requires creating a folder and `account.py` — no changes to `account_registry.py`.
+G3 is done. See Sprint 0D below for results, decisions, and the GEP account setup prereqs.
 
-**Context:**
-- `short_code` is currently overloaded: it's both the infrastructure naming prefix (`QA_DG1_{short_code}`, Prefect block slugs, tags) AND the Python module path (`connector.accounts.{short_code}.deployments`). Renaming an account requires renaming the directory.
-- `account_registry.py` hardcodes `ALDC_QA` — every new account requires a code change.
-- This is the blocker for adding the Navira production account without touching shared files.
+### Boot prompt — GP-247: Fork connector repo → prefect-connectors
 
-**Read first:**
-- This page (Sprint 0A–0C results, especially the `short_code` gotcha in Sprint 0A)
-- `connector/account_registry.py` — see line 58 where `ALDC_QA` is hardcoded
-- `connector/accounts/ALDC_QA/account.py` — the `Account` dataclass definition
-- `connector/accounts/ALDC_QA/__init__.py` — understand what the account module exports
+````
+You are working on **GP-247** (Fork connector repo → prefect-connectors).
 
-**Work in:** `connector` repo, new branch `feature/paulrussell/phase-0/g3-account-autodiscovery` cut from `operation-fiasco`.
+**Goal:** Create `ALDC-io/prefect-connectors` repo from `operation-fiasco` branch, set up branch protection, CI secrets, and verify first Docker push + QA Work Pool deployment.
 
-**PR target:** `operation-fiasco` (not `master` or `development`).
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
+2. Read `C:\Users\PaulRussell\repos\wiki\entities\repos\connector.md` — legacy repo context
+3. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — existing Prefect Server infrastructure (Azure resources, Work Pool architecture, environment switching)
+4. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` — Phase 0 status + connector promotion lifecycle
+5. In the connector repo: `git log --oneline operation-fiasco -10` to confirm latest state
 
-**Deliverables:**
-1. `account_registry.py` — scan `connector/accounts/*/account.py` dynamically, import and register each `Account` instance without hardcoding names.
-2. Account module contract — document (or enforce with a test) what each `connector/accounts/*/account.py` must export for auto-discovery to work.
-3. New account smoke test — add `connector/accounts/NAVIRA_PROD/account.py` as a minimal stub (no deployments yet) and verify `AccountRegistry.register_all_accounts()` discovers it automatically.
-4. Existing `pytest tests/` still passes.
+**Existing Prefect infrastructure (Brayden built this):**
+- Server: `aldcprodwbapprefectserver1c01` at `https://prefect.analyticlabs.io`
+- Work Pool: `aldcprodctappprefectworkpool1c01` (ACI-based)
+- Database: `aldcprodpgdbconnector1c01` (Azure Postgres, VNET-private)
+- Workers: auto-generated ACI in `aldcprodrsgpprefectworkers1c`
+- Environment switching: `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP` env vars on Work Pool
 
-**Acceptance:** Adding a new `connector/accounts/NAVIRA_PROD/account.py` causes it to appear in the Prefect UI without modifying `account_registry.py` or any other shared file. `pytest tests/` is green. PR passes all CI checks.
+**Steps:**
+1. Create `ALDC-io/prefect-connectors` repo on GitHub (empty, then push operation-fiasco content as `main`)
+2. Create `development` branch from `main`
+3. Set branch protection: require PR + CI pass for both `main` and `development`
+4. Configure GitHub Actions secrets: GHCR token, Azure credentials, Snowflake test/prod credentials
+5. Update Dockerfile, CI workflows, CLAUDE.md, README — reference `prefect-connectors` not `connector`
+6. Push first Docker image to `ghcr.io/aldc-io/prefect-connectors`
+7. Validate GP-243: hit `https://prefect.analyticlabs.io` — confirm Prefect Server is healthy
+8. Register ExchangeRates deployment against QA Work Pool as smoke test
+9. Update wiki: [[connector]] repo page (note the fork), [[Prefect]] (reference new repo), [[repo-integration-map]]
+
+**Branch strategy:**
+- `main` → Prod Work Pool (`PROD_DG1_GEP` on wj66376)
+- `uat` → UAT Work Pool (`TEST_DG1_GEP_PREFECT` on og35375) — Navira client-facing; frozen during client review
+- `development` → QA Work Pool (`QA_DG1_GEP_PREFECT` on og35375) — ALDC internal; stays open during UAT
+- Feature branches → local dev only
+
+**Promotion path:** `feature/*` → `development` (ALDC QA) → `uat` (Navira UAT) → `main` (prod)
+
+**Why `uat` not `staging`:** Azure App Service uses "staging slot" for blue-green deploys — naming a branch `staging` would collide with that vocabulary when discussing Azure infra. `uat` is unambiguous.
+
+**Scope:** Repo creation + infrastructure validation. Do NOT migrate any connectors in this ticket — that's GP-219 (Sellercloud).
+````
+
+### Boot prompt — GP-248: Snowflake Environment Isolation
+
+````
+You are working on **GP-248** (Prefect Snowflake Environment Isolation — QA, UAT, Prod Staging Databases + PBI Workspaces).
+
+**Goal:** Create 3 isolated Snowflake databases and 2 PBI workspaces for the Prefect connector migration. Zero impact on legacy production data.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
+2. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — existing Prefect infrastructure + environment switching mechanism
+3. Read `C:\Users\PaulRussell\repos\wiki\concepts\architecture\azure-environments.md` — subscription model
+4. Read `C:\Users\PaulRussell\repos\wiki\concepts\patterns\sandbox-feature-delivery.md` — existing sandbox pattern (references TEST_DG1_GEP structure)
+5. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` — the Snowflake Environment Model table and promotion lifecycle
+
+**What to create:**
+
+Snowflake databases:
+1. `QA_DG1_GEP_PREFECT` on og35375 — `CREATE DATABASE QA_DG1_GEP_PREFECT CLONE TEST_DG1_GEP;` (inherits schemas + prod data share)
+2. `TEST_DG1_GEP_PREFECT` on og35375 — `CREATE DATABASE TEST_DG1_GEP_PREFECT CLONE TEST_DG1_GEP;` (client UAT)
+3. `PROD_DG1_GEP_PREFECT` on wj66376 — `CREATE DATABASE PROD_DG1_GEP_PREFECT;` (empty, create schemas: WAREHOUSE, WAREHOUSE_SOURCE, REPORT_COMMON)
+
+Service accounts:
+- QA/UAT (og35375): dedicated Prefect role with write access to `QA_DG1_GEP_PREFECT` and `TEST_DG1_GEP_PREFECT` only. NO write to `TEST_DG1_GEP`.
+- Prod staging (wj66376): dedicated Prefect role with write access to `PROD_DG1_GEP_PREFECT` only. NO write to `PROD_DG1_GEP`.
+
+PBI workspaces:
+- "GEP Prefect QA" → `QA_DG1_GEP_PREFECT` (ALDC internal)
+- "GEP Prefect Test" → `TEST_DG1_GEP_PREFECT` (Navira client-facing UAT)
+
+**Snowflake credentials:** Use Paul's personal credentials for the setup (SYSADMIN role). Service account passwords from CosmosDB `account_secret` container (same pattern as Sprint 0A).
+
+**Scope:** Database creation + service accounts + PBI workspace creation. Do NOT configure Prefect Work Pool env vars — that's GP-218.
+````
+
+### Boot prompt — GP-243: Validate Existing Prefect Server
+
+````
+You are working on **GP-243** (Validate existing Prefect Server).
+
+**Goal:** Confirm Brayden's self-hosted Prefect Server on Azure is healthy and accessible. Quick validation — should take under an hour.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — full resource inventory
+
+**Validation steps:**
+1. Hit `https://prefect.analyticlabs.io` in a browser — does the Prefect UI load?
+2. Check Azure Portal: is `aldcprodwbapprefectserver1c01` (App Service) running?
+3. Check Azure Portal: is `aldcprodpgdbconnector1c01` (Postgres) running?
+4. Check Azure Portal: is `aldcprodctappprefectworkpool1c01` (Container App) running?
+5. From Prefect UI: can you see the Work Pool? Any existing deployments?
+6. Test: `PREFECT_API_URL=https://prefect.analyticlabs.io/api prefect block ls` — does it connect?
+7. Test: register a dummy block and verify it persists
+8. Check Prefect version — is it compatible with the connector code (Prefect 3.6.9)?
+9. Document any issues (expired TLS cert, stale Prefect version, dead Postgres, etc.)
+
+**If the server is DOWN:** Document what's broken. The fix is GP-218's scope, not this ticket. This ticket is diagnosis only.
+
+**Scope:** Validation + documentation. Do NOT configure Work Pools or deploy connectors.
+````
+
+---
+
+## Sprint 0D — G3 Account Auto-Discovery (2026-04-29) ✅
+
+G3 complete. PR #117 (`feature/paulrussell/phase-0/g3-account-autodiscovery` → `operation-fiasco`).
+
+### What was built
+
+| File | Change |
+|---|---|
+| `connector/account_registry.py` | `register_all_accounts()` globs `connector/accounts/*/account.py`, dynamically imports `ACCOUNT` from each — no hardcoded names |
+| `connector/accounts/account.py` | `discover_deployments()` accepts optional `package_name` param; catches `ModuleNotFoundError` for accounts with no deployments yet |
+| `connector/accounts/ALDC_QA/account.py` | Added `ACCOUNT = ALDC_QA_ACCOUNT` (standard contract export) |
+| `connector/accounts/ALDC_QA/__init__.py` | Emptied — registry handles discovery; old call would have caused double-registration |
+| `connector/CLAUDE.md` | New — branch model, skill pointer, account contract, test requirements |
+| `tests/test_account_registry.py` | 4 tests covering discovery, type safety, no-hardcoding contract, graceful skip of non-conforming modules |
+
+### Account module contract
+
+Every `connector/accounts/*/account.py` must export a top-level variable named `ACCOUNT` of type `Account`. The registry scans for this — no other shared file needs to change when adding a new account.
+
+### GEP account — naming decisions and prereqs
+
+When GEP is ready to run connectors via Prefect:
+
+**Naming:** `connector/accounts/GEP/account.py` with `short_code="GEP"` — no environment suffix. The environment is a runtime concern handled by `setup_account_blocks()`, which creates blocks for all `EnvironmentLevel` values:
+```
+snowflake-qa-gep   → og35375 (non-prod Snowflake)
+snowflake-test-gep → og35375 (non-prod Snowflake)
+snowflake-prod-gep → wj66376 (prod Snowflake)
+```
+
+**Blocker:** the `id` field in `Account` feeds into Snowflake service account naming:
+```
+TEST_DG1_CORE_SVC_<id.upper()>
+TEST_DG1_ROLE_CORE_SVC_<id.upper()>
+```
+The real GEP account ID must be looked up from CosmosDB (`aldcqacsdb1c01` → `core` → `account_secret` container) before `connector/accounts/GEP/account.py` can be created. It follows the same pattern as `ALDC_QA` (`id="f49f9aa3"`).
+
+**Do not commit a stub** until the real CosmosDB ID is confirmed. The auto-discovery is proven by the test suite (`test_new_account_discovered_without_registry_change`), not by a premature directory.
+
+**Note on `ALDC_QA` naming:** `ALDC_QA` is a misnomer — the `_QA` suffix reflects where it lives, not that it's environment-scoped. The account concept is per-client, not per-environment. Rename to `ALDC` in a future cleanup.
+
+### Key design decisions
+
+**No real account stub committed to prove auto-discovery.** The smoke test uses `sys.modules` injection to simulate a new account directory, avoiding premature production stubs with fake IDs. The test proves the mechanism without coupling the codebase to accounts that aren't provisioned yet.
+
+**`ALDC_QA/__init__.py` emptied** (not deleted) — the old `discover_deployments()` call there would have caused double-registration when the registry also calls it. The registry is now the single orchestrator of account discovery.
 
 ---
 
@@ -300,12 +431,69 @@ Feature branches should PR into `operation-fiasco`, not `development` or `master
 
 1. ~~**G2 (pytest framework)**~~ ✅ **Done** — `conftest.py` + mock fixtures + `test_exchange_rates.py` (15 tests) + `conftest_template.py`. `pytest tests/` passes.
 2. ~~**G5 (logging)**~~ ✅ **Done** — `get_run_logger()` in `run_workflow()` + `_upload_data()`; `log_prints=True` + `on_failure` hook in `register_flow()`. CI gate enforces `pytest tests/` passes on every PR.
-3. **G3 (account auto-discovery)** — Decouple `short_code` from module path. Enables descriptive naming + adding NAVIRA_PROD without code changes to `account_registry.py`.
-4. **G1 (DateWindow partition)** — Required for Phase 1A ad platform connectors (Google Ads retroactively adjusts 7–30 days). Implement at `base_connector.py` FIXME.
-5. **Sellercloud migration** — First production connector on Prefect. Proves the framework at scale. Validates CC1–CC7 empirically.
-6. **Snapshot naming fix** — Move snapshots to `_PREFECT_SNAPSHOTS` schema so the framework's schema scanner doesn't pick them up.
-7. **G4 (extended run options)** — Needed for connectors with pagination, cursors, rate limit context. Can defer until Phase 1A connectors actually need it.
-8. **G6 (scaffold CLI)** — Nice-to-have. Defer until we've manually built 2–3 connectors and the pattern is stable.
+3. ~~**G3 (account auto-discovery)**~~ ✅ **Done** — `register_all_accounts()` globs `connector/accounts/*/account.py`, dynamically imports `ACCOUNT`; GEP account added. PR #117 merged to `operation-fiasco` 2026-04-29.
+4. ~~**G1 (DateWindow partition)**~~ ✅ **Done** — `_compute_date_window()` helper + `DateWindow` branch in `run_workflow()`; `ConnectorRunOptionsDateRange` passed to `run()`; 13 tests in `test_base_connector.py`. PR #118 merged to `operation-fiasco` 2026-04-30. Tracked as GP-220 (QA).
+5. ~~**Repo fork**~~ ✅ **Done 2026-05-01 (GP-247)** — `ALDC-io/prefect-connectors` live at `github.com/ALDC-io/prefect-connectors`. Branches: `main`/`uat`/`development` with branch protection + org secrets inherited. Docker publish CI pushing to `ghcr.io/aldc-io/prefect-connectors`. Smoke test `astute-waxbill` **COMPLETED** in ACI: API → Parquet → Azure blob → Snowflake. Data in `QA_DG1_ALDC_QA.EXCHANGE_RATES.*` on og35375. Three bugs fixed (Windows entrypoint path, WebSockets disabled on App Service, Prefect events WebSocket crash → `sitecustomize.py` NullEventsClient). See [[prefect-connectors]] for full repo page.
+6. **Snowflake environment isolation** (GP-248, S2) — Create 3 isolated databases + 2 PBI workspaces for the Prefect migration. See § Snowflake Environment Model below.
+7. **Validate existing Prefect Server** (GP-243, S2) — Brayden's self-hosted server at `https://prefect.analyticlabs.io` already exists. Validate it's healthy, Postgres connected, Work Pool running.
+8. **CI/CD pipeline** (GP-217, S3) — GitHub Actions on new repo: merge to `development` → Docker build → GHCR push → QA Work Pool. Merge to `main` → Prod Work Pool.
+9. **QA/UAT/Prod Work Pools** (GP-218, S3) — Configure Work Pool env vars per environment (see table below).
+10. **Testing protocol** (GP-246, S3) — Formal validation process: compare Prefect output vs legacy Eclipse output, < 1% variance, per-connector sign-off.
+11. **Sellercloud migration** (GP-219, S2 build / S3 QA deploy) — First production connector on Prefect. Build locally in S2, deploy to QA via new repo in S3, validate through UAT, promote to prod.
+11. **Snapshot naming fix** — Move snapshots to `_PREFECT_SNAPSHOTS` schema so the framework's schema scanner doesn't pick them up.
+12. **G4 (extended run options)** — Needed for connectors with pagination, cursors, rate limit context. Can defer until Phase 1A connectors actually need it.
+13. **G6 (scaffold CLI)** — Nice-to-have. Defer until we've manually built 2–3 connectors and the pattern is stable.
+
+### Snowflake Environment Model (GP-248)
+
+| Tier | Database | Account | Work Pool / Branch | PBI Workspace | Who Validates |
+|---|---|---|---|---|---|
+| **Dev** | `QA_DG1_ALDC_QA` | og35375 | Local `serve_local` | None | Paul (local dev) |
+| **QA** | `QA_DG1_GEP_PREFECT` | og35375 | QA Work Pool / `development` | GEP Prefect QA (new) | ALDC team |
+| **UAT** | `TEST_DG1_GEP_PREFECT` | og35375 | UAT Work Pool / `uat` | GEP Prefect Test (new) | Navira (Heather, Lori) + ALDC |
+| **Prod Staging** | `PROD_DG1_GEP_PREFECT` | wj66376 | Prod Work Pool / `main` (staging) | None (SQL only) | Paul |
+| **Production** | `PROD_DG1_GEP` | wj66376 | Prod Work Pool / `main` (post-cutover) | GEP Production (existing) | Everyone |
+
+**Safety rules:**
+- Service accounts per tier — prod staging role has NO write access to `PROD_DG1_GEP`
+- Legacy databases (`TEST_DG1_GEP`, `PROD_DG1_GEP`) untouched until explicit per-connector cutover
+- PBI workspaces fully isolated — no shared credentials between tiers
+
+### Connector promotion lifecycle (every connector follows this)
+
+```
+prefect-connectors repo                    connector repo (legacy)
+─────────────────────                      ───────────────────────
+feature/<connector> → PR → development → PR → uat → PR → main (on-prem agents)
+
+  ┌─ Tier 2: QA ────────────────────┐
+  │ QA_DG1_GEP_PREFECT (og35375)    │     PROD_DG1_GEP (wj66376)
+  │ ALDC validates row counts,      │←──── Compare via data share
+  │ metrics, PBI refresh (GP-246)   │
+  └──────────────┬──────────────────┘
+                 ↓
+  ┌─ Tier 3: UAT ───────────────────┐
+  │ TEST_DG1_GEP_PREFECT (og35375)  │
+  │ Navira validates in PBI         │
+  │ Client sign-off required        │
+  └──────────────┬──────────────────┘
+                 ↓
+           PR → main
+                 ↓
+  ┌─ Tier 4: Prod Staging ──────────┐
+  │ PROD_DG1_GEP_PREFECT (wj66376)  │
+  │ Real API pulls on prod infra    │
+  │ SQL parity check vs legacy      │
+  └──────────────┬──────────────────┘
+                 ↓
+  ┌─ Tier 5: Production ────────────┐
+  │ Switch target → PROD_DG1_GEP    │
+  │ Decommission legacy Eclipse     │
+  │ connector for this source       │
+  └─────────────────────────────────┘
+```
+
+Roll out per-connector — don't wait for all (per Mike).
 
 **Parallel (non-blocking):**
 - Amazon UK PPC: waiting on Navira to authorize UK ad profile. Once done, add UK profile ID to `MARKETPLACE_PROFILE_MAP` in `marketing_fct_activity.sql`. No connector code changes.
@@ -328,17 +516,9 @@ These should be addressed in a future session:
 
 **Objective:** Make the framework production-ready for 17+ connectors.
 
-#### 1.1 Complete DateWindow partition (G1)
+#### 1.1 Complete DateWindow partition (G1) ✅ Done 2026-04-29
 
-Implement `PartitionSchemeDateWindow` in `base_connector.py`. The existing code has a FIXME placeholder at line 711. This partition scheme should:
-- Accept `window_type` (day, week, month)
-- Accept `lookback_days` (e.g., 30 for ad platforms)
-- Iterate over date windows, calling `run()` per window
-- Support `min_date` for historical backfill
-
-This is essential for Phase 1A — Google Ads retroactively adjusts data for 7–30 days, requiring configurable lookback windows.
-
-**Acceptance:** A flow using `PartitionSchemeDateWindow(window_type="day", lookback_days=30)` iterates over the last 30 days and loads each day's data into Snowflake.
+`_compute_date_window(reference_date, offset, window_type) → (start, end)` added as a module-level helper in `base_connector.py`. Supports `Day`, `Month`, `Year` window types (`Week` deferred — add when a connector actually needs it). `DateWindow` branch in `run_workflow()` iterates `time_to_live` windows from newest to oldest, clamps `window_end` to today, breaks early on `min_date`, passes `ConnectorRunOptionsDateRange` to `run()`. 13 tests in `tests/test_base_connector.py`.
 
 #### 1.2 Build pytest framework (G2)
 
@@ -403,17 +583,33 @@ Sellercloud is already in production for Navira Sales Data (Live). Migrating it 
 - Block-based credential management works for a complex API (API key + VPN context)
 - The migration doesn't disrupt existing data flows
 
+**GEP account credential status (confirmed 2026-04-29):**
+- Account: `connector/accounts/GEP/account.py` — `id=da8904db`, `short_code=GEP` (from Test 1 CosmosDB)
+- Snowflake service account password confirmed present in Test 1 `account_secret` container
+- Target database: `TEST_DG1_GEP` on `og35375.canada-central.azure` (non-prod Snowflake)
+- Register the real block with password from CosmosDB (same pattern as ALDC_QA in Sprint 0A) before first connector run
+
 **Steps:**
 1. Create typed `SellercloudConnection(ConnectorConnectionBase)` and `SellercloudOptions(ConnectorOptionsBase)` from the existing legacy `connector/connectors/sellercloud*.py` files
 2. Implement `SellercloudConnector(BaseConnector[...])` wrapping the existing logic
-3. Create `connector/accounts/NAVIRA_PROD/account.py` (proves G3 auto-discovery)
-4. Create `connector/accounts/NAVIRA_PROD/deployments/sellercloud.py`
-5. Register Sellercloud connection block in Prefect with credentials from vault
-6. Run in QA against test Snowflake, reconcile row counts and totals
-7. Run in production alongside legacy connector, compare outputs
-8. Cut over when reconciled
+3. Create `connector/accounts/GEP/deployments/sellercloud.py` (GEP account already in repo)
+4. Register Sellercloud connection block in Prefect with credentials from vault
+5. Register real Snowflake block for GEP (`snowflake-test-gep`) with password from CosmosDB `account_secret` → `da8904db`
+6. Run in QA Prefect against `TEST_DG1_GEP` Snowflake
 
-**Acceptance:** Sellercloud data lands in Snowflake via Prefect with < 1% variance vs legacy pipeline. Legacy connector can be decommissioned.
+**Step 6 verification — prod data share comparison:**
+Mirror the [[GP-207]] pattern used for warehouse SQL: clone `PROD_DG1_GEP` production data into `TEST_DG1_GEP` via the existing prod→test data share, then compare Prefect output row counts and key totals against the production baseline. This is the connector-side equivalent of the warehouse sandbox pattern — proves Prefect output matches legacy Eclipse output without touching prod.
+
+```sql
+-- Example reconciliation check (run in TEST_DG1_GEP after Prefect run)
+SELECT COUNT(*), SUM(<key_metric>) FROM TEST_DG1_GEP.<schema>.<table>
+-- compare against PROD_DG1_GEP equivalent
+```
+
+7. Run Prefect connector alongside legacy Eclipse connector in parallel, compare outputs
+8. Cut over when row counts and key metrics match within < 1% variance
+
+**Acceptance:** Sellercloud data lands in `TEST_DG1_GEP` via Prefect with < 1% variance vs legacy Eclipse pipeline. Legacy connector can be decommissioned.
 
 #### 2.2 Migrate Amazon US connector (optional — stretch goal)
 
@@ -462,9 +658,9 @@ Phase 0 is complete when:
 
 | Stage | Effort | Notes |
 |---|---|---|
-| 1.1 DateWindow partition | 1 day | FIXME already in code; pattern from DateExact |
+| ~~1.1 DateWindow partition~~ | ~~1 day~~ | ✅ Done 2026-04-30 — `_compute_date_window` + DateWindow branch + 13 tests. PR #118. GP-220 (QA). |
 | ~~1.2 Pytest framework~~ | ~~2 days~~ | ✅ Done 2026-04-29 — 15 tests passing |
-| 1.3 Account auto-discovery | 0.5 day | Dynamic import scan |
+| ~~1.3 Account auto-discovery~~ | ~~0.5 day~~ | ✅ Done 2026-04-29 — PR #117 merged |
 | 1.4 Extend run options | 1 day | Custom context or overridable run_workflow |
 | ~~1.5 Prefect logging + alerts~~ | ~~1 day~~ | ✅ Done 2026-04-29 — get_run_logger + on_failure hook; Slack stub deferred |
 | 1.6 Connector scaffold CLI | 2 days | Jinja templates + CLI |

@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-2, inventory, sellercloud, purchasing, priority-2
 aliases: [Navira Phase 2, Inventory Data]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-04-27
+updated: 2026-04-30
 ---
 
 # Phase 2 — Inventory Data
 
-**Priority:** 2 · **Interfaces:** 2 · **Status:** Not Started
+**Priority:** 2 · **Interfaces:** 2 · **Status:** Tickets created — Backlog
 
 ## Objective
 
@@ -57,6 +57,15 @@ Leverage existing Sellercloud connector; new connector for purchasing.
 - [ ] Days-of-supply calculable by joining inventory + sales velocity
 - [ ] Margin analysis possible: revenue (sales) − COGS (purchasing) − ad spend (marketing)
 - [ ] Historical PO data backfilled to at least **12 months**
+
+## Jira Tickets
+
+| Ticket | Summary | Sprint | Notes |
+|---|---|---|---|
+| GP-232 | Sellercloud Inventory | Backlog | GP-208 closed — artifacts carried forward here |
+| GP-233 | Purchasing System & COGS | Backlog | Net-new connector to internal purchasing system |
+
+> **Note:** GP-208 (Inventory feed ingestion & modelling) was closed with its artifacts (data dictionary, Phase 1 schema work) carried forward to GP-232.
 
 ## See Also
 

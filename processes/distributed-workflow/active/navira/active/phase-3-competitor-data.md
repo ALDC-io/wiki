@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-3, competitor, smartscout, priority-3]
 aliases: [Navira Phase 3, Competitor Data]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-04-27
+updated: 2026-04-30
 ---
 
 # Phase 3 — Competitor Data
 
-**Priority:** 3 · **Interfaces:** 1 · **Status:** Not Started
+**Priority:** 3 · **Interfaces:** 1 · **Status:** Tickets created — Backlog. Needs refinement.
 
 ## Objective
 
@@ -56,6 +56,12 @@ New standalone connector; define competitive analysis schema.
 - [ ] Navira products benchmarkable against category averages
 - [ ] Historical competitor data retained for trend analysis (min **6 months**)
 - [ ] Access restricted to authorized internal users (no agency customer access)
+
+## Jira Tickets
+
+| Ticket | Summary | Sprint | Notes |
+|---|---|---|---|
+| GP-234 | SmartScout | Backlog | Needs refinement — API access tier and ASIN scope TBD |
 
 ## See Also
 

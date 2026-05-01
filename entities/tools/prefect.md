@@ -72,19 +72,30 @@ MSYS_NO_PATHCONV=1 PYTHONPATH=. .venv/Scripts/python -m tests.test_connectors.ne
 
 Note: Must use `MSYS_NO_PATHCONV=1` in Git Bash to prevent MSYS2 path translation converting leading `/` to `C:/Program Files/Git/`.
 
-## Active Branch
+## Active Repo
 
-Prefect / new connector development lives on the `operation-fiasco` branch of the `connector` repo (not `main`). The `main` branch continues to serve old/current connector agents. Source: Confluence TECH/1774256132 (Github Repo and Branch Reference). See [[repo-integration-map]] § Product-to-Branch Reference.
+As of 2026-05-01 (GP-247), Prefect connector development lives in the **`ALDC-io/prefect-connectors`** repo (forked from `operation-fiasco`). See [[prefect-connectors]] for branch model, Docker pipeline, known issues, and smoke test results.
+
+The legacy `connector` repo continues running on-prem Docker agents for all unconverted connectors — it is NOT retired until per-connector cutover is complete.
 
 ## Deployment
 
-Prefect runs in the **QA subscription** in [[Azure]] — a sandbox for the in-flight migration. See [[azure-environments]] for the subscription map. The [[connector]] repo holds the Prefect flow definitions.
+Prefect runs in the **Production 2 subscription** (`6389f755-3ff7-488a-a56c-7ea8297730bc`) in [[Azure]]. Resource group: `aldcprodrsgpconnector1c`. See [[azure-environments]] for the subscription map. The [[connector]] repo holds the Prefect flow definitions.
 
-> **Naming gotcha**: the Prefect resources carry an `aldcprod*` prefix (e.g. `aldcprodrsgpconnector1c`) even though they live in the QA subscription. The `prod` here refers to the logical "production Prefect instance" that workflows point to, *not* the ALDC production Azure subscription. This naming collides with the standard ALDC convention where `aldcprod*` = Production 2 subscription resources. Reconciled 2026-04-17 per Paul.
+> **Subscription correction (2026-05-01, GP-243):** Earlier documentation stated "QA subscription" — this was wrong. The `aldcprod*` prefix correctly reflects Production 2 placement. Confirmed via Azure CLI during GP-243 validation.
 
 URL: https://prefect.analyticlabs.io
 
-Architecture + resource inventory below sourced from Confluence TECH/1767014406 subtree (Brayden Offboarding), ingested 2026-04-17.
+**Auth:** HTTP Basic auth. Credentials stored in App Service setting `PREFECT_API_AUTH_STRING` (`prefect-admin:<password>`). Retrieve via:
+```bash
+az webapp config appsettings list --name aldcprodwbapprefectserver1c01 \
+  --resource-group aldcprodrsgpconnector1c \
+  --subscription 6389f755-3ff7-488a-a56c-7ea8297730bc \
+  --query "[?name=='PREFECT_API_AUTH_STRING'].value" -o tsv
+```
+Set for CLI use: `PREFECT_API_URL=https://prefect.analyticlabs.io/api` + `PREFECT_API_AUTH_STRING=prefect-admin:<password>`. Write operations also require a CSRF token (handled automatically by the Prefect Python client). Full deployment runbook: [[prefect-connector-deployment]].
+
+Architecture + resource inventory below sourced from Confluence TECH/1767014406 subtree (Brayden Offboarding), ingested 2026-04-17. Resource states validated 2026-05-01 (GP-243).
 
 ### Deployment architecture
 

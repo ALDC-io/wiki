@@ -39,6 +39,7 @@ wiki/
 │   ├── gep/
 │   └── fusion92/
 ├── daily/                 # Daily notes, POAs
+├── workplan/              # Daily work plans (start-of-day task tracker)
 ├── standup/               # Generated stand-up notes (end-of-day summaries)
 └── assets/                # Images
 ```
@@ -181,14 +182,35 @@ For large ingests (hundreds of pages — e.g., Confluence migration, full Obsidi
 
 **Why:** Subagents editing shared files (`index.md`, `log.md`, high-traffic entity pages) would produce lost updates. Centralizing writes eliminates that class of bug. Reading and proposing is the expensive part and parallelizes cleanly — structured proposals also force subagents to surface decisions (page name, section placement, wikilink targets) where the main agent can spot-check them before committing.
 
-### 5. Stand-Up (End of Day)
+### 5. Work Plan (Start of Day)
+
+**This is the first operation at the start of every work day.** Before any ticket work begins, generate (or confirm) a daily work plan at `workplan/YYYY-MM-DD.md`. This is Paul's live task tracker for the day — items move through statuses as work progresses, and feed directly into the end-of-day standup.
+
+1. **Read the previous day's standup** (`standup/` most recent file) — pull "Plan for Tomorrow" items as carried-forward work
+2. **Check blockers from previous standup** — scan for any that may have been unblocked (new emails, Jira updates, Slack messages mentioned in conversation)
+3. **Check the Navira roadmap** ([[navira/README|Navira Roadmap]]) and sprint tickets for S2/S3 items that are actionable
+4. **Generate** the work plan using the template at `workplan/_template.md`:
+   - **Carried Forward** — items from previous standup's "Plan for Tomorrow"
+   - **Unblocked Today** — items that were blocked but can now proceed (with context on what unblocked them)
+   - **Today's Plan** — ordered table with `#`, `Ticket`, `Task`, `Status`, `Notes`. Statuses: `Planned` | `In Progress` | `Done` | `Blocked` | `Deferred`
+   - **Waiting On Others** — items blocked on external parties (who, what, last contact date)
+   - **Ad-Hoc** — empty section for unplanned work that comes up during the day
+   - **End-of-Day Status** — empty section filled in at standup time
+5. **If a work plan already exists for today**, update it rather than creating a duplicate
+6. **During the day**, update item statuses as work progresses (`Planned` → `In Progress` → `Done`)
+7. **Do not append to log.md** for work plan generation (it's a planning artifact, not an operation)
+
+The work plan is the live contract for the day. Keep it honest — if something gets deferred, mark it `Deferred` with a reason, don't delete it.
+
+### 6. Stand-Up (End of Day)
 
 At the end of a work session (or when Paul asks for a standup), generate a daily stand-up note at `standup/YYYY-MM-DD.md`:
 
-1. **Scan `log.md`** for all entries dated today
-2. **Scan wiki pages** with `updated:` date of today (check frontmatter)
-3. **Review conversation context** for work done in the current session
-4. **Generate** the standup note with three sections:
+1. **Read today's work plan** (`workplan/YYYY-MM-DD.md`) — use completed items as the primary source for "What I Did Today"
+2. **Scan `log.md`** for all entries dated today
+3. **Scan wiki pages** with `updated:` date of today (check frontmatter)
+4. **Review conversation context** for work done in the current session
+5. **Generate** the standup note with three sections:
 
 ```markdown
 ---
@@ -208,8 +230,9 @@ date: YYYY-MM-DD
 <!-- 2-4 bullet points. Concrete next actions, not vague goals. -->
 ```
 
-5. **If a standup already exists for today**, update it rather than creating a duplicate
-6. **Do not append to log.md** for standup generation (it's a report, not an operation)
+6. **Update today's work plan** — fill in the "End-of-Day Status" section with a brief summary
+7. **If a standup already exists for today**, update it rather than creating a duplicate
+8. **Do not append to log.md** for standup generation (it's a report, not an operation)
 
 The standup is Paul's cheat sheet for the next morning's team standup. Keep it scannable — bullet points, not paragraphs. Prioritize "what changed" and "what's blocked" over process details.
 

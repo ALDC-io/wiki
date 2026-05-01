@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-1b, marketing, tiktok, email, target-plus, priori
 aliases: [Navira Phase 1B, Marketing Social Emerging]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-04-28
+updated: 2026-04-30
 ---
 
 # Phase 1B — Marketing Data: Social & Emerging Channels
 
-**Priority:** 1 · **Interfaces:** 3 · **Status:** Not Started · **Depends on:** Phase 1A ingestion pattern
+**Priority:** 1 · **Interfaces:** 3 · **Status:** Tickets created — S5. Needs refinement. · **Depends on:** Phase 1A ingestion pattern
 
 > **2026-04-28 scope change:** Target+ moved to Phase 1A — confirmed as active spend by Heather Tabor. TikTok, Creator Connections, and Email were not listed as current spend channels. Phase 1B may be deprioritized pending further input from Navira.
 
@@ -47,6 +47,13 @@ Reuse Phase 1A pipeline; adapt transformations per channel. The unified marketin
 ## Acceptance Criteria
 
 Same as Phase 1A (daily ingestion, < 24h latency, 2% reconciliation tolerance, alerting, queryable in PBI/Eclipse).
+
+## Jira Tickets
+
+| Ticket | Summary | Sprint | Notes |
+|---|---|---|---|
+| GP-228 | TikTok/Creator Connections | S5 | TikTok Shops + Creator Marketplace — needs platform confirmation |
+| GP-229 | Email Campaigns | S5 | Platform TBD (Klaviyo/Mailchimp/HubSpot?) |
 
 ## See Also
 

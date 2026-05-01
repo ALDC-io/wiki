@@ -3,7 +3,7 @@ tags: [workflow, navira, gep, roadmap, client, e-commerce]
 aliases: [Navira Roadmap, Navira Integration, GEP Roadmap]
 sources: [eclipse_exp/frontend/public/navira/navira-roadmap.html, eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-04-28
+updated: 2026-04-30
 ---
 
 # Navira Integration — Workflow Hub
@@ -29,13 +29,13 @@ Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks 
 
 | Phase | Domain | Interfaces | Priority | Status |
 |---|---|---|---|---|
-| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — E2E proven 2026-04-28 |
-| **1A** | Marketing — Ad Platforms | Google Ads (Amazon + D2C), Facebook Ads, Amazon PPC UK/CA, Target+ | P1 | Not Started |
-| **1B** | Marketing — Social & Emerging | TikTok Shops, Creator Connections, Email Campaigns | P1 | Not Started |
-| **1C** | Sales — Agency Customers | Seller Central (Sales), Seller Central (Inventory) | P1 | Not Started |
-| **2** | Inventory | Sellercloud (Inventory), Navira Purchasing System | P2 | Not Started |
-| **3** | Competitor | SmartScout | P3 | Not Started |
-| **4** | Unstructured | Email, Meeting Notes, Word Documents | P4 | Not Started |
+| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — G1–G3/G5 done (GP-213–216, GP-220). Sellercloud migration next (GP-219). Infra: GP-217, GP-218. |
+| **1A** | Marketing — Ad Platforms | Google Ads (Amazon + D2C), Facebook Ads, Amazon PPC UK/CA, Target+ | P1 | Tickets created (GP-221, GP-222, GP-223, GP-225, GP-226, GP-227). Sprint S3/S4. |
+| **1B** | Marketing — Social & Emerging | TikTok Shops, Creator Connections, Email Campaigns | P1 | Tickets created (GP-228, GP-229). Sprint S5. Needs refinement. |
+| **1C** | Sales — Agency Customers | Seller Central (Sales), Seller Central (Inventory) | P1 | Tickets created (GP-230, GP-231). Sprint S4/S5. |
+| **2** | Inventory | Sellercloud (Inventory), Navira Purchasing System | P2 | Tickets created (GP-232, GP-233). Backlog. |
+| **3** | Competitor | SmartScout | P3 | Tickets created (GP-234). Backlog. Needs refinement. |
+| **4** | Unstructured | Email, Meeting Notes, Word Documents | P4 | Tickets created (GP-235). Backlog. Needs refinement. |
 
 ### Production (already live)
 
@@ -52,6 +52,67 @@ Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks 
 | Item | Blocker | Owner | Action |
 |---|---|---|---|
 | Amazon UK PPC | No UK advertising profile authorized — refresh token only returns US + CA profiles. Raw Snowflake tables confirmed: no GBP data landing. | Navira | Send OAuth authorization URL; Navira authorizes UK ad profile. ALDC exchanges code, updates connection config, adds UK profile ID to `MARKETPLACE_PROFILE_MAP` in `marketing_fct_activity.sql`. |
+
+## Jira Ticket Map
+
+All GP tickets created 2026-04-30. See individual phase pages for details.
+
+### Phase 0 — Prefect Foundation
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-213 | E2E Proof (Sprint 0A) | S2 | Done |
+| GP-214 | pytest Framework (Sprint 0B) | S2 | Done |
+| GP-215 | Logging + CI Pipeline (Sprint 0C) | S2 | Done |
+| GP-216 | Account Auto-Discovery (Sprint 0D) | S2 | Done |
+| GP-220 | DateWindow Partition (G1) | S2 | Done |
+| GP-247 | Fork connector repo → prefect-connectors | S2 | To Do |
+| GP-248 | Snowflake Environment Isolation (QA/UAT/Prod) | S2 | To Do |
+| GP-243 | Validate existing Prefect Server | S2 | To Do |
+| GP-217 | CI/CD Pipeline — Docker & GHCR | S3 | To Do |
+| GP-218 | QA/Prod Work Pools & Promotion Pipeline | S3 | To Do |
+| GP-246 | Migration Testing Protocol | S3 | To Do |
+| GP-219 | Sellercloud Migration (build S2, QA deploy S3) | S2/S3 | To Do |
+
+### Phase 1A — Marketing Ad Platforms
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-221 | Amazon UK PPC OAuth | S3 | BLOCKED |
+| GP-222 | Facebook Ads Connector | S4 | To Do |
+| GP-223 | Target+ Connector | S4 | To Do |
+| GP-237 | Access & Credentials Epic (GP-238–245) | S2+ | Ongoing |
+| GP-225 | Unified Marketing Schema Design | S3 | To Do |
+| GP-226 | Google Ads Connector | S4 | To Do |
+| GP-227 | Historical Backfill | S5 | To Do |
+
+### Phase 1B — Marketing Social & Emerging
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-228 | TikTok/Creator Connections | S5 | To Do |
+| GP-229 | Email Campaigns | S5 | To Do |
+
+### Phase 1C — Sales Agency Customers
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-230 | SP-API Registration | S4 | To Do |
+| GP-231 | Seller Central Multi-Tenant | S5 | To Do |
+
+### Phase 2 — Inventory
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-232 | Sellercloud Inventory | Backlog | To Do |
+| GP-233 | Purchasing System & COGS | Backlog | To Do |
+
+### Phase 3 — Competitor Data
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-234 | SmartScout | Backlog | To Do |
+
+### Phase 4 — Unstructured Data
+| Ticket | Summary | Sprint | Status |
+|---|---|---|---|
+| GP-235 | Discovery & Architecture Design | Backlog | To Do |
+
+---
 
 ## Cross-Cutting Concerns (CC1–CC7)
 

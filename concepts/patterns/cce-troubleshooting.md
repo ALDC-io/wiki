@@ -3,7 +3,7 @@ tags: [concept, pattern, cce, troubleshooting, claude-code]
 aliases: [CCE issues, CCE troubleshooting]
 sources: [sources/obsidian-import/general/CCE/Issues/]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-04-30
 ---
 
 # CCE Troubleshooting
@@ -63,6 +63,49 @@ Referenced but details in separate issue file.
 ## Issue #6: Status Line Not Appearing
 
 Referenced but details in separate issue file.
+
+## Issue #7: CCX MCP "No active session" / Stale Session Accumulation
+
+**Symptom**: CCX MCP tools fail with `"No active session for session_id='' user_id='anonymous'"` or `"Invalid or missing Mcp-Session-Id"`.
+
+**Root cause**: Stale sessions accumulate in the CCX SessionManager because SessionEnd hooks don't always fire (Claude Code crash, timeout, etc.). The MCP auto-resolution logic requires exactly 1 active session to map `user_id`; with multiple sessions it falls through to `"anonymous"`, and ToolHandler rejects the call. Orphan recovery at server startup also re-creates sessions with fresh `started_at` timestamps, defeating the lazy re-resolution filter.
+
+**Diagnosis**:
+```bash
+curl -s http://localhost:7432/api/health  # check "sessions" count — should be 1
+```
+
+**Manual recovery** (run in order):
+```bash
+# 1. Mark orphan JSONL files as processed
+for f in ~/repos/ccx/data/sessions/cc-*.jsonl; do
+  sid=$(basename "$f" .jsonl)
+  marker="~/repos/ccx/data/sessions/auto-learn-${sid}"
+  [ ! -f "$marker" ] && echo "processed" > "$marker"
+done
+
+# 2. Clean stale session cache (PowerShell — keep only current session PID)
+Get-ChildItem "$env:LOCALAPPDATA\ccx\session-*.id" | Where-Object { $_.Name -ne "session-<CURRENT_PID>.id" } | Remove-Item
+
+# 3. Restart CCX container
+docker restart ccx
+
+# 4. Re-fire session-start
+SESSION_ID=$(cat "$LOCALAPPDATA/ccx/session-<CURRENT_PID>.id")
+curl -X POST http://localhost:7432/events/session-start \
+  -H "Content-Type: application/json" \
+  -d "{\"session_id\": \"${SESSION_ID}\", \"user\": \"paul\", \"hostname\": \"$(hostname)\", \"cwd\": \"$(pwd)\"}"
+
+# 5. Verify
+curl -s http://localhost:7432/api/health  # sessions should be 1
+```
+
+**Code fix** (pending upstream in ccx repo for JK/Mike):
+1. `server.py` MCP `initialize`: fall back to `settings.cce_user` when session-count auto-resolution fails (multiple sessions)
+2. `server.py` MCP `tools/call`: same `cce_user` fallback in lazy re-resolution
+3. `server.py` MCP handler: auto-recover MCP sessions with unknown `Mcp-Session-Id` after container restart instead of rejecting
+
+**First observed**: 2026-04-30 (3 consecutive sessions)
 
 ## General CCE Architecture Notes
 
