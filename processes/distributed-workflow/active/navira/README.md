@@ -3,7 +3,7 @@ tags: [workflow, navira, gep, roadmap, client, e-commerce]
 aliases: [Navira Roadmap, Navira Integration, GEP Roadmap]
 sources: [eclipse_exp/frontend/public/navira/navira-roadmap.html, eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-04-30
+updated: 2026-05-02
 ---
 
 # Navira Integration — Workflow Hub
@@ -29,7 +29,7 @@ Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks 
 
 | Phase | Domain | Interfaces | Priority | Status |
 |---|---|---|---|---|
-| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — G1–G3/G5 done (GP-213–216, GP-220). Sellercloud migration next (GP-219). Infra: GP-217, GP-218. |
+| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — G1–G3/G5 done (GP-213–216, GP-220). Repo fork done (GP-247, 2026-05-01). Prefect Server validated (GP-243, 2026-05-01). Snowflake env isolation next (GP-248), then Sellercloud migration (GP-219). Infra: GP-217, GP-218. |
 | **1A** | Marketing — Ad Platforms | Google Ads (Amazon + D2C), Facebook Ads, Amazon PPC UK/CA, Target+ | P1 | Tickets created (GP-221, GP-222, GP-223, GP-225, GP-226, GP-227). Sprint S3/S4. |
 | **1B** | Marketing — Social & Emerging | TikTok Shops, Creator Connections, Email Campaigns | P1 | Tickets created (GP-228, GP-229). Sprint S5. Needs refinement. |
 | **1C** | Sales — Agency Customers | Seller Central (Sales), Seller Central (Inventory) | P1 | Tickets created (GP-230, GP-231). Sprint S4/S5. |
@@ -65,9 +65,9 @@ All GP tickets created 2026-04-30. See individual phase pages for details.
 | GP-215 | Logging + CI Pipeline (Sprint 0C) | S2 | Done |
 | GP-216 | Account Auto-Discovery (Sprint 0D) | S2 | Done |
 | GP-220 | DateWindow Partition (G1) | S2 | Done |
-| GP-247 | Fork connector repo → prefect-connectors | S2 | To Do |
+| GP-247 | Fork connector repo → prefect-connectors | S2 | Done |
 | GP-248 | Snowflake Environment Isolation (QA/UAT/Prod) | S2 | To Do |
-| GP-243 | Validate existing Prefect Server | S2 | To Do |
+| GP-243 | Validate existing Prefect Server | S2 | Done |
 | GP-217 | CI/CD Pipeline — Docker & GHCR | S3 | To Do |
 | GP-218 | QA/Prod Work Pools & Promotion Pipeline | S3 | To Do |
 | GP-246 | Migration Testing Protocol | S3 | To Do |

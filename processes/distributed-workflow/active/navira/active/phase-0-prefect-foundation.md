@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-0, prefect, foundation, connector, infrastructure
 aliases: [Navira Phase 0, Prefect Foundation]
 sources: [connector repo review 2026-04-27, entities/tools/prefect.md, concepts/patterns/connector-development-standards.md, prefect-v3-reference, prefect-v3-patterns]
 created: 2026-04-27
-updated: 2026-04-30 (session 4 — Jira alignment)
+updated: 2026-05-02 (GP-247 + GP-243 complete; boot prompts added for GP-219/217/218/246)
 ---
 
 # Phase 0 — Prefect Foundation & Connector Migration
 
-**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged to `operation-fiasco`; G1 PR #118 merged 2026-04-30; Sellercloud migration next)
+**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged to `operation-fiasco`; G1 PR #118 merged 2026-04-30; repo forked to `ALDC-io/prefect-connectors` 2026-05-01 (GP-247); Prefect Server validated 2026-05-01 (GP-243); Snowflake env isolation next (GP-248), then Sellercloud migration (GP-219))
 
 This phase proves the Prefect connector pattern end-to-end by migrating 1–2 existing production connectors, then hardens the framework for the 17 new connectors in Phases 1A–4. All cross-cutting concerns (CC1–CC7) are resolved here.
 
@@ -158,50 +158,22 @@ curl -s http://127.0.0.1:4200/api/flow_runs/<id> | python -m json.tool
 
 G3 is done. See Sprint 0D below for results, decisions, and the GEP account setup prereqs.
 
-### Boot prompt — GP-247: Fork connector repo → prefect-connectors
+### Boot prompt — GP-247: Fork connector repo → prefect-connectors ✅ Done 2026-05-01
 
-````
-You are working on **GP-247** (Fork connector repo → prefect-connectors).
+Repo live at `ALDC-io/prefect-connectors`. Smoke test `astute-waxbill` COMPLETED. See [[prefect-connectors]] for full repo page and the three infra bugs fixed during this work (Windows entrypoint path, WebSockets disabled on App Service, Prefect events WebSocket → `sitecustomize.py` patch).
 
-**Goal:** Create `ALDC-io/prefect-connectors` repo from `operation-fiasco` branch, set up branch protection, CI secrets, and verify first Docker push + QA Work Pool deployment.
+### GP-248 Pre-flight Results (2026-05-01)
 
-Boot procedure:
-1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
-2. Read `C:\Users\PaulRussell\repos\wiki\entities\repos\connector.md` — legacy repo context
-3. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — existing Prefect Server infrastructure (Azure resources, Work Pool architecture, environment switching)
-4. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` — Phase 0 status + connector promotion lifecycle
-5. In the connector repo: `git log --oneline operation-fiasco -10` to confirm latest state
+Credential and share health verified before execution. Use these findings when starting the boot prompt:
 
-**Existing Prefect infrastructure (Brayden built this):**
-- Server: `aldcprodwbapprefectserver1c01` at `https://prefect.analyticlabs.io`
-- Work Pool: `aldcprodctappprefectworkpool1c01` (ACI-based)
-- Database: `aldcprodpgdbconnector1c01` (Azure Postgres, VNET-private)
-- Workers: auto-generated ACI in `aldcprodrsgpprefectworkers1c`
-- Environment switching: `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP` env vars on Work Pool
-
-**Steps:**
-1. Create `ALDC-io/prefect-connectors` repo on GitHub (empty, then push operation-fiasco content as `main`)
-2. Create `development` branch from `main`
-3. Set branch protection: require PR + CI pass for both `main` and `development`
-4. Configure GitHub Actions secrets: GHCR token, Azure credentials, Snowflake test/prod credentials
-5. Update Dockerfile, CI workflows, CLAUDE.md, README — reference `prefect-connectors` not `connector`
-6. Push first Docker image to `ghcr.io/aldc-io/prefect-connectors`
-7. Validate GP-243: hit `https://prefect.analyticlabs.io` — confirm Prefect Server is healthy
-8. Register ExchangeRates deployment against QA Work Pool as smoke test
-9. Update wiki: [[connector]] repo page (note the fork), [[Prefect]] (reference new repo), [[repo-integration-map]]
-
-**Branch strategy:**
-- `main` → Prod Work Pool (`PROD_DG1_GEP` on wj66376)
-- `uat` → UAT Work Pool (`TEST_DG1_GEP_PREFECT` on og35375) — Navira client-facing; frozen during client review
-- `development` → QA Work Pool (`QA_DG1_GEP_PREFECT` on og35375) — ALDC internal; stays open during UAT
-- Feature branches → local dev only
-
-**Promotion path:** `feature/*` → `development` (ALDC QA) → `uat` (Navira UAT) → `main` (prod)
-
-**Why `uat` not `staging`:** Azure App Service uses "staging slot" for blue-green deploys — naming a branch `staging` would collide with that vocabulary when discussing Azure infra. `uat` is unambiguous.
-
-**Scope:** Repo creation + infrastructure validation. Do NOT migrate any connectors in this ticket — that's GP-219 (Sellercloud).
-````
+| Item | Finding |
+|---|---|
+| `TEST_DG1_CORE_ADMIN` | Only has `USAGE` role — cannot CREATE DATABASE. Do NOT use. |
+| `paulrussell` on og35375 | **SYSADMIN confirmed** ✅ |
+| `paulrussell` on wj66376 | **SYSADMIN confirmed** ✅ |
+| Credentials stored | `vault/infra-credentials.md` § Snowflake Environment Admin Accounts |
+| `TEST_DG1_GEP` (clone source) | Healthy: 18 schemas, 29 WS views, 4 RC views, 37 Amazon Ads tables, 724k FCT rows, 14 tasks running |
+| `PROD_DG1_GEP` inbound share | Mounted on og35375 ✅. IMPORTED PRIVILEGES not granted to SYSADMIN — not a clone blocker |
 
 ### Boot prompt — GP-248: Snowflake Environment Isolation
 
@@ -237,30 +209,136 @@ PBI workspaces:
 **Scope:** Database creation + service accounts + PBI workspace creation. Do NOT configure Prefect Work Pool env vars — that's GP-218.
 ````
 
-### Boot prompt — GP-243: Validate Existing Prefect Server
+### Boot prompt — GP-243: Validate Existing Prefect Server ✅ Done 2026-05-01
+
+All resources healthy. Auth is HTTP Basic via `PREFECT_API_AUTH_STRING`. Server in **Production 2** subscription (wiki was previously wrong about QA). See [[prefect-connector-deployment]] for the full deploy/env-switch runbook produced from this ticket, and [[Prefect]] for resource inventory.
+
+### Boot prompt — GP-219: Sellercloud Migration (first production connector on Prefect)
 
 ````
-You are working on **GP-243** (Validate existing Prefect Server).
+You are working on **GP-219** (Migrate Sellercloud to Prefect — first production connector).
 
-**Goal:** Confirm Brayden's self-hosted Prefect Server on Azure is healthy and accessible. Quick validation — should take under an hour.
+**Goal:** Build a typed Prefect connector for Sellercloud in `prefect-connectors`, deploy to QA Work Pool, validate output against legacy Eclipse Sellercloud connector with < 1% variance, then promote to UAT.
 
 Boot procedure:
-1. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — full resource inventory
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
+2. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` § Stage 2.1 (Sellercloud migration steps + GEP credential status)
+3. Read `C:\Users\PaulRussell\repos\wiki\entities\repos\prefect-connectors.md` — repo structure, branch model, gotchas
+4. Read `C:\Users\PaulRussell\repos\wiki\concepts\patterns\connector-development-standards.md` — typed-class hierarchy
+5. Read `C:\Users\PaulRussell\repos\wiki\processes\deployment\prefect-connector-deployment.md` — local + ACI deploy steps
+6. In the legacy connector repo: read `connector/connectors/sellercloud*.py` to understand existing API logic, auth, pagination
+7. Run `/prefect-connector` skill in `migrate` mode
 
-**Validation steps:**
-1. Hit `https://prefect.analyticlabs.io` in a browser — does the Prefect UI load?
-2. Check Azure Portal: is `aldcprodwbapprefectserver1c01` (App Service) running?
-3. Check Azure Portal: is `aldcprodpgdbconnector1c01` (Postgres) running?
-4. Check Azure Portal: is `aldcprodctappprefectworkpool1c01` (Container App) running?
-5. From Prefect UI: can you see the Work Pool? Any existing deployments?
-6. Test: `PREFECT_API_URL=https://prefect.analyticlabs.io/api prefect block ls` — does it connect?
-7. Test: register a dummy block and verify it persists
-8. Check Prefect version — is it compatible with the connector code (Prefect 3.6.9)?
-9. Document any issues (expired TLS cert, stale Prefect version, dead Postgres, etc.)
+**Pre-reqs (verify before coding):**
+- `connector/accounts/GEP/account.py` exists with `id="da8904db", short_code="GEP"` (confirmed in CosmosDB Test 1 `account_secret`)
+- Snowflake block `snowflake-test-gep` registered against the Prefect server (password from CosmosDB `account_secret` → `da8904db.snowflake_service_core_password`)
+- GP-248 complete: `QA_DG1_GEP_PREFECT` exists on og35375 (this is the QA write target)
 
-**If the server is DOWN:** Document what's broken. The fix is GP-218's scope, not this ticket. This ticket is diagnosis only.
+**Steps:**
+1. Create `connector/connectors/sellercloud.py` with typed `SellercloudConnection(ConnectorConnectionBase)` (API key + base URL) and `SellercloudOptions(ConnectorOptionsBase)` (date range, marketplace filters)
+2. Implement `SellercloudConnector(BaseConnector[SellercloudConnection, SellercloudOptions])` wrapping legacy logic. Use `PartitionSchemeDateExact` to start; switch to `DateWindow` if Sellercloud needs lookback rewrites.
+3. Create `connector/accounts/GEP/deployments/sellercloud.py` — `@account.register_flow()` decorator
+4. Add `tests/test_sellercloud.py` from `conftest_template.py` — at minimum: options validation, run() with mocked API, response shape assertions
+5. Local test: `serve_local` against `QA_DG1_ALDC_QA` first, then point at `QA_DG1_GEP_PREFECT` once GP-248 lands
+6. **Reconciliation (mirror GP-207 pattern):** clone `PROD_DG1_GEP.<sellercloud_schema>` into a sandbox in `QA_DG1_GEP_PREFECT` via prod data share; run Prefect connector against the same date window; compare row counts + key totals (`COUNT(*)`, `SUM(<key_metric>)`)
+7. PR feature branch → `development` (QA), let CI run, validate in QA Snowflake
+8. PR `development` → `uat` once row counts within < 1% variance
+9. Update `[[Sellercloud]]` connector wiki page (or create one if missing) with the migration result
 
-**Scope:** Validation + documentation. Do NOT configure Work Pools or deploy connectors.
+**Acceptance:** Sellercloud data lands in `QA_DG1_GEP_PREFECT.<schema>.*` via Prefect with < 1% variance vs legacy Eclipse pipeline. Tests pass in CI. UAT promotion approved by ALDC.
+
+**Scope:** Build + QA validate + UAT promote. Do NOT cut over prod (decommission legacy Eclipse Sellercloud) until prod-staging parity check is also green — that's a follow-up session, not this ticket.
+````
+
+### Boot prompt — GP-217: CI/CD Pipeline (Docker & GHCR) — `prefect-connectors` repo
+
+````
+You are working on **GP-217** (CI/CD Pipeline — automate Docker build → GHCR push → Work Pool refresh per branch).
+
+**Goal:** Wire the `prefect-connectors` repo so every merge to `development`/`uat`/`main` builds a Docker image, pushes to GHCR with the correct tag, and the matching Work Pool picks up the new image without manual re-deploy.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\entities\repos\prefect-connectors.md` — branch model, current `docker-publish.yml`
+2. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — Work Pool config, env vars, ACI image-pull mechanics
+3. Read `C:\Users\PaulRussell\repos\wiki\processes\deployment\prefect-connector-deployment.md` — current manual deploy flow
+4. Inspect existing `.github/workflows/` in `prefect-connectors` (already has `quality-gate.yml` + `docker-publish.yml` from the fork)
+
+**Steps:**
+1. Confirm branch → tag mapping in `docker-publish.yml`: `main:main`, `uat:uat`, `development:development`. No `:latest` tag (avoid implicit promotion).
+2. Confirm GHCR creds block is `russell94paul`-owned (was `brayden-marshall` pre-2026-05-01) and has `read:packages` + `write:packages`
+3. Add a post-push step that triggers a Prefect deployment refresh (or document why polling-only is sufficient for ACI Work Pool image pulls)
+4. Add CI matrix: pytest must pass before Docker build (currently sequenced in `quality-gate.yml` — verify it actually blocks `docker-publish.yml`)
+5. Document expected lead time: PR merge → Docker available in GHCR → next ACI worker run picks it up
+6. Write a one-page "what does our CI do" entry in `prefect-connector-deployment.md` so future sessions don't have to read YAML
+
+**Acceptance:** Push to `development` → `ghcr.io/aldc-io/prefect-connectors:development` updated within 5 min → next QA Work Pool flow run uses the new image. No manual `prefect deploy` needed for image-only changes.
+
+**Scope:** CI plumbing only. Do NOT change Work Pool env vars (that's GP-218) or migrate any connector (that's GP-219).
+````
+
+### Boot prompt — GP-218: QA/UAT/Prod Work Pools & Promotion Pipeline
+
+````
+You are working on **GP-218** (Configure QA/UAT/Prod Work Pools with environment-specific env vars and promotion pipeline).
+
+**Goal:** The current single `azure-aci-production` Work Pool needs to split (or be templated) into 3 logical environments — QA, UAT, Prod — each pointing at the right Snowflake DB, Azure storage, and CosmosDB instance. Each tier reads from its branch's Docker tag.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` § Work Pools and § Environment switching
+2. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` § Snowflake Environment Model (the table)
+3. Read `C:\Users\PaulRussell\repos\wiki\concepts\architecture\azure-environments.md` — subscription/env mapping
+4. Confirm GP-248 status: are `QA_DG1_GEP_PREFECT`, `TEST_DG1_GEP_PREFECT`, `PROD_DG1_GEP_PREFECT` all created? If not, GP-218 is blocked on GP-248.
+
+**Env-var matrix to configure (per Work Pool):**
+
+| Tier | Work Pool | Image tag | ENVIRONMENT_LEVEL | ENVIRONMENT_DEPLOYMENT_GROUP | Snowflake target |
+|---|---|---|---|---|---|
+| QA | `azure-aci-qa` (or job-template override) | `:development` | `qa` | `dg1` | `QA_DG1_GEP_PREFECT` |
+| UAT | `azure-aci-uat` | `:uat` | `test` | `dg1` | `TEST_DG1_GEP_PREFECT` |
+| Prod | `azure-aci-production` (existing) | `:main` | `prod` | `dg1` | `PROD_DG1_GEP_PREFECT` (staging), then `PROD_DG1_GEP` post-cutover |
+
+**Steps:**
+1. Decide: 3 separate Work Pools, OR 1 Work Pool with per-deployment job-template overrides? Default to 3 separate Work Pools — clearer blast radius, simpler env var management.
+2. Create QA + UAT Work Pools in the Prefect UI (or via `prefect work-pool create`); copy job template from existing prod pool
+3. Set env vars on each pool (above table)
+4. Verify GHCR pull works from each pool — pull a known-good `:development` image into QA, run a no-op flow
+5. Wire promotion pipeline doc: feature → `development` (auto-deploys to QA pool) → PR → `uat` (auto-deploys to UAT pool) → PR → `main` (auto-deploys to Prod pool)
+6. Document rollback: if a `:main` image is bad, revert PR on `main` and the next ACI worker run uses the previous image.
+7. Update [[prefect-connectors]] repo page Work Pool table + [[prefect-connector-deployment]] with new tier diagram
+
+**Acceptance:** A test connector deployed against the `development` branch lands data in `QA_DG1_GEP_PREFECT` via the QA Work Pool. Promoting to `uat` lands data in `TEST_DG1_GEP_PREFECT` via the UAT Work Pool. No env var was hardcoded in Python — all reads come from `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP`.
+
+**Scope:** Work Pool config + promotion pipeline doc. Do NOT migrate Sellercloud (GP-219) or build CI (GP-217).
+````
+
+### Boot prompt — GP-246: Migration Testing Protocol
+
+````
+You are working on **GP-246** (Formal migration testing protocol — Prefect output vs legacy Eclipse output, < 1% variance, per-connector sign-off).
+
+**Goal:** Define a repeatable, documented testing protocol that every connector migration must pass before cut-over. The Sellercloud migration (GP-219) is the first one to use it; future migrations follow the same template.
+
+Boot procedure:
+1. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` § Stage 2.1 step 6 (existing reconciliation pattern)
+2. Read `C:\Users\PaulRussell\repos\wiki\tickets\gep\GP-207.md` — prod data share clone pattern that this protocol mirrors
+3. Read `C:\Users\PaulRussell\repos\wiki\concepts\patterns\sandbox-feature-delivery.md` — sandbox schema pattern
+4. Read `C:\Users\PaulRussell\repos\wiki\processes\operations\flight-check.md` — existing operational validation conventions
+
+**What to produce:**
+
+Create `wiki/processes/operations/connector-migration-testing.md` with:
+
+1. **Test phases:** smoke (single date) → reconciliation (full back-window vs legacy) → soak (run alongside legacy for N days, compare daily)
+2. **Reconciliation queries:** SQL templates for row count, sum-of-key-metric, distinct-key parity (parameterized by `<schema>.<table>`)
+3. **Variance threshold:** < 1% per metric. If exceeded, document the diff and either fix or accept-with-justification.
+4. **Soak duration:** propose 7 days minimum for ad platform connectors (pick up retroactive adjustments), 3 days for static-data connectors
+5. **Sign-off sheet:** per-connector checklist — who validated what, when, link to reconciliation evidence (Snowflake query results)
+6. **Cut-over runbook:** disable legacy Eclipse task → final reconciliation → flip downstream warehouse SQL to read Prefect output → monitor for 48h
+7. **Rollback procedure:** re-enable Eclipse task; what state to restore in Snowflake
+
+**Acceptance:** A new engineer can read this doc and execute a connector migration validation end-to-end without asking. The Sellercloud migration (GP-219) is the first to use it and produces filled-in evidence sections (linked from this protocol).
+
+**Scope:** Documentation + SQL templates. No code changes. The Sellercloud migration itself is GP-219.
 ````
 
 ---
