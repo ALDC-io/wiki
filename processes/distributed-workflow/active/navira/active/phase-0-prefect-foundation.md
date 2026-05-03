@@ -3,7 +3,7 @@ tags: [workflow, navira, phase-0, prefect, foundation, connector, infrastructure
 aliases: [Navira Phase 0, Prefect Foundation]
 sources: [connector repo review 2026-04-27, entities/tools/prefect.md, concepts/patterns/connector-development-standards.md, prefect-v3-reference, prefect-v3-patterns]
 created: 2026-04-27
-updated: 2026-05-02 (GP-248 complete — Snowflake env isolation + PREFECT_SVC naming)
+updated: 2026-05-02 (GP-218 Work Pools + promotion pipeline; GP-248 complete)
 ---
 
 # Phase 0 — Prefect Foundation & Connector Migration
@@ -530,7 +530,7 @@ Feature branches should PR into `operation-fiasco`, not `development` or `master
 6. ~~**Snowflake environment isolation**~~ ✅ **Done 2026-05-02 (GP-248)** — 3 databases + 3 service accounts + 2 PBI workspaces created. Non-prod (og35375): `QA_DG1_GEP_PREFECT` + `TEST_DG1_GEP_PREFECT` cloned from `TEST_DG1_GEP`. Prod (wj66376): `PROD_DG1_GEP_PREFECT` empty with 3 schemas. Service accounts use `PREFECT_SVC` naming (not `CORE_SVC`) — framework updated in `account_registry.py`. PBI workspaces: "GEP Prefect QA" + "GEP Prefect Test". Passwords in `vault/infra-credentials.md` § Prefect Service Accounts. Provisioning script: `prefect-connectors/scripts/provision_gep_prefect.py`.
 7. **Validate existing Prefect Server** (GP-243, S2) — Brayden's self-hosted server at `https://prefect.analyticlabs.io` already exists. Validate it's healthy, Postgres connected, Work Pool running.
 8. **CI/CD pipeline** (GP-217, S3) — GitHub Actions on new repo: merge to `development` → Docker build → GHCR push → QA Work Pool. Merge to `main` → Prod Work Pool.
-9. **QA/UAT/Prod Work Pools** (GP-218, S3) — Configure Work Pool env vars per environment (see table below).
+9. ~~**QA/UAT/Prod Work Pools**~~ ✅ **Done 2026-05-02 (GP-218)** — 3 Work Pools (`azure-aci-qa`, `azure-aci-uat`, `azure-aci-production`) with dedicated worker Container Apps, per-tier env vars, branch-mapped Docker tags. GEP Snowflake blocks registered. `short_code="GEP_PREFECT"` fix. Promotion pipeline + rollback documented. E2E verified (`ultramarine-parakeet` COMPLETED on QA pool). See [[GP-218]].
 10. **Testing protocol** (GP-246, S3) — Formal validation process: compare Prefect output vs legacy Eclipse output, < 1% variance, per-connector sign-off.
 11. **Sellercloud migration** (GP-219, S2 build / S3 QA deploy) — First production connector on Prefect. Build locally in S2, deploy to QA via new repo in S3, validate through UAT, promote to prod.
 11. **Snapshot naming fix** — Move snapshots to `_PREFECT_SNAPSHOTS` schema so the framework's schema scanner doesn't pick them up.

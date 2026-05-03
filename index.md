@@ -208,6 +208,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-207]] — Prod-to-test data share setup. Re-pointed all GEP warehouse SQL to `PROD_DG1_GEP` share so test and prod reference the same raw data.
 - [[GP-199]] — ASIN Brand Campaign Attribution. Design for attributing SB spend to targeted ASINs instead of all brand ASINs. Two approaches proposed (ad creative vs purchase-based). Awaiting client response.
 - [[GP-208]] — Inventory feed ingestion & modelling. Phase 1 (current snapshot) built on existing Sellercloud + Amazon FBA pipelines — no data share. Data dictionary at [[gep-inventory-data-dictionary]]. Phase 2 (historical accumulation) pending.
+- [[GP-218]] — QA/UAT/Prod Work Pools & Promotion Pipeline. 3 Work Pools, 3 worker Container Apps, 3 Snowflake blocks, `short_code` fix, promotion pipeline documented. Infra complete 2026-05-02, GEP E2E pending PR #1.
 - [[GP-248]] — Prefect Snowflake Environment Isolation. 3 databases (`QA/TEST/PROD_DG1_GEP_PREFECT`), 3 `PREFECT_SVC` service accounts, 2 PBI workspaces. Done 2026-05-02.
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 

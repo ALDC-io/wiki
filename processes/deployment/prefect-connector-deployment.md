@@ -1,9 +1,9 @@
 ---
 tags: [process, deployment, prefect, connector, runbook]
 aliases: [Prefect Connector Deployment, prefect-run-guide]
-sources: [GP-243 validation 2026-05-01, phase-0-prefect-foundation, prefect-connector skill]
+sources: [GP-243 validation 2026-05-01, GP-218 work pool setup 2026-05-02, phase-0-prefect-foundation, prefect-connector skill]
 created: 2026-05-01
-updated: 2026-05-01
+updated: 2026-05-02
 ---
 
 # Prefect Connector Deployment Guide
@@ -16,15 +16,16 @@ See also: [[Prefect]] (architecture + resource inventory), [[prefect-v3-referenc
 
 ## Overview
 
-There are three modes of operation:
+There are four modes of operation:
 
-| Mode | Prefect Server | Snowflake target | Use when |
-|---|---|---|---|
-| **Local** | `http://127.0.0.1:4200` (ephemeral) | `QA_DG1_ALDC_QA` on og35375 | Building + unit-testing a connector |
-| **Azure QA** | `https://prefect.analyticlabs.io` | `QA_DG1_{account}` on og35375 | Integration testing against real infra |
-| **Azure Prod** | `https://prefect.analyticlabs.io` | `PROD_DG1_{account}` on wj66376 | Production runs |
+| Mode | Prefect Server | Work Pool | Snowflake target | Use when |
+|---|---|---|---|---|
+| **Local** | `http://127.0.0.1:4200` (ephemeral) | — (`serve_local`) | `QA_DG1_ALDC_QA` on og35375 | Building + unit-testing a connector |
+| **Azure QA** | `https://prefect.analyticlabs.io` | `azure-aci-qa` | `QA_DG1_{account}` on og35375 | ALDC internal integration testing |
+| **Azure UAT** | `https://prefect.analyticlabs.io` | `azure-aci-uat` | `TEST_DG1_{account}` on og35375 | Client-facing UAT (Navira validates in PBI) |
+| **Azure Prod** | `https://prefect.analyticlabs.io` | `azure-aci-production` | `PROD_DG1_{account}` on wj66376 | Production runs |
 
-The same Prefect Server serves all environments. The environment (QA vs Prod) is controlled by the **Work Pool** env vars, not by which server you point at.
+The same Prefect Server serves all environments. The environment is controlled by the **Work Pool** env vars, not by which server you point at. Each pool has a dedicated worker Container App.
 
 ---
 
@@ -228,10 +229,17 @@ Allow ~2 min for ACI container spin-up before the flow begins executing.
 
 ---
 
-## Environment Switching
+## Work Pool Configuration (GP-218)
 
-The Prefect Server is a single instance for all environments. The **Work Pool** controls
-which Snowflake database and Azure storage account a flow writes to.
+Three dedicated Work Pools, each with its own worker Container App. Configured 2026-05-02.
+
+### Work Pool matrix
+
+| Work Pool | Worker Container App | `ENVIRONMENT_LEVEL` | `ENVIRONMENT_DEPLOYMENT_GROUP` | Image tag | Snowflake target |
+|---|---|---|---|---|---|
+| `azure-aci-qa` | `aldcprodctapprefectwpqa1c01` | `qa` | `1` | `:development` | `QA_DG1_{account}` (og35375) |
+| `azure-aci-uat` | `aldcprodctapprefectwpuat1c01` | `test` | `1` | `:uat` | `TEST_DG1_{account}` (og35375) |
+| `azure-aci-production` | `aldcprodctapprefectworkpool1c01` | `prod` | `1` | `:main` | `PROD_DG1_{account}` (wj66376) |
 
 ### Environment map
 
@@ -241,31 +249,58 @@ which Snowflake database and Azure storage account a flow writes to.
 | `test` | `1` | `TEST_DG1_{account}` | og35375 | `aldctestcsdb1c01` | Test 1 |
 | `prod` | `1` | `PROD_DG1_{account}` | wj66376 | `aldcprodcsdb1c01` | Production 2 |
 
-Current Work Pool setting: `qa` / `1` (as of 2026-05-01).
+### GEP Snowflake blocks (registered 2026-05-02)
 
-### Switch ALL workflows to a different environment
+| Block | User | Snowflake Account |
+|---|---|---|
+| `snowflake-qa-gep-prefect` | `QA_DG1_PREFECT_SVC_DA8904DB` | og35375 |
+| `snowflake-test-gep-prefect` | `TEST_DG1_PREFECT_SVC_DA8904DB` | og35375 |
+| `snowflake-prod-gep-prefect` | `PROD_DG1_PREFECT_SVC_DA8904DB` | wj66376 |
 
-Change the env vars on the `aldcprodctapprefectworkpool1c01` Container App (Production 2):
+Passwords in `vault/infra-credentials.md` § Prefect Service Accounts. Registration script: `prefect-connectors/scripts/register_gep_blocks.py`.
 
-```bash
-az containerapp update \
-  --name aldcprodctapprefectworkpool1c01 \
-  --resource-group aldcprodrsgpprefectworkers1c \
-  --subscription 6389f755-3ff7-488a-a56c-7ea8297730bc \
-  --set-env-vars "ENVIRONMENT_LEVEL=<level>" "ENVIRONMENT_DEPLOYMENT_GROUP=<group>"
+---
+
+## Promotion Pipeline
+
+Code flows through branches; each branch maps to a Work Pool and Docker tag. No env var is hardcoded in Python — all reads come from `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP`.
+
+```
+feature/*  ──PR──►  development  ──PR──►  uat  ──PR──►  main
+                        │                   │              │
+                   CI builds            CI builds      CI builds
+                   :development          :uat           :main
+                        │                   │              │
+                   azure-aci-qa      azure-aci-uat   azure-aci-production
+                        │                   │              │
+                   QA_DG1_*_PREFECT  TEST_DG1_*_PREFECT  PROD_DG1_*_PREFECT
+                        │                   │              │
+                   ALDC validates    Navira validates   Production
 ```
 
-**This affects all running deployments.** Only do this for a coordinated environment promotion.
+### Promoting a connector
 
-### Switch a single deployment to a different environment
+1. **QA:** PR `feature/*` → `development`. CI builds `:development`. QA pool picks up new image on next run. Validate row counts + metrics in `QA_DG1_GEP_PREFECT`. See [[connector-migration-testing]] (GP-246) for formal protocol.
+2. **UAT:** PR `development` → `uat`. CI builds `:uat`. UAT pool picks up new image. Navira validates in "GEP Prefect Test" PBI workspace.
+3. **Prod:** PR `uat` → `main`. CI builds `:main`. Prod pool picks up new image. Data lands in `PROD_DG1_GEP_PREFECT` (staging). At cutover, flip `short_code` from `GEP_PREFECT` to `GEP` to target `PROD_DG1_GEP`.
 
-Stand up a second Work Pool with the target env vars, then point only that deployment at it:
+### Rollback
 
-1. Create a new Work Pool in Prefect UI with `ENVIRONMENT_LEVEL=<target>` set in its env defaults
-2. Edit the specific deployment to use the new Work Pool
-3. All other deployments remain on the original pool
+Revert the PR on the target branch. On next CI build, the image reverts to the previous code. The next ACI worker run picks up the old image automatically. No manual redeploy needed.
 
-This is the safe pattern for per-connector environment promotion.
+For immediate rollback (before CI completes): update the deployment's `job_variables.image` to a known-good SHA tag (e.g., `ghcr.io/aldc-io/prefect-connectors:<sha>`).
+
+### Moving a single deployment between pools
+
+```python
+from prefect.client.schemas.actions import DeploymentUpdate
+await client.update_deployment(
+    deployment_id=<id>,
+    deployment=DeploymentUpdate(work_pool_name="azure-aci-<target>"),
+)
+```
+
+Or in the Prefect UI: Deployments → Edit → Work Pool.
 
 ### Local `.env` environment
 
@@ -277,15 +312,17 @@ For local development, `ENVIRONMENT_LEVEL` and `ENVIRONMENT_DEPLOYMENT_GROUP` co
 
 All in **Production 2** subscription (`6389f755-3ff7-488a-a56c-7ea8297730bc`).
 
-| Resource | Type | Resource Group | Status (2026-05-01) |
-|---|---|---|---|
-| `aldcprodwbapprefectserver1c01` | App Service (Prefect Server) | `aldcprodrsgpconnector1c` | Running |
-| `aldcprodpgdbconnector1c01` | Azure Postgres v17 | `aldcprodrsgpconnector1c` | Ready |
-| `aldcprodctapprefectworkpool1c01` | Container App (Work Pool) | `aldcprodrsgpprefectworkers1c` | Running |
-| `aldcprodmgidprefectworkers1c` | Managed Identity | `aldcprodrsgpprefectworkers1c` | — |
+| Resource | Type | Resource Group | Pool | Status (2026-05-02) |
+|---|---|---|---|---|
+| `aldcprodwbapprefectserver1c01` | App Service (Prefect Server) | `aldcprodrsgpconnector1c` | — | Running |
+| `aldcprodpgdbconnector1c01` | Azure Postgres v17 | `aldcprodrsgpconnector1c` | — | Ready |
+| `aldcprodctapprefectworkpool1c01` | Container App (Prod Worker) | `aldcprodrsgpprefectworkers1c` | `azure-aci-production` | Running |
+| `aldcprodctapprefectwpqa1c01` | Container App (QA Worker) | `aldcprodrsgpprefectworkers1c` | `azure-aci-qa` | Running |
+| `aldcprodctapprefectwpuat1c01` | Container App (UAT Worker) | `aldcprodrsgpprefectworkers1c` | `azure-aci-uat` | Running |
+| `aldcprodmgidprefectworkers1c` | Managed Identity | `aldcprodrsgpprefectworkers1c` | — | — |
 
-Work Pool type: `azure-aci-production` (Azure Container Instances).
-Work Pool image: `prefecthq/prefect-azure:0.4.9-python3.14`.
+Worker image: `prefecthq/prefect-azure:0.4.9-python3.14` (all 3 workers).
+Setup scripts: `prefect-connectors/scripts/setup_work_pools.py` + `create_tier_workers.ps1`.
 
 ---
 

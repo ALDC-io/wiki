@@ -1,9 +1,9 @@
 ---
 tags: [entity, repo, prefect-connectors, aldc, prefect, data-plane]
 aliases: [prefect-connectors, prefect connectors repo]
-sources: [GP-247 session 2026-05-01, entities/repos/connector.md, entities/tools/prefect.md]
+sources: [GP-247 session 2026-05-01, GP-218 work pool setup 2026-05-02, entities/repos/connector.md, entities/tools/prefect.md]
 created: 2026-05-01
-updated: 2026-05-01
+updated: 2026-05-02
 ---
 
 # prefect-connectors
@@ -35,18 +35,20 @@ The legacy [[connector]] repo continues running on-prem Docker agents for all un
 
 ## Branch model
 
-| Branch | Docker tag | Work Pool | Snowflake target | Purpose |
-|---|---|---|---|---|
-| `main` | `:main` | Prod Work Pool | `PROD_DG1_GEP` (wj66376) | Production |
-| `uat` | `:uat` | UAT Work Pool | `TEST_DG1_GEP_PREFECT` (og35375) | Navira client-facing UAT |
-| `development` | `:development` | QA Work Pool | `QA_DG1_GEP_PREFECT` (og35375) | ALDC internal QA |
-| `feature/*` | — | Local `serve-local` | `QA_DG1_ALDC_QA` | Individual dev |
+| Branch | Docker tag | Work Pool | Worker Container App | Snowflake target | Purpose |
+|---|---|---|---|---|---|
+| `main` | `:main` | `azure-aci-production` | `aldcprodctapprefectworkpool1c01` | `PROD_DG1_GEP_PREFECT` → `PROD_DG1_GEP` post-cutover | Production |
+| `uat` | `:uat` | `azure-aci-uat` | `aldcprodctapprefectwpuat1c01` | `TEST_DG1_GEP_PREFECT` (og35375) | Navira client-facing UAT |
+| `development` | `:development` | `azure-aci-qa` | `aldcprodctapprefectwpqa1c01` | `QA_DG1_GEP_PREFECT` (og35375) | ALDC internal QA |
+| `feature/*` | — | Local `serve_local` | — | `QA_DG1_ALDC_QA` | Individual dev |
 
-**Promotion path:** `feature/*` → `development` (ALDC QA) → `uat` (Navira UAT) → `main` (prod)
+**Promotion path:** `feature/*` → `development` (ALDC QA) → `uat` (Navira UAT) → `main` (prod). Full pipeline documented at [[prefect-connector-deployment]] § Promotion Pipeline.
 
 `uat` is a snapshot — frozen during Navira review while `development` stays open for new feature work.
 
 **Why `uat` not `staging`:** Azure App Service uses "staging slot" for blue-green deploys — naming a branch `staging` collides with that vocabulary.
+
+**`short_code` note (GP-218):** GEP account uses `short_code="GEP_PREFECT"` during migration so `warehouse_database_name` resolves to `{ENV}_DG1_GEP_PREFECT`. At production cutover (per-connector), flip to `"GEP"` to target `PROD_DG1_GEP`.
 
 ## Architecture
 
@@ -82,11 +84,13 @@ The Prefect server's `ghcr-io-aldc-io` `DockerRegistryCredentials` block was set
 
 ## Prefect infrastructure
 
-All resources in `aldcprodrsgpconnector1c` (Production 2 subscription `6389f755-...`). See [[Prefect]] for full resource table.
+All resources in Production 2 subscription (`6389f755-...`). See [[Prefect]] for full resource table, [[prefect-connector-deployment]] for deployment runbook.
 
-- **Server:** `https://prefect.analyticlabs.io` (`aldcprodwbapprefectserver1c01`)
-- **Work Pool:** `azure-aci-production` (`aldcprodctapprefectworkpool1c01`, ACI-based)
-- **Workers RG:** `aldcprodrsgpprefectworkers1c`
+- **Server:** `https://prefect.analyticlabs.io` (`aldcprodwbapprefectserver1c01` in `aldcprodrsgpconnector1c`)
+- **Work Pools (GP-218):** 3 pools with dedicated workers in `aldcprodrsgpprefectworkers1c`:
+  - `azure-aci-qa` → `aldcprodctapprefectwpqa1c01`
+  - `azure-aci-uat` → `aldcprodctapprefectwpuat1c01`
+  - `azure-aci-production` → `aldcprodctapprefectworkpool1c01`
 - **Managed Identity:** `aldcprodmgidprefectworkers1c` (attached to each ACI worker container)
 
 Auth: HTTP Basic auth via `PREFECT_API_AUTH_STRING`. Retrieve password:

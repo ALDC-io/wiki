@@ -3,7 +3,7 @@ tags: [entity, tool, prefect, orchestration, connector-migration]
 aliases: [Prefect]
 sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md, daily/2026-04-17.md, Confluence TECH/1766260745 (Prefect subtree, Brayden Offboarding), TECH/1772126209 (Azure Resources Reference), TECH/1774256132 (Github Repo and Branch Reference)]
 created: 2026-04-16
-updated: 2026-05-02
+updated: 2026-05-02 (GP-218 Work Pool setup)
 ---
 
 # Prefect
@@ -139,21 +139,22 @@ All resources in the `aldcprodrsgpconnector1c` resource group except where noted
 | `aldcprodvnetconnector1c` | Virtual Network | VNET containing all Prefect services. Only Prefect Server is publicly accessible — everything else is VNET-private |
 | `aldcprodvmconnector1c01` | Virtual Machine | Admin jump-host for `psql` access to the VNET-bound Postgres. Should be stopped when not in use |
 
-### Switching environments (QA / Test / Prod)
+### Work Pools (GP-218, 2026-05-02)
 
-The Work Pool uses two environment variables to pick an environment:
+Three dedicated Work Pools, each with its own worker Container App. Environment is determined by `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP` set on each pool.
 
-- `ENVIRONMENT_LEVEL`
-- `ENVIRONMENT_DEPLOYMENT_GROUP`
+| Work Pool | Worker | `ENVIRONMENT_LEVEL` | Image tag | Snowflake target |
+|---|---|---|---|---|
+| `azure-aci-qa` | `aldcprodctapprefectwpqa1c01` | `qa` | `:development` | `QA_DG1_*_PREFECT` (og35375) |
+| `azure-aci-uat` | `aldcprodctapprefectwpuat1c01` | `test` | `:uat` | `TEST_DG1_*_PREFECT` (og35375) |
+| `azure-aci-production` | `aldcprodctapprefectworkpool1c01` | `prod` | `:main` | `PROD_DG1_*_PREFECT` (wj66376) |
 
-Together they select:
+Together `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP` select:
 
 - The Azure storage account used for staging data
 - The [[Snowflake]] account + target database (including the Snowflake user + role)
 
-To switch **all** Prefect workflows to a different environment, change those two env vars on the Work Pool.
-
-To run a **single** Deployment against a different environment, stand up a second Work Pool with the other env vars and point that Deployment at the new pool. This lets one Work Pool serve production workflows while another serves Test/QA — without switching everything at once.
+To move a **single** deployment between pools, update its `work_pool_name` in the Prefect UI or via the API. Full promotion pipeline and rollback procedure documented in [[prefect-connector-deployment]] § Promotion Pipeline.
 
 **GEP Prefect databases (GP-248, 2026-05-02):**
 
