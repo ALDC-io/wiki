@@ -3,7 +3,7 @@ tags: [entity, tool, prefect, orchestration, connector-migration]
 aliases: [Prefect]
 sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md, daily/2026-04-17.md, Confluence TECH/1766260745 (Prefect subtree, Brayden Offboarding), TECH/1772126209 (Azure Resources Reference), TECH/1774256132 (Github Repo and Branch Reference)]
 created: 2026-04-16
-updated: 2026-05-02 (GP-218 Work Pool setup)
+updated: 2026-05-03 (cost analysis)
 ---
 
 # Prefect
@@ -188,6 +188,7 @@ For developers building connectors, two wiki pages provide a comprehensive Prefe
 
 ## See Also
 
+- [[prefect-cost-analysis]] — Azure infrastructure cost model (actual SKUs, right-sizing recommendations, Prefect Cloud comparison). Analysed 2026-05-03.
 - [[Eclipse]] — the platform being replaced
 - [[connector]] — the repo where Prefect flows live
 - [[connector-development-standards]] — canonical Prefect connector pattern (attribute hierarchy, migration steps, PartitionScheme/MergeScheme selection)

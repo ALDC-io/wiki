@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-05-02
+updated: 2026-05-03
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -110,6 +110,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[core-api-data-model]] — core_api v1 domain model (2021): routine, schedule, session, schema, merge strategies, history tracking. Predecessor to cosmosdb-schema.
 - [[local-network]] — On-prem: Nginx reverse proxy (NPM + Cloudflare DDNS), TrueNAS/Covenant storage (30 TiB, Surrey), Tailscale VPN (kookiet subnet router).
 - [[star-schema-convention]] — ALDC naming: shared_dim_*, *_fct_*, extract_*. SHA2 keys, currency triple pattern, common SQL patterns.
+- [[prefect-cost-analysis]] — Prefect Azure infrastructure cost model: actual SKUs (P2v3, D2ads_v5, 3x Container Apps), right-sizing recommendations (~75% savings), Prefect Cloud comparison, ACI Spot analysis. 2026-05-03.
 - [[workflow-analysis-current-vs-future]] — End-to-end feature delivery workflow analysis: current state diagrams, gap analysis (17 gaps across Snowflake/PBI/Prefect/cross-cutting), future state target, three implementation options (Incremental → Data Quality Platform → Full CI/CD).
 - [[snowflake-data-share-refresh]] — Producer `CREATE OR REPLACE TABLE` semantics across a data share: atomic within producer DB, transparent handoff to name-referencing consumers, mitigation options for transient failures.
 - [[accumulating-source-tables]] — `CURRENT_REPORT_*` and `CURRENT_MAIN_*` tables retain multiple ingestion batches per key; dedup required at read time. Includes moving-target QA workflow (drift diagnostic, acceptable tolerance).
@@ -193,6 +194,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[processes/distributed-workflow/backlog/wiki-client-restructure]] — Backlog: reorganize wiki into client-first structure (GEP/Fusion92 top-level folders, frontmatter-driven Jira state, hub README per client). ~2-3hr migration script.
 - [[processes/distributed-workflow/archive/dv-444-dashboard-rename]] — ✅ Archived 2026-04-21: DV-444 Navira-demo sidebar app rename "Dashboard" → "SKU Profitability". Pure CosmosDB data change on `application_metadata`; no eclipse-2.1 code commits.
 - [[processes/distributed-workflow/active/azure-deploy-automation]] — Active workstream tracker (Phase 1–3: automate CI → stage deploy → Playwright E2E → slot swap for eclipse + core_api). Phased to-do with boot prompts per phase.
+- [[processes/distributed-workflow/active/zeus-memory/README|zeus-memory]] — Active workstream: Automated Tenant Data Source Ingestion. 5 phases (0–4): Discovery → Confluence ingestion → Jira+Git → Batch orchestration → Self-service onboarding. Phase 0 current (no codebase access yet).
 - [[processes/distributed-workflow/archive/repo-documentation]] — ✅ Archived 2026-04-20: Repo documentation workstream complete. 9 ALDC repos documented + cross-repo [[repo-integration-map]]. 10 new wiki pages, 4 memories, 1 potential ticket (`.pbip` migration), 11 stale cross-references flagged.
 
 ---

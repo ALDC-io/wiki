@@ -3,7 +3,7 @@ tags: [workflow, navira, phase-0, prefect, foundation, connector, infrastructure
 aliases: [Navira Phase 0, Prefect Foundation]
 sources: [connector repo review 2026-04-27, entities/tools/prefect.md, concepts/patterns/connector-development-standards.md, prefect-v3-reference, prefect-v3-patterns]
 created: 2026-04-27
-updated: 2026-05-02 (GP-218 Work Pools + promotion pipeline; GP-248 complete)
+updated: 2026-05-03 (infra right-sizing bundled into GP-217)
 ---
 
 # Phase 0 — Prefect Foundation & Connector Migration
@@ -262,6 +262,7 @@ Boot procedure:
 2. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` — Work Pool config, env vars, ACI image-pull mechanics
 3. Read `C:\Users\PaulRussell\repos\wiki\processes\deployment\prefect-connector-deployment.md` — current manual deploy flow
 4. Inspect existing `.github/workflows/` in `prefect-connectors` (already has `quality-gate.yml` + `docker-publish.yml` from the fork)
+5. Read `C:\Users\PaulRussell\repos\wiki\concepts\architecture\prefect-cost-analysis.md` — right-sizing targets, actual SKUs, `az` commands for downsizing
 
 **Steps:**
 1. Confirm branch → tag mapping in `docker-publish.yml`: `main:main`, `uat:uat`, `development:development`. No `:latest` tag (avoid implicit promotion).
@@ -273,7 +274,20 @@ Boot procedure:
 
 **Acceptance:** Push to `development` → `ghcr.io/aldc-io/prefect-connectors:development` updated within 5 min → next QA Work Pool flow run uses the new image. No manual `prefect deploy` needed for image-only changes.
 
-**Scope:** CI plumbing only. Do NOT change Work Pool env vars (that's GP-218) or migrate any connector (that's GP-219).
+**Infrastructure right-sizing (bundled with this ticket):**
+While in the Production 2 subscription, right-size the overprovisioned Prefect infrastructure. See [[prefect-cost-analysis]] for full analysis (2026-05-03).
+
+Pre-flight check (do first):
+- Verify whether the App Service (`aldcprodapspprefectserver1c01`) connects to PostgreSQL via VNET private endpoint or public connection string. This determines the minimum App Service tier (B2 if public, S1 if VNET integration required).
+
+Downsizes:
+1. **PostgreSQL** `aldcprodpgdbconnector1c01`: `Standard_D2ads_v5` GeneralPurpose (~$150/mo) → `Standard_B1ms` Burstable (~$16/mo). Prefect metadata is lightweight; Burstable handles it. Command: `az postgres flexible-server update --name aldcprodpgdbconnector1c01 -g aldcprodrsgpconnector1c --sku-name Standard_B1ms --tier Burstable`
+2. **App Service Plan** `aldcprodapspprefectserver1c01`: `P2v3` PremiumV3 (~$185/mo) → `B2` Basic (~$26/mo) or `S1` Standard (~$55/mo) if VNET needed. Command: `az appservice plan update --name aldcprodapspprefectserver1c01 -g aldcprodrsgpconnector1c --sku B2` (or S1)
+3. **Container App workers** (evaluate, don't change yet): current 0.5 vCPU / 1 GiB ($113/mo total). Consider 0.25 vCPU / 0.5 GiB (~$55/mo) after observing QA worker load with a few connectors deployed.
+
+Expected savings: ~$265–300/month immediately from steps 1+2. Step 3 deferred until more connectors are running.
+
+**Scope:** CI plumbing + infrastructure right-sizing. Do NOT change Work Pool env vars (that's GP-218) or migrate any connector (that's GP-219).
 ````
 
 ### Boot prompt — GP-218: QA/UAT/Prod Work Pools & Promotion Pipeline
@@ -529,7 +543,7 @@ Feature branches should PR into `operation-fiasco`, not `development` or `master
 5. ~~**Repo fork**~~ ✅ **Done 2026-05-01 (GP-247)** — `ALDC-io/prefect-connectors` live at `github.com/ALDC-io/prefect-connectors`. Branches: `main`/`uat`/`development` with branch protection + org secrets inherited. Docker publish CI pushing to `ghcr.io/aldc-io/prefect-connectors`. Smoke test `astute-waxbill` **COMPLETED** in ACI: API → Parquet → Azure blob → Snowflake. Data in `QA_DG1_ALDC_QA.EXCHANGE_RATES.*` on og35375. Three bugs fixed (Windows entrypoint path, WebSockets disabled on App Service, Prefect events WebSocket crash → `sitecustomize.py` NullEventsClient). See [[prefect-connectors]] for full repo page.
 6. ~~**Snowflake environment isolation**~~ ✅ **Done 2026-05-02 (GP-248)** — 3 databases + 3 service accounts + 2 PBI workspaces created. Non-prod (og35375): `QA_DG1_GEP_PREFECT` + `TEST_DG1_GEP_PREFECT` cloned from `TEST_DG1_GEP`. Prod (wj66376): `PROD_DG1_GEP_PREFECT` empty with 3 schemas. Service accounts use `PREFECT_SVC` naming (not `CORE_SVC`) — framework updated in `account_registry.py`. PBI workspaces: "GEP Prefect QA" + "GEP Prefect Test". Passwords in `vault/infra-credentials.md` § Prefect Service Accounts. Provisioning script: `prefect-connectors/scripts/provision_gep_prefect.py`.
 7. **Validate existing Prefect Server** (GP-243, S2) — Brayden's self-hosted server at `https://prefect.analyticlabs.io` already exists. Validate it's healthy, Postgres connected, Work Pool running.
-8. **CI/CD pipeline** (GP-217, S3) — GitHub Actions on new repo: merge to `development` → Docker build → GHCR push → QA Work Pool. Merge to `main` → Prod Work Pool.
+8. **CI/CD pipeline + infra right-sizing** (GP-217, S3) — GitHub Actions on new repo: merge to `development` → Docker build → GHCR push → QA Work Pool. Merge to `main` → Prod Work Pool. Also: right-size overprovisioned Azure resources (PostgreSQL D2ads_v5 → B1ms, App Service P2v3 → B2/S1) per [[prefect-cost-analysis]]. ~$265–300/month savings.
 9. ~~**QA/UAT/Prod Work Pools**~~ ✅ **Done 2026-05-02 (GP-218)** — 3 Work Pools (`azure-aci-qa`, `azure-aci-uat`, `azure-aci-production`) with dedicated worker Container Apps, per-tier env vars, branch-mapped Docker tags. GEP Snowflake blocks registered. `short_code="GEP_PREFECT"` fix. Promotion pipeline + rollback documented. E2E verified (`ultramarine-parakeet` COMPLETED on QA pool). See [[GP-218]].
 10. **Testing protocol** (GP-246, S3) — Formal validation process: compare Prefect output vs legacy Eclipse output, < 1% variance, per-connector sign-off.
 11. **Sellercloud migration** (GP-219, S2 build / S3 QA deploy) — First production connector on Prefect. Build locally in S2, deploy to QA via new repo in S3, validate through UAT, promote to prod.
