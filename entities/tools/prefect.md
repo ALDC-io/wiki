@@ -3,7 +3,7 @@ tags: [entity, tool, prefect, orchestration, connector-migration]
 aliases: [Prefect]
 sources: [sources/obsidian-import/work/PREFECT/PRE-000 - Initial Prefect Setup.md, sources/obsidian-import/work/PREFECT/Claude Planning/Planning.md, daily/2026-04-17.md, Confluence TECH/1766260745 (Prefect subtree, Brayden Offboarding), TECH/1772126209 (Azure Resources Reference), TECH/1774256132 (Github Repo and Branch Reference)]
 created: 2026-04-16
-updated: 2026-04-27
+updated: 2026-05-02
 ---
 
 # Prefect
@@ -154,6 +154,16 @@ Together they select:
 To switch **all** Prefect workflows to a different environment, change those two env vars on the Work Pool.
 
 To run a **single** Deployment against a different environment, stand up a second Work Pool with the other env vars and point that Deployment at the new pool. This lets one Work Pool serve production workflows while another serves Test/QA — without switching everything at once.
+
+**GEP Prefect databases (GP-248, 2026-05-02):**
+
+| Tier | Database | Account | Service Account |
+|---|---|---|---|
+| QA | `QA_DG1_GEP_PREFECT` | og35375 | `QA_DG1_PREFECT_SVC_DA8904DB` |
+| UAT | `TEST_DG1_GEP_PREFECT` | og35375 | `TEST_DG1_PREFECT_SVC_DA8904DB` |
+| Prod Staging | `PROD_DG1_GEP_PREFECT` | wj66376 | `PROD_DG1_PREFECT_SVC_DA8904DB` |
+
+Service accounts use `PREFECT_SVC` naming (not legacy `CORE_SVC`). Each has access ONLY to its Prefect database. See [[GP-248]] for full details.
 
 ## Connector Specs
 

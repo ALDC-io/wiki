@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-05-01
+updated: 2026-05-02
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -110,6 +110,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[core-api-data-model]] — core_api v1 domain model (2021): routine, schedule, session, schema, merge strategies, history tracking. Predecessor to cosmosdb-schema.
 - [[local-network]] — On-prem: Nginx reverse proxy (NPM + Cloudflare DDNS), TrueNAS/Covenant storage (30 TiB, Surrey), Tailscale VPN (kookiet subnet router).
 - [[star-schema-convention]] — ALDC naming: shared_dim_*, *_fct_*, extract_*. SHA2 keys, currency triple pattern, common SQL patterns.
+- [[workflow-analysis-current-vs-future]] — End-to-end feature delivery workflow analysis: current state diagrams, gap analysis (17 gaps across Snowflake/PBI/Prefect/cross-cutting), future state target, three implementation options (Incremental → Data Quality Platform → Full CI/CD).
 - [[snowflake-data-share-refresh]] — Producer `CREATE OR REPLACE TABLE` semantics across a data share: atomic within producer DB, transparent handoff to name-referencing consumers, mitigation options for transient failures.
 - [[accumulating-source-tables]] — `CURRENT_REPORT_*` and `CURRENT_MAIN_*` tables retain multiple ingestion batches per key; dedup required at read time. Includes moving-target QA workflow (drift diagnostic, acceptable tolerance).
 - [[connector-timeout-outage]] — Post-mortem: `/work/pick` Azure Function timeout caused by O(N_accounts x N_connections) global queue sweep. Short-term and long-term fixes documented.
@@ -126,7 +127,8 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[ai-pr-workflow]] — ALDC definitive PR workflow: Jira → branch → CCX → PR → Semgrep + TruffleHog + Claude Opus review + PyTestArch → code owner → merge → auto-deploy. All checks live as of 2026-04-10. Bypass list empty.
 - [[connector-token-refresh]] — OAuth token refresh runbook. Bing Ads 90-day cycle (automated daily + manual PowerShell). Facebook 60-day long-lived token.
 - [[connector-development-standards]] — Canonical ALDC/Prefect connector pattern: typed attribute hierarchy (ConnectorConnectionBase/OptionsBase), migration steps, PartitionScheme/MergeScheme selection, reference implementation.
-- [[sandbox-feature-delivery]] — Per-feature Snowflake schema pattern (`WAREHOUSE_TEST_<TICKET_ID>`) for isolating in-flight warehouse changes.
+- [[sandbox-feature-delivery]] — Per-feature Snowflake schema pattern (`WAREHOUSE_TEST_<TICKET_ID>`) for isolating in-flight warehouse changes. PBI workspace creation now automatable via PowerShell (updated 2026-05-02).
+- [[snowflake-environment-provisioning]] — Idempotent Snowflake provisioning pattern: databases, service accounts, grants via Python. Role hierarchy, Git Bash path gotchas, utility scripts. Extracted from GP-248.
 - [[pbi-xmla-automation]] — Programmatic PBI metadata changes via XMLA + TOM + Roslyn (`pbi_model_apply.exe`) + Snowflake-schema-derived column generator. The PBI sibling of sandbox-feature-delivery; validated end-to-end on GP-208 2026-04-24.
 - [[adversarial-investigation-skill]] — `/investigate-adversarial` Claude Code skill (Vlad). 6-phase adversarial protocol: ANCHOR → OUTSIDE-IN → FORENSIC EVIDENCE → PROVE/DISPROVE/BLIND-SPOT → QUANTIFY → CONVERGE. For bugs, arch decisions, tech evals, concept validation.
 
@@ -205,6 +207,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-207]] — Prod-to-test data share setup. Re-pointed all GEP warehouse SQL to `PROD_DG1_GEP` share so test and prod reference the same raw data.
 - [[GP-199]] — ASIN Brand Campaign Attribution. Design for attributing SB spend to targeted ASINs instead of all brand ASINs. Two approaches proposed (ad creative vs purchase-based). Awaiting client response.
 - [[GP-208]] — Inventory feed ingestion & modelling. Phase 1 (current snapshot) built on existing Sellercloud + Amazon FBA pipelines — no data share. Data dictionary at [[gep-inventory-data-dictionary]]. Phase 2 (historical accumulation) pending.
+- [[GP-248]] — Prefect Snowflake Environment Isolation. 3 databases (`QA/TEST/PROD_DG1_GEP_PREFECT`), 3 `PREFECT_SVC` service accounts, 2 PBI workspaces. Done 2026-05-02.
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 
 ### Fusion92
@@ -236,6 +239,7 @@ Handwritten notes inbox. Copy `daily/_template.md` as `daily/YYYY-MM-DD.md`, add
 
 Start-of-day task tracker. Generated from previous standup's "Plan for Tomorrow" + unblocked items. Updated throughout the day as work progresses. Feeds into the end-of-day standup.
 
+- [[workplan/2026-05-02]] — GP-248 Snowflake environment isolation execution
 - [[workplan/2026-05-01]] — AMZ UK PPC token exchange (unblocked), GP-243 Prefect Server validation, GP-247 repo fork, GP-248 Snowflake env isolation
 
 ---
@@ -244,6 +248,7 @@ Start-of-day task tracker. Generated from previous standup's "Plan for Tomorrow"
 
 End-of-day summaries for next-morning team standup. Generated by scanning `log.md`, updated wiki pages, and session context. Three sections: What I Did Today, Blockers, Plan for Tomorrow.
 
+- [[standup/2026-05-02]] — GP-248 Snowflake env isolation complete — 3 databases, 3 PREFECT_SVC accounts, 2 PBI workspaces, framework CORE_SVC→PREFECT_SVC rename
 - [[standup/2026-05-01]] — GP-243 Prefect Server validated (all green), auth mechanism documented, subscription error corrected, deployment guide written
 - [[standup/2026-04-30]] — Navira roadmap breakdown (30+ tickets GP-213–248), sprint S2–S5 planning, repo fork plan, Snowflake 4-tier environment isolation, access epic GP-237
 - [[standup/2026-04-29]] — Phase 0 G2+G3 complete (PRs #116/#117 merged, 19 tests), wrong-branch deploy incident + post-mortem, Azure Deploy Automation workstream created, aldc-shipyard rename

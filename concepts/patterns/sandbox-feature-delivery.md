@@ -3,7 +3,7 @@ tags: [concept, pattern, snowflake, automation, testing, sandbox]
 aliases: [sandbox feature delivery, per-feature schema, test schema isolation]
 sources: [entities/projects/workflow-automation.md, GP-207, GP-208, gep-snowflake-pbi-deployment]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-05-02
 ---
 
 # Sandbox Feature Delivery (Per-Feature Schema Pattern)
@@ -56,20 +56,31 @@ TEST_DG1_GEP
 
 ---
 
-## Why True Ephemeral Isn't Achievable Today
+## PBI Workspace Automation (updated 2026-05-02)
 
-The full "ephemeral environment" ideal — one isolated Snowflake schema + one isolated PBI workspace per branch — breaks at the Power BI layer. As of 2025, Microsoft's Power BI REST API does not expose public endpoints for:
-- Programmatically creating or deleting workspaces
-- Deploying `.pbix` files at scale
-- Scripting the Explore/smoke-test flow
+PBI workspace **creation** is automatable via the `MicrosoftPowerBIMgmt` PowerShell module:
 
-The Snowflake half is fully automatable. The PBI half is not. The practical sandbox is therefore:
+```powershell
+Install-Module -Name MicrosoftPowerBIMgmt -Scope CurrentUser
+Connect-PowerBIServiceAccount   # interactive browser login
+New-PowerBIWorkspace -Name "GEP Prefect QA"
+```
+
+See `prefect-connectors/scripts/create_pbi_workspaces.ps1` for a full idempotent script.
+
+What remains manual or not yet scripted:
+- Deploying `.pbix` semantic model files at scale
+- Programmatic semantic model → Snowflake connection wiring (done via Power BI Service UI)
+- Scripting the smoke-test / Explore flow
+
+The practical sandbox is therefore:
 
 | Layer | Isolation | Automated? |
 |---|---|---|
 | Snowflake schema | Per-feature (`WAREHOUSE_TEST_<ticket>`) | ✅ |
 | Snowflake task chain | Triggered per-deploy | ✅ |
-| PBI workspace | Shared (`GEP Test Models`) | ❌ Manual |
+| PBI workspace creation | Per-environment (scripted via PowerShell) | ✅ (as of 2026-05-02) |
+| PBI semantic model deploy | Manual `.pbix` upload | ❌ Manual |
 | Prod→test data | Shared (GP-207 share, always current) | ✅ (infrastructure) |
 
 ---

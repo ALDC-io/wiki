@@ -3,7 +3,7 @@ tags: [entity, repo, automation, aldc, workflow-automation, shipyard]
 aliases: [aldc-shipyard, shipyard repo, workflow automation repo]
 sources: [processes/distributed-workflow/active/client-workflow-automation.md (Phase 7 design + Tranche H dogfood 2026-04-26)]
 created: 2026-04-26
-updated: 2026-04-29
+updated: 2026-05-02
 ---
 
 # aldc-shipyard repo
@@ -53,7 +53,9 @@ aldc-shipyard/
 │   └── gep.yaml                      # gitignored — real machine-local values
 ├── scripts/
 │   ├── deploy.py                     # Snowflake deploy (--client gep --env sandbox|test|prod)
-│   ├── validate.py                   # Snowflake validation harness
+│   ├── validate.py                   # Snowflake validation harness (+ --compare cross-env)
+│   ├── monitor.py                    # Data freshness, task health, share integrity monitoring
+│   ├── flight_check.py               # Full operational health check (combines all monitors)
 │   ├── pbi_generate_columns.py       # TOM column-def emitter
 │   ├── pbi_scan.py                   # PBI model scanner
 │   ├── pbi_seed_sandbox.py           # Sandbox workspace bootstrapper
@@ -67,6 +69,7 @@ aldc-shipyard/
     └── GEP/
         ├── deploy_manifest/          # GP-208.yaml, GP-BENCH-01.yaml, ...
         ├── validate_manifest/        # GP-208.yaml, ...
+        ├── monitor_config.yaml       # Monitoring config: freshness thresholds, share objects, task chains
         ├── pbi_config.example.yaml   # committed — schema documentation
         └── pbi_config.yaml           # gitignored — real PBI workspace/dataset GUIDs
 ```
@@ -162,6 +165,54 @@ Skill-emitted invocations look like:
 python "$SHIPYARD_HOME/scripts/deploy.py"   --client gep --env sandbox --ticket GP-208 --check-share
 python "$SHIPYARD_HOME/scripts/validate.py" --client gep --env sandbox --ticket GP-208 --save-results
 ```
+
+## Monitoring & flight check (Option A — added 2026-05-02)
+
+Three new scripts extend the automation from deploy-time into operational monitoring:
+
+### monitor.py — continuous monitoring
+
+Checks data freshness, task chain health, and share integrity against thresholds in `clients/GEP/monitor_config.yaml`.
+
+```bash
+python scripts/monitor.py --client gep --env test                  # all checks
+python scripts/monitor.py --client gep --env prod --freshness      # freshness only
+python scripts/monitor.py --client gep --env prod --json           # JSON output
+```
+
+Three check categories:
+- **Freshness** — `MAX(date_col)` per table vs `max_stale_hours` threshold. Catches the 42-day stale SELLERCLOUD P&L incident (GP-208).
+- **Task chain** — queries `TASK_HISTORY` for recent runs; flags FAILED/CANCELLED tasks.
+- **Share integrity** — probes every `PROD_DG1_GEP.*` object in the config. Catches the share-drop incidents (GP-200, GP-PENDING).
+
+### flight_check.py — full operational health report
+
+Combines all monitor checks + volume sanity + optional cross-env comparison + PBI refresh status into a single pass/fail report. Replaces the manual [[flight-check]] process.
+
+```bash
+python scripts/flight_check.py --client gep --env test                   # full check
+python scripts/flight_check.py --client gep --env test --compare prod    # + cross-env diff
+python scripts/flight_check.py --client gep --env prod --save report.json
+```
+
+### deploy.py extensions
+
+- **Deploy log** — every test/prod deploy writes to `{db}.MONITORING.DEPLOY_LOG` (auto-created). Columns: deploy_id, ticket, env, file_name, file_hash, deployed_by, git info, status, duration.
+- **Promotion gate** — `--env prod` checks `MONITORING.DEPLOY_LOG` for a prior successful test deploy. Warns if missing; `--force` to override.
+
+### validate.py extensions
+
+- **Cross-env comparison** — `--compare prod` runs the same row-count queries against both environments and reports diffs. Flags >50% divergence as failure, >10% as warning.
+
+### monitor_config.yaml
+
+Per-client monitoring configuration:
+- `freshness:` — tables, date columns, hour thresholds
+- `tasks:` — root task, prefixes, lookback window
+- `share_objects:` — critical PROD_DG1_GEP objects to probe
+- `volume_tables:` — tables for cross-env comparison
+
+See [[workflow-analysis-current-vs-future]] for the full gap analysis and roadmap.
 
 ## Connector integration pattern (sketch only — not built)
 

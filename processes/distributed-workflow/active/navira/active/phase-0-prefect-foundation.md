@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-0, prefect, foundation, connector, infrastructure
 aliases: [Navira Phase 0, Prefect Foundation]
 sources: [connector repo review 2026-04-27, entities/tools/prefect.md, concepts/patterns/connector-development-standards.md, prefect-v3-reference, prefect-v3-patterns]
 created: 2026-04-27
-updated: 2026-05-02 (GP-247 + GP-243 complete; boot prompts added for GP-219/217/218/246)
+updated: 2026-05-02 (GP-248 complete — Snowflake env isolation + PREFECT_SVC naming)
 ---
 
 # Phase 0 — Prefect Foundation & Connector Migration
 
-**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged to `operation-fiasco`; G1 PR #118 merged 2026-04-30; repo forked to `ALDC-io/prefect-connectors` 2026-05-01 (GP-247); Prefect Server validated 2026-05-01 (GP-243); Snowflake env isolation next (GP-248), then Sellercloud migration (GP-219))
+**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged to `operation-fiasco`; G1 PR #118 merged 2026-04-30; repo forked to `ALDC-io/prefect-connectors` 2026-05-01 (GP-247); Prefect Server validated 2026-05-01 (GP-243); Snowflake env isolation complete 2026-05-02 (GP-248); `CORE_SVC` → `PREFECT_SVC` naming change in framework; next: CI/CD (GP-217), Work Pools (GP-218), Sellercloud migration (GP-219))
 
 This phase proves the Prefect connector pattern end-to-end by migrating 1–2 existing production connectors, then hardens the framework for the 17 new connectors in Phases 1A–4. All cross-cutting concerns (CC1–CC7) are resolved here.
 
@@ -284,31 +284,46 @@ You are working on **GP-218** (Configure QA/UAT/Prod Work Pools with environment
 **Goal:** The current single `azure-aci-production` Work Pool needs to split (or be templated) into 3 logical environments — QA, UAT, Prod — each pointing at the right Snowflake DB, Azure storage, and CosmosDB instance. Each tier reads from its branch's Docker tag.
 
 Boot procedure:
-1. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` § Work Pools and § Environment switching
-2. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` § Snowflake Environment Model (the table)
-3. Read `C:\Users\PaulRussell\repos\wiki\concepts\architecture\azure-environments.md` — subscription/env mapping
-4. Confirm GP-248 status: are `QA_DG1_GEP_PREFECT`, `TEST_DG1_GEP_PREFECT`, `PROD_DG1_GEP_PREFECT` all created? If not, GP-218 is blocked on GP-248.
+1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
+2. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\prefect.md` § Work Pools, § Environment switching, and § GEP Prefect databases table
+3. Read `C:\Users\PaulRussell\repos\wiki\processes\distributed-workflow\active\navira\active\phase-0-prefect-foundation.md` § Snowflake Environment Model (the table)
+4. Read `C:\Users\PaulRussell\repos\wiki\concepts\architecture\azure-environments.md` — subscription/env mapping
+5. Read `C:\Users\PaulRussell\repos\wiki\tickets\gep\GP-248.md` — completed infra (databases, service accounts, PBI workspaces)
+6. Read `C:\Users\PaulRussell\repos\wiki\processes\deployment\prefect-connector-deployment.md` — current deploy runbook to extend
+7. Read `C:\Users\PaulRussell\repos\prefect-connectors\connector\account_registry.py` — verify `PREFECT_SVC` naming
+8. Read `C:\Users\PaulRussell\repos\prefect-connectors\connector\lib\warehouse\schema.py` — `warehouse_database_name` property (needs `short_code` fix)
+
+**GP-248 prerequisites (confirmed done 2026-05-02):**
+- `QA_DG1_GEP_PREFECT` ✅, `TEST_DG1_GEP_PREFECT` ✅, `PROD_DG1_GEP_PREFECT` ✅
+- Service accounts: `{ENV}_DG1_PREFECT_SVC_DA8904DB` (not `CORE_SVC` — renamed in GP-248)
+- Passwords in `vault/infra-credentials.md` § Prefect Service Accounts
+- PBI workspaces: "GEP Prefect QA" + "GEP Prefect Test" ✅
+
+**Critical framework fix (do first):**
+`schema.py:27` computes `warehouse_database_name` as `{ENV}_DG1_{SHORT_CODE}`. With `short_code="GEP"` this resolves to `QA_DG1_GEP` — wrong. The databases are `QA_DG1_GEP_PREFECT`. Fix: set `short_code="GEP_PREFECT"` in `connector/accounts/GEP/account.py`. At production cutover, flip back to `"GEP"`.
 
 **Env-var matrix to configure (per Work Pool):**
 
 | Tier | Work Pool | Image tag | ENVIRONMENT_LEVEL | ENVIRONMENT_DEPLOYMENT_GROUP | Snowflake target |
 |---|---|---|---|---|---|
-| QA | `azure-aci-qa` (or job-template override) | `:development` | `qa` | `dg1` | `QA_DG1_GEP_PREFECT` |
-| UAT | `azure-aci-uat` | `:uat` | `test` | `dg1` | `TEST_DG1_GEP_PREFECT` |
-| Prod | `azure-aci-production` (existing) | `:main` | `prod` | `dg1` | `PROD_DG1_GEP_PREFECT` (staging), then `PROD_DG1_GEP` post-cutover |
+| QA | `azure-aci-qa` (new) | `:development` | `qa` | `1` | `QA_DG1_GEP_PREFECT` |
+| UAT | `azure-aci-uat` (new) | `:uat` | `test` | `1` | `TEST_DG1_GEP_PREFECT` |
+| Prod | `azure-aci-production` (existing) | `:main` | `prod` | `1` | `PROD_DG1_GEP_PREFECT` (staging), then `PROD_DG1_GEP` post-cutover |
 
 **Steps:**
-1. Decide: 3 separate Work Pools, OR 1 Work Pool with per-deployment job-template overrides? Default to 3 separate Work Pools — clearer blast radius, simpler env var management.
-2. Create QA + UAT Work Pools in the Prefect UI (or via `prefect work-pool create`); copy job template from existing prod pool
-3. Set env vars on each pool (above table)
-4. Verify GHCR pull works from each pool — pull a known-good `:development` image into QA, run a no-op flow
-5. Wire promotion pipeline doc: feature → `development` (auto-deploys to QA pool) → PR → `uat` (auto-deploys to UAT pool) → PR → `main` (auto-deploys to Prod pool)
-6. Document rollback: if a `:main` image is bad, revert PR on `main` and the next ACI worker run uses the previous image.
-7. Update [[prefect-connectors]] repo page Work Pool table + [[prefect-connector-deployment]] with new tier diagram
+1. Update `connector/accounts/GEP/account.py`: `short_code="GEP_PREFECT"` (framework fix above)
+2. Register Prefect blocks with real passwords from vault (3 blocks: `snowflake-qa-gep-prefect`, `snowflake-test-gep-prefect`, `snowflake-prod-gep-prefect`)
+3. Decide: 3 separate Work Pools, OR 1 Work Pool with per-deployment job-template overrides? Default to 3 separate — clearer blast radius.
+4. Create QA + UAT Work Pools in the Prefect UI (or via `prefect work-pool create`); copy job template from existing prod pool
+5. Set env vars on each pool (above table)
+6. Verify GHCR pull works from each pool — pull a known-good `:development` image into QA, run ExchangeRates flow
+7. Wire promotion pipeline doc: feature → `development` (QA pool) → PR → `uat` (UAT pool) → PR → `main` (Prod pool)
+8. Document rollback: revert PR on `main`, next ACI worker run uses previous image
+9. Update [[prefect-connectors]] repo page Work Pool table + [[prefect-connector-deployment]] with new tier diagram
 
-**Acceptance:** A test connector deployed against the `development` branch lands data in `QA_DG1_GEP_PREFECT` via the QA Work Pool. Promoting to `uat` lands data in `TEST_DG1_GEP_PREFECT` via the UAT Work Pool. No env var was hardcoded in Python — all reads come from `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP`.
+**Acceptance:** ExchangeRates connector deployed against `development` branch lands data in `QA_DG1_GEP_PREFECT` via the QA Work Pool. Promoting to `uat` lands data in `TEST_DG1_GEP_PREFECT` via the UAT Work Pool. No env var was hardcoded in Python — all reads come from `ENVIRONMENT_LEVEL` + `ENVIRONMENT_DEPLOYMENT_GROUP`.
 
-**Scope:** Work Pool config + promotion pipeline doc. Do NOT migrate Sellercloud (GP-219) or build CI (GP-217).
+**Scope:** Work Pool config + block registration + promotion pipeline doc + `short_code` fix. Do NOT migrate Sellercloud (GP-219) or build CI (GP-217).
 ````
 
 ### Boot prompt — GP-246: Migration Testing Protocol
@@ -512,7 +527,7 @@ Feature branches should PR into `operation-fiasco`, not `development` or `master
 3. ~~**G3 (account auto-discovery)**~~ ✅ **Done** — `register_all_accounts()` globs `connector/accounts/*/account.py`, dynamically imports `ACCOUNT`; GEP account added. PR #117 merged to `operation-fiasco` 2026-04-29.
 4. ~~**G1 (DateWindow partition)**~~ ✅ **Done** — `_compute_date_window()` helper + `DateWindow` branch in `run_workflow()`; `ConnectorRunOptionsDateRange` passed to `run()`; 13 tests in `test_base_connector.py`. PR #118 merged to `operation-fiasco` 2026-04-30. Tracked as GP-220 (QA).
 5. ~~**Repo fork**~~ ✅ **Done 2026-05-01 (GP-247)** — `ALDC-io/prefect-connectors` live at `github.com/ALDC-io/prefect-connectors`. Branches: `main`/`uat`/`development` with branch protection + org secrets inherited. Docker publish CI pushing to `ghcr.io/aldc-io/prefect-connectors`. Smoke test `astute-waxbill` **COMPLETED** in ACI: API → Parquet → Azure blob → Snowflake. Data in `QA_DG1_ALDC_QA.EXCHANGE_RATES.*` on og35375. Three bugs fixed (Windows entrypoint path, WebSockets disabled on App Service, Prefect events WebSocket crash → `sitecustomize.py` NullEventsClient). See [[prefect-connectors]] for full repo page.
-6. **Snowflake environment isolation** (GP-248, S2) — Create 3 isolated databases + 2 PBI workspaces for the Prefect migration. See § Snowflake Environment Model below.
+6. ~~**Snowflake environment isolation**~~ ✅ **Done 2026-05-02 (GP-248)** — 3 databases + 3 service accounts + 2 PBI workspaces created. Non-prod (og35375): `QA_DG1_GEP_PREFECT` + `TEST_DG1_GEP_PREFECT` cloned from `TEST_DG1_GEP`. Prod (wj66376): `PROD_DG1_GEP_PREFECT` empty with 3 schemas. Service accounts use `PREFECT_SVC` naming (not `CORE_SVC`) — framework updated in `account_registry.py`. PBI workspaces: "GEP Prefect QA" + "GEP Prefect Test". Passwords in `vault/infra-credentials.md` § Prefect Service Accounts. Provisioning script: `prefect-connectors/scripts/provision_gep_prefect.py`.
 7. **Validate existing Prefect Server** (GP-243, S2) — Brayden's self-hosted server at `https://prefect.analyticlabs.io` already exists. Validate it's healthy, Postgres connected, Work Pool running.
 8. **CI/CD pipeline** (GP-217, S3) — GitHub Actions on new repo: merge to `development` → Docker build → GHCR push → QA Work Pool. Merge to `main` → Prod Work Pool.
 9. **QA/UAT/Prod Work Pools** (GP-218, S3) — Configure Work Pool env vars per environment (see table below).
