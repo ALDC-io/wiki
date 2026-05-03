@@ -760,6 +760,12 @@ Paul closed the session here. Pick up next session as follows:
 - committed: `GEP/scripts/deploy.py`, `GEP/scripts/.env.example`, `GEP/scripts/deploy_manifest/GP-208.yaml`, `GEP/scripts/deploy_manifest/GP-BENCH-01.yaml`, `GEP/snowflake/warehouse/workflow_bench_smoke.sql`
 - next: Phase 2 — validation suite (`validate.py`). Boot prompt below.
 
+### 2026-05-02 — Option A monitoring layer: monitor.py, flight_check.py, deploy extensions, /session-open + /session-close skills
+
+- did: Built Option A Phase A1+A2 of the workflow automation roadmap. Created `monitor.py` (freshness, task health, share integrity), `flight_check.py` (full operational health check replacing manual flight-check), `monitor_config.yaml` (GEP thresholds). Extended `deploy.py` with `MONITORING.DEPLOY_LOG` recording + prod promotion gate (`--force`). Extended `validate.py` with `--compare` for cross-env row count comparison. Created `workflow-analysis-current-vs-future.md` with 8 Mermaid diagrams, 27 gap items, 3 implementation options. Wired `§K Flight Check helper` into `/gep-feature` at test-deployed and prod-deployed stages. Built `/session-open` and `/session-close` skills. Scheduled weekly "GEP Prod Weekly Flight Check" remote agent (Mondays 08:00 UTC).
+- decided: Option A (incremental automation) over Option B (data quality platform) or Option C (full CI/CD). Flight check failures are safety nets not gates — they never hard-block a stage. Remote flight check agent posts Jira checklists since it can't access Snowflake directly.
+- next: Dogfood `/session-open` and `/session-close` next session. Remaining Option A gaps: schema diff (`deploy.py --diff`), connector validation suite, token expiry tracker. Tracker template v2 (phase-aligned layout matching Jira states) deferred to next session.
+
 ## Decisions Log
 
 - 2026-04-18 — Output of this workstream is design artifacts only on first pass. Implementation is a separate follow-on workstream gated on Paul's design approval.

@@ -3,7 +3,7 @@ tags: [concept, pattern, cce, troubleshooting, claude-code]
 aliases: [CCE issues, CCE troubleshooting]
 sources: [sources/obsidian-import/general/CCE/Issues/]
 created: 2026-04-16
-updated: 2026-04-30
+updated: 2026-05-02
 ---
 
 # CCE Troubleshooting
@@ -70,42 +70,60 @@ Referenced but details in separate issue file.
 
 **Root cause**: Stale sessions accumulate in the CCX SessionManager because SessionEnd hooks don't always fire (Claude Code crash, timeout, etc.). The MCP auto-resolution logic requires exactly 1 active session to map `user_id`; with multiple sessions it falls through to `"anonymous"`, and ToolHandler rejects the call. Orphan recovery at server startup also re-creates sessions with fresh `started_at` timestamps, defeating the lazy re-resolution filter.
 
+**Symptom variant**: `cce_memory_store` returns `{"status": "queued"}` but memories don't appear in Zeus. This is the same root cause — session count > 1 prevents user resolution. Memories ARE queued in CCX; they land after recovery. Verify via leaderboard after fixing.
+
 **Diagnosis**:
 ```bash
 curl -s http://localhost:7432/api/health  # check "sessions" count — should be 1
 ```
 
-**Manual recovery** (run in order):
+**Manual recovery** (run in order — confirmed working 2026-05-02):
 ```bash
 # 1. Mark orphan JSONL files as processed
 for f in ~/repos/ccx/data/sessions/cc-*.jsonl; do
   sid=$(basename "$f" .jsonl)
-  marker="~/repos/ccx/data/sessions/auto-learn-${sid}"
-  [ ! -f "$marker" ] && echo "processed" > "$marker"
+  marker="$HOME/repos/ccx/data/sessions/auto-learn-${sid}"
+  [ ! -f "$marker" ] && echo "processed" > "$marker" && echo "Marked: $sid"
 done
 
-# 2. Clean stale session cache (PowerShell — keep only current session PID)
-Get-ChildItem "$env:LOCALAPPDATA\ccx\session-*.id" | Where-Object { $_.Name -ne "session-<CURRENT_PID>.id" } | Remove-Item
+# 2. Clean stale session cache — keep only most recent session-*.id file
+# Find most recent:
+ls -t /c/Users/PaulRussell/AppData/Local/ccx/session-*.id | head -1
+# Read its session ID:
+cat $(ls -t /c/Users/PaulRussell/AppData/Local/ccx/session-*.id | head -1)
+# Delete all others (Git Bash):
+KEEP=$(ls -t /c/Users/PaulRussell/AppData/Local/ccx/session-*.id | head -1 | xargs basename)
+for f in /c/Users/PaulRussell/AppData/Local/ccx/session-*.id; do
+  [ "$(basename $f)" != "$KEEP" ] && rm "$f" && echo "Removed: $(basename $f)"
+done
 
 # 3. Restart CCX container
 docker restart ccx
+sleep 3
 
-# 4. Re-fire session-start
-SESSION_ID=$(cat "$LOCALAPPDATA/ccx/session-<CURRENT_PID>.id")
+# 4. Re-fire session-start (use session ID read in step 2)
+SESSION_ID="cc-xxxxxxxxxxxxxxx"  # from step 2
 curl -X POST http://localhost:7432/events/session-start \
   -H "Content-Type: application/json" \
   -d "{\"session_id\": \"${SESSION_ID}\", \"user\": \"paul\", \"hostname\": \"$(hostname)\", \"cwd\": \"$(pwd)\"}"
 
 # 5. Verify
 curl -s http://localhost:7432/api/health  # sessions should be 1
+
+# 6. Verify memories landed (check leaderboard)
+curl -s https://zeus.aldc.io/api/learnings/leaderboard \
+  -H "X-API-Key: zm_aldc_mgmt_5fa85da311ce24614a52128d7a2e63eb" | \
+  python3 -c "import sys,json; d=json.load(sys.stdin); paul=next(u for u in d['leaderboard'] if u['user']=='paul'); print(paul)"
 ```
 
 **Code fix** (pending upstream in ccx repo for JK/Mike):
 1. `server.py` MCP `initialize`: fall back to `settings.cce_user` when session-count auto-resolution fails (multiple sessions)
 2. `server.py` MCP `tools/call`: same `cce_user` fallback in lazy re-resolution
 3. `server.py` MCP handler: auto-recover MCP sessions with unknown `Mcp-Session-Id` after container restart instead of rejecting
+4. **Enhancement:** Add CCX health check (`sessions == 1`) as first step in `/cce-learn` — auto-run recovery before storing memories to eliminate the failure mode
 
 **First observed**: 2026-04-30 (3 consecutive sessions)
+**Confirmed recovery**: 2026-05-02 — 21 stale sessions cleared, all queued memories landed
 
 ## General CCE Architecture Notes
 

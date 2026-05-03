@@ -33,6 +33,12 @@ If you're doing one focused thing in one session, you don't need this. Use [[act
 
 When a workstream finishes, move its tracker from `active/` to `archive/` (folder created on first archive).
 
+## Backlog
+
+Ideas scoped but not yet started. Pick one up by moving it to `active/` and opening a tracker.
+
+- [[backlog/wiki-client-restructure]] — reorganize wiki from type-centric to client-centric (GEP/Fusion92 top-level folders, frontmatter-driven Jira state). ~2-3hr migration script.
+
 ## Archived workstreams
 
 - [[archive/dv-444-dashboard-rename]] — ✅ 2026-04-21: Renamed the Navira-demo sidebar app's `app_name` from "Dashboard" → "SKU Profitability" via direct CosmosDB patch. Pure data change; no eclipse-2.1 code commits. See [[DV-444]].
