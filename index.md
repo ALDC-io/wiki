@@ -222,6 +222,9 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[FU92-394]] — Viant DSP actuals missing after 4/2. Connector timeout bug → schedules disabled → never re-enabled. Fix + backfill.
 - [[FU92-395]] — DAX user role error on approved flight. Ken Kocna can't view flight, persists after re-login. Blocking monthly QA.
 
+### Internal / Research & Tooling
+- [[SHIP-001]] — Rename aldc-shipyard to shipyard. Drop `aldc-` prefix, update all refs. ~15-20 min dedicated session.
+
 ### DV (Eclipse 2.1)
 - [[DV-444]] — Rename GEP/Navira's `navira-demo` sidebar app label from "Dashboard" → "SKU Profitability". Data change in `application_metadata` CosmosDB doc; no eclipse-2.1 code change. Surfaced v2 write-endpoint gap in [[core_api]].
 
