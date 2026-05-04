@@ -224,6 +224,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 
 ### Internal / Research & Tooling
 - [[SHIP-001]] — Rename aldc-shipyard to shipyard. Drop `aldc-` prefix, update all refs. ~15-20 min dedicated session.
+- [[SHIP-002]] — Team Pulse: Highs/Lows/Celebrations + Coffee Recognition. Scans Jira + Wiki + Zeus Memory for per-person and company-wide summaries. CLI MVP → skill → UI (Claude Design).
 
 ### DV (Eclipse 2.1)
 - [[DV-444]] — Rename GEP/Navira's `navira-demo` sidebar app label from "Dashboard" → "SKU Profitability". Data change in `application_metadata` CosmosDB doc; no eclipse-2.1 code change. Surfaced v2 write-endpoint gap in [[core_api]].
