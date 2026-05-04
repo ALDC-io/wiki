@@ -56,13 +56,48 @@ A weekly/sprint-end report (and eventually a UI) that answers:
 ```
 ## ALDC Pulse — Week of 2026-05-04
 
-### Wins
-- Fusion92 Viant data pipeline restored after 30-day outage
-- Infrastructure costs reduced ~$265/mo (Prefect right-sizing)
+### Product Updates
+What shipped to clients this week and what it enables:
+- Fusion92 Viant data pipeline restored — actuals now reporting in DAX after 30-day gap
+  → Enables: Fusion92 can finalize monthly QA and resume Viant flight reporting
+- Prefect infrastructure right-sized (~$265/mo saved)
+  → Enables: sustainable self-hosted Prefect at scale without cloud cost pressure
+
+### Development Updates
+What moved forward internally and what it unlocks:
+- Docker CI pipeline validated end-to-end on connector repo
+  → Enables: automated builds gated behind quality checks — no more manual build.sh deploys
+- Jira board restructured with 3 swimlanes (Support / Development / Research & Tooling)
+  → Enables: visibility into all work types, support SLAs trackable separately from sprint velocity
+- Viant connector hardened with timeout + error handling
+  → Enables: connectors can no longer hang indefinitely and block the entire worker queue
+
+### Potential Demos
+Ready to show internally or to clients:
+- Prefect CI/CD pipeline: quality gate → Docker build → environment promotion (QA → UAT → Prod)
+- Operational monitoring: flight_check.py + monitor.py — data freshness, task health, share integrity
+- Wiki-driven boot prompts: any team member can resume any workstream cold via copy-paste prompt
 
 ### Watch Items
 - 2 open Fusion92 support tickets (FU92-394 in-progress, FU92-395 to-do)
 - Monthly QA deadline this week
+
+### Product Readiness
+
+Zeus Memory                  ████████░░░░░░░░░░░░  40%
+  ✅ Streamlit prototype     ✅ Lululemon use case
+  ✅ Zeus API integration     ⬜ Multi-tenant isolation
+  ⬜ Drift detection engine   ⬜ Production deployment
+
+Zeus Chat                    ██████░░░░░░░░░░░░░░  30%
+  ✅ Core conversation loop   ✅ Memory retrieval
+  ⬜ Multi-source grounding   ⬜ Approval workflows
+  ⬜ Production deployment    ⬜ Client-facing auth
+
+Eclipse Exp (v2.1)           ████████████░░░░░░░░  60%
+  ✅ FastAPI + Next.js 15     ✅ PostgreSQL RLS
+  ✅ 50 connectors            ✅ 87 migrations
+  ⬜ Strangler-fig cutover    ⬜ AI onboarding
 
 ### Celebrations
 - New CI/CD pipeline validated end-to-end on connector repo
