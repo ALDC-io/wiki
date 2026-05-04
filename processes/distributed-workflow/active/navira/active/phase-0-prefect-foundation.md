@@ -3,12 +3,12 @@ tags: [workflow, navira, phase-0, prefect, foundation, connector, infrastructure
 aliases: [Navira Phase 0, Prefect Foundation]
 sources: [connector repo review 2026-04-27, entities/tools/prefect.md, concepts/patterns/connector-development-standards.md, prefect-v3-reference, prefect-v3-patterns]
 created: 2026-04-27
-updated: 2026-05-03 (infra right-sizing bundled into GP-217)
+updated: 2026-05-03 (GP-217 done, GP-218 E2E blocked on Snowflake staging)
 ---
 
 # Phase 0 — Prefect Foundation & Connector Migration
 
-**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged to `operation-fiasco`; G1 PR #118 merged 2026-04-30; repo forked to `ALDC-io/prefect-connectors` 2026-05-01 (GP-247); Prefect Server validated 2026-05-01 (GP-243); Snowflake env isolation complete 2026-05-02 (GP-248); `CORE_SVC` → `PREFECT_SVC` naming change in framework; next: CI/CD (GP-217), Work Pools (GP-218), Sellercloud migration (GP-219))
+**Priority:** 0 (prerequisite for all other phases) · **Status:** In Progress (Sprints 0A–0D merged; G1 done; repo forked (GP-247); Prefect Server validated (GP-243); Snowflake env isolation done (GP-248); Work Pools + promotion pipeline done (GP-218, E2E blocked on Snowflake staging DB — password reset pending); CI/CD gated pipeline done (GP-217); next: GP-218 E2E (after Snowflake access), Sellercloud migration (GP-219))
 
 This phase proves the Prefect connector pattern end-to-end by migrating 1–2 existing production connectors, then hardens the framework for the 17 new connectors in Phases 1A–4. All cross-cutting concerns (CC1–CC7) are resolved here.
 
@@ -250,7 +250,11 @@ Boot procedure:
 **Scope:** Build + QA validate + UAT promote. Do NOT cut over prod (decommission legacy Eclipse Sellercloud) until prod-staging parity check is also green — that's a follow-up session, not this ticket.
 ````
 
-### Boot prompt — GP-217: CI/CD Pipeline (Docker & GHCR) — `prefect-connectors` repo
+### Boot prompt — GP-217: CI/CD Pipeline (Docker & GHCR) ✅ Done 2026-05-03
+
+PR #2 merged. Consolidated `docker-publish.yml` into `ci.yml` — Docker builds now gated behind quality gate. All checks green, gated pipeline confirmed working on `development` push.
+
+### ~~Boot prompt — GP-217~~ (original below, superseded)
 
 ````
 You are working on **GP-217** (CI/CD Pipeline — automate Docker build → GHCR push → Work Pool refresh per branch).
@@ -290,7 +294,15 @@ Expected savings: ~$265–300/month immediately from steps 1+2. Step 3 deferred 
 **Scope:** CI plumbing + infrastructure right-sizing. Do NOT change Work Pool env vars (that's GP-218) or migrate any connector (that's GP-219).
 ````
 
-### Boot prompt — GP-218: QA/UAT/Prod Work Pools & Promotion Pipeline
+### Boot prompt — GP-218: QA/UAT/Prod Work Pools & Promotion Pipeline — 90% Done, BLOCKED on Snowflake password reset
+
+**Done (2026-05-02 + 2026-05-03):** PR #1 (short_code fix) + PR #3 (GEP ExchangeRates deployment) merged. CI gated pipeline working (GP-217). 3 Work Pools + 3 workers + 3 Snowflake blocks. Azure Storage `aldcqastac1cda8904db` created + managed identity RBAC granted. Flow run `happy-shellfish` confirmed routing works (172 rows fetched as `Exchange Rates - GEP_PREFECT`).
+
+**Blocked:** Snowflake staging infrastructure — needs ACCOUNTADMIN on og35375 (password reset pending). SQL to run is in [[GP-218]] § Snowflake staging SQL.
+
+**Resume:** Run the SQL in [[GP-218]], consent the storage integration, grant "Storage Blob Data Reader" to the Snowflake SP, then: `prefect deployment run "Exchange Rates - GEP_PREFECT/Exchange Rates - GEP_PREFECT"` and verify data in `QA_DG1_GEP_PREFECT.EXCHANGE_RATES.*`.
+
+### ~~Boot prompt — GP-218~~ (original below, superseded)
 
 ````
 You are working on **GP-218** (Configure QA/UAT/Prod Work Pools with environment-specific env vars and promotion pipeline).

@@ -79,13 +79,13 @@ Storage: $0.115/GiB/month. Current 64 GB = ~$7.37/month.
 
 | Component | Current | Recommended | Monthly Savings |
 |-----------|---------|------------|----------------|
-| App Service Plan | P2v3 ($175–200) | B2 ($26) or S1 ($55) if VNET needed | $120–174 |
+| App Service Plan | P2v3 ($175–200) | S1 ($55) — VNET required | $120–145 |
 | PostgreSQL | D2ads_v5 GeneralPurpose ($140–165) | B1ms Burstable ($12) + 32GB ($3.70) | $124–149 |
 | Container App workers | 0.5 vCPU / 1 GiB ($113) | 0.25 vCPU / 0.5 GiB (~$55) | ~$58 |
-| **Total savings** | | | **~$302–381** |
-| **Right-sized total** | | **~$110–125/month** | |
+| **Total savings** | | | **~$302–352** |
+| **Right-sized total** | | **~$140–155/month** | |
 
-**VNET caveat:** If the App Service needs VNET integration to reach PostgreSQL's private endpoint, B-tier won't work — S1 ($55/month) is the minimum tier supporting VNET integration. Verify whether Prefect Server connects via private endpoint or public connection string before downsizing.
+**VNET finding (confirmed 2026-05-03, GP-217):** The App Service **does** use VNET integration (subnet `prefect-app-service` in `aldcprodvnetconnector1c`), and PostgreSQL has `publicNetworkAccess: Disabled`. B-tier is not viable — **S1 ($55/month) is the minimum** tier supporting VNET integration. Savings: ~$120–145/mo vs P2v3.
 
 **Worker sizing caveat:** Workers poll the Prefect API for queued runs. 0.25 vCPU / 0.5 GiB should suffice for polling, but test with a few connectors before committing across all 3 workers.
 

@@ -3,7 +3,7 @@ tags: [workflow, navira, gep, roadmap, client, e-commerce]
 aliases: [Navira Roadmap, Navira Integration, GEP Roadmap]
 sources: [eclipse_exp/frontend/public/navira/navira-roadmap.html, eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-05-02
+updated: 2026-05-03
 ---
 
 # Navira Integration — Workflow Hub
@@ -29,7 +29,7 @@ Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks 
 
 | Phase | Domain | Interfaces | Priority | Status |
 |---|---|---|---|---|
-| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — G1–G3/G5 done (GP-213–216, GP-220). Repo fork done (GP-247). Prefect Server validated (GP-243). Snowflake env isolation done (GP-248). Work Pools + promotion pipeline done (GP-218). Next: CI/CD (GP-217), Sellercloud migration (GP-219). |
+| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — G1–G3/G5 done (GP-213–216, GP-220). Repo fork done (GP-247). Prefect Server validated (GP-243). Snowflake env isolation done (GP-248). Work Pools done (GP-218, E2E blocked on Snowflake staging DB). CI/CD gated pipeline done (GP-217). Next: GP-218 E2E (after Snowflake password reset), Sellercloud migration (GP-219). |
 | **1A** | Marketing — Ad Platforms | Google Ads (Amazon + D2C), Facebook Ads, Amazon PPC UK/CA, Target+ | P1 | Tickets created (GP-221, GP-222, GP-223, GP-225, GP-226, GP-227). Sprint S3/S4. |
 | **1B** | Marketing — Social & Emerging | TikTok Shops, Creator Connections, Email Campaigns | P1 | Tickets created (GP-228, GP-229). Sprint S5. Needs refinement. |
 | **1C** | Sales — Agency Customers | Seller Central (Sales), Seller Central (Inventory) | P1 | Tickets created (GP-230, GP-231). Sprint S4/S5. |
@@ -68,8 +68,8 @@ All GP tickets created 2026-04-30. See individual phase pages for details.
 | GP-247 | Fork connector repo → prefect-connectors | S2 | Done |
 | GP-248 | Snowflake Environment Isolation (QA/UAT/Prod) | S2 | Done |
 | GP-243 | Validate existing Prefect Server | S2 | Done |
-| GP-217 | CI/CD Pipeline — Docker & GHCR | S3 | To Do |
-| GP-218 | QA/Prod Work Pools & Promotion Pipeline | S3 | Done (infra) |
+| GP-217 | CI/CD Pipeline — Docker & GHCR | S3 | Done |
+| GP-218 | QA/Prod Work Pools & Promotion Pipeline | S3 | Blocked (Snowflake password reset — staging DB) |
 | GP-246 | Migration Testing Protocol | S3 | To Do |
 | GP-219 | Sellercloud Migration (build S2, QA deploy S3) | S2/S3 | To Do |
 

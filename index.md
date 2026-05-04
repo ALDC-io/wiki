@@ -171,6 +171,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[client-invoicing]] — Three invoicing models: project-based gates, quarterly payment plans (GEP), monthly recurring.
 - [[client-communications]] — Email templates: outage/maintenance notifications, data model access onboarding email.
 - [[client-onboarding-checklist]] — New client onboarding: KT from sales, technical setup (Eclipse/Snowflake/NextCloud), data connection collection.
+- [[jira-board-structure]] — ALDC Scrum Board layout: 3 swimlanes (Support, Development, Research & Tooling), column definitions, Waiting On Client cross-cutting state, graduation rule for research items.
 - [[knowledge-transfer-log]] — Steven to Paul handoff: KT session notes, outstanding asks/requests, to-dos, institutional knowledge about GEP, Fusion92, and deployment processes.
 - [[debugging-warehouse-loads]] — Runbook for failing warehouse loads: Eclipse template → Postman → core_api → CosmosDB schema-container inspection.
 - [[employee-onboarding]] — Account & software access checklist for a new ALDC hire (M365, Slack, GitHub, Atlassian, Eclipse, Snowflake, Azure, Postman, training). Pair with [[environment-setup]] for the technical machine setup.
@@ -196,6 +197,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[processes/distributed-workflow/active/azure-deploy-automation]] — Active workstream tracker (Phase 1–3: automate CI → stage deploy → Playwright E2E → slot swap for eclipse + core_api). Phased to-do with boot prompts per phase.
 - [[processes/distributed-workflow/active/zeus-memory/README|zeus-memory]] — Active workstream: Automated Tenant Data Source Ingestion. 5 phases (0–4): Discovery → Confluence ingestion → Jira+Git → Batch orchestration → Self-service onboarding. Phase 0 current (no codebase access yet).
 - [[processes/distributed-workflow/archive/repo-documentation]] — ✅ Archived 2026-04-20: Repo documentation workstream complete. 9 ALDC repos documented + cross-repo [[repo-integration-map]]. 10 new wiki pages, 4 memories, 1 potential ticket (`.pbip` migration), 11 stale cross-references flagged.
+- [[processes/distributed-workflow/active/fu92-394-viant-dsp-fix]] — Active workstream: FU92-394 Viant DSP connector timeout fix + re-enable + backfill + client comms. 4 phases with boot prompts.
 
 ---
 
@@ -210,12 +212,15 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-207]] — Prod-to-test data share setup. Re-pointed all GEP warehouse SQL to `PROD_DG1_GEP` share so test and prod reference the same raw data.
 - [[GP-199]] — ASIN Brand Campaign Attribution. Design for attributing SB spend to targeted ASINs instead of all brand ASINs. Two approaches proposed (ad creative vs purchase-based). Awaiting client response.
 - [[GP-208]] — Inventory feed ingestion & modelling. Phase 1 (current snapshot) built on existing Sellercloud + Amazon FBA pipelines — no data share. Data dictionary at [[gep-inventory-data-dictionary]]. Phase 2 (historical accumulation) pending.
+- [[GP-217]] — CI/CD Pipeline + Infrastructure Right-Sizing. Docker publish gated behind quality gate, standalone `docker-publish.yml` removed. PostgreSQL D2ads_v5→B1ms, App Service P2v3→S1. ~$265/mo saved. 2026-05-03.
 - [[GP-218]] — QA/UAT/Prod Work Pools & Promotion Pipeline. 3 Work Pools, 3 worker Container Apps, 3 Snowflake blocks, `short_code` fix, promotion pipeline documented. Infra complete 2026-05-02, GEP E2E pending PR #1.
 - [[GP-248]] — Prefect Snowflake Environment Isolation. 3 databases (`QA/TEST/PROD_DG1_GEP_PREFECT`), 3 `PREFECT_SVC` service accounts, 2 PBI workspaces. Done 2026-05-02.
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 
 ### Fusion92
 - [[FU92-342]] — Viant campaign conversions fact table. Root cause: CONVERSION_EVENT_ID missing from connector PK caused duplicates. Fixed at source.
+- [[FU92-394]] — Viant DSP actuals missing after 4/2. Connector timeout bug → schedules disabled → never re-enabled. Fix + backfill.
+- [[FU92-395]] — DAX user role error on approved flight. Ken Kocna can't view flight, persists after re-login. Blocking monthly QA.
 
 ### DV (Eclipse 2.1)
 - [[DV-444]] — Rename GEP/Navira's `navira-demo` sidebar app label from "Dashboard" → "SKU Profitability". Data change in `application_metadata` CosmosDB doc; no eclipse-2.1 code change. Surfaced v2 write-endpoint gap in [[core_api]].
@@ -243,6 +248,7 @@ Handwritten notes inbox. Copy `daily/_template.md` as `daily/YYYY-MM-DD.md`, add
 
 Start-of-day task tracker. Generated from previous standup's "Plan for Tomorrow" + unblocked items. Updated throughout the day as work progresses. Feeds into the end-of-day standup.
 
+- [[workplan/2026-05-04]] — FU92-394 Viant connector fix + FU92-395 DAX permissions triage
 - [[workplan/2026-05-02]] — GP-248 Snowflake environment isolation execution
 - [[workplan/2026-05-01]] — AMZ UK PPC token exchange (unblocked), GP-243 Prefect Server validation, GP-247 repo fork, GP-248 Snowflake env isolation
 
@@ -252,6 +258,7 @@ Start-of-day task tracker. Generated from previous standup's "Plan for Tomorrow"
 
 End-of-day summaries for next-morning team standup. Generated by scanning `log.md`, updated wiki pages, and session context. Three sections: What I Did Today, Blockers, Plan for Tomorrow.
 
+- [[standup/2026-05-03]] — GP-217 CI/CD pipeline gated + Azure right-sizing (~$265/mo saved)
 - [[standup/2026-05-02]] — GP-248 Snowflake env isolation complete — 3 databases, 3 PREFECT_SVC accounts, 2 PBI workspaces, framework CORE_SVC→PREFECT_SVC rename
 - [[standup/2026-05-01]] — GP-243 Prefect Server validated (all green), auth mechanism documented, subscription error corrected, deployment guide written
 - [[standup/2026-04-30]] — Navira roadmap breakdown (30+ tickets GP-213–248), sprint S2–S5 planning, repo fork plan, Snowflake 4-tier environment isolation, access epic GP-237

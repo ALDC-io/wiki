@@ -62,7 +62,7 @@ The legacy [[connector]] repo continues running on-prem Docker agents for all un
 | Output handling | `BaseConnector.add_response()` | Parquet → Azure blob → Snowflake staging/merge |
 | Test framework | `tests/conftest.py` + `tests/test_*.py` | Session-scoped `prefect_test_harness`, mocked Block/Azure/Snowflake fixtures |
 | CI quality gate | `.github/workflows/quality-gate.yml` | Semgrep · TruffleHog · pytest · PyTestArch · Claude Opus review |
-| Docker publish | `.github/workflows/docker-publish.yml` | Builds and pushes to GHCR on merge to `main`/`uat`/`development` |
+| CI + Docker publish | `.github/workflows/ci.yml` | Calls quality gate, then builds+pushes to GHCR on merge (GP-217) |
 
 ## Known issues / gotchas
 

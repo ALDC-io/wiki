@@ -157,15 +157,16 @@ export PREFECT_API_AUTH_STRING=prefect-admin:<password>
 
 ### 2. Build and push Docker image
 
+**Automated (GP-217):** Merging to `development`/`uat`/`main` triggers CI which builds and pushes the image to GHCR automatically. See §CI/CD Pipeline.
+
+**Manual (if needed):**
 ```bash
-cd C:\Users\PaulRussell\repos\connector
+cd C:\Users\PaulRussell\repos\prefect-connectors
 TAG=$(git rev-parse --short HEAD)
 
-docker build -t ghcr.io/aldc-io/connector:$TAG .
-docker push ghcr.io/aldc-io/connector:$TAG
+docker build -t ghcr.io/aldc-io/prefect-connectors:$TAG .
+docker push ghcr.io/aldc-io/prefect-connectors:$TAG
 ```
-
-> GP-217 (CI/CD pipeline) will automate this on merge to `operation-fiasco`. Until then, manual.
 
 ### 3. Register credential blocks on the Azure server
 
@@ -323,6 +324,65 @@ All in **Production 2** subscription (`6389f755-3ff7-488a-a56c-7ea8297730bc`).
 
 Worker image: `prefecthq/prefect-azure:0.4.9-python3.14` (all 3 workers).
 Setup scripts: `prefect-connectors/scripts/setup_work_pools.py` + `create_tier_workers.ps1`.
+
+---
+
+## CI/CD Pipeline (GP-217, 2026-05-03)
+
+A single GitHub Actions workflow (`.github/workflows/ci.yml`) handles both quality gating and Docker publishing. There is no standalone `docker-publish.yml` — the publish job is gated behind the quality gate.
+
+### How it works
+
+```
+PR opened or pushed to main/uat/development
+  │
+  ├── quality-gate (reusable workflow)
+  │     ├── semgrep (SAST, PR-only)
+  │     ├── trufflehog (secret scan)
+  │     ├── pytest
+  │     ├── architecture (PyTestArch)
+  │     ├── claude-review (Opus, PR-only)
+  │     └── gate (aggregator — fails if any above fails)
+  │
+  └── docker-publish (push events only, needs: quality-gate)
+        ├── Log in to GHCR (github.actor + GITHUB_TOKEN)
+        ├── Extract metadata (branch tag + SHA tag)
+        └── Build and push to ghcr.io/aldc-io/prefect-connectors
+```
+
+### Tag mapping
+
+| Branch | Docker tag | Additional tag | Work Pool |
+|---|---|---|---|
+| `development` | `:development` | `:<short-sha>` | `azure-aci-qa` |
+| `uat` | `:uat` | `:<short-sha>` | `azure-aci-uat` |
+| `main` | `:main` | `:<short-sha>` | `azure-aci-production` |
+
+No `:latest` tag. SHA tags enable pinning for rollback.
+
+### Lead time: merge → new image in use
+
+1. **PR merged** → push event triggers CI (~0s)
+2. **Quality gate** runs: pytest, trufflehog, architecture (~1-2 min)
+3. **Docker build+push** to GHCR (~1-2 min)
+4. **GHCR image updated** with new branch tag (~3-4 min total)
+5. **Next flow run** picks up the new image automatically
+
+No `prefect deploy` needed for image-only changes. ACI Work Pools create ephemeral containers per flow run — each run pulls the tag configured in `job_variables.image` (e.g., `:development`), so the next scheduled or manual run uses the updated image.
+
+### Why no explicit refresh step
+
+The ACI worker creates a fresh Container Instance for each flow run and always pulls the image tag. There's no long-lived container caching a stale image. The only "delay" is waiting for the next scheduled run (or triggering one manually).
+
+### GHCR authentication
+
+- **CI:** Uses `github.actor` + `secrets.GITHUB_TOKEN` (built-in GitHub Actions auth). No personal PAT needed.
+- **Work Pool image pull:** Uses the `ghcr-io-aldc-io` DockerRegistryCredentials block on the Prefect Server (currently `russell94paul`, updated 2026-05-01 from `brayden-marshall`).
+
+### Rollback
+
+1. **Standard:** Revert the PR on the target branch. Next CI build publishes the reverted code. Next flow run uses it.
+2. **Immediate** (before CI completes): Override the deployment's `job_variables.image` to a known-good SHA tag: `ghcr.io/aldc-io/prefect-connectors:<sha>`.
 
 ---
 

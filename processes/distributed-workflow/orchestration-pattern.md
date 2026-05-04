@@ -24,6 +24,7 @@ A **lane** is the list of paths a workstream is allowed to write to. Sessions re
 |---|---|---|
 | Confluence migration | ALDC | `sources/`, new pages under `entities/`, `processes/`, `concepts/` *that originate from Confluence sources*, plus `processes/operations/confluence-migration.md` |
 | Client workflow automation | ALDC | `entities/projects/workflow-automation.md` (new), `concepts/patterns/sandbox-feature-delivery.md` (new). **Read-only** on existing GEP runbooks until a written design lands |
+| Zeus Memory ingestion | ALDC | `processes/distributed-workflow/active/zeus-memory/` (tracker + phase pages), `entities/projects/zeus-memory.md` (product entity). **Read-only** on CCE and other project pages. |
 | Neurospect | Neurospect wiki **only** | `entities/projects/neurospect.md`, `concepts/business-logic/ict-*`, `sources/neurospect/`. **Strictly forbidden from writing anywhere in the ALDC wiki.** |
 
 Lanes are declared in each tracker's *Lane* section. If a session needs to write outside its lane, it stops and writes a *Cross-Lane Request* in its tracker.
