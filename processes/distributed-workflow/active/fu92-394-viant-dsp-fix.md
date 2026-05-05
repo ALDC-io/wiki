@@ -156,6 +156,30 @@ When done, update the tracker session log and archive this workstream.
 
 ## Session Log
 
+### 2026-05-04 — Phase 1b: CI unblocked, deployment prep (blocked on PAT)
+
+- did: Pushed `development` branch → triggered CI → build failed with `permission_denied: write_package`
+- did: Diagnosed root cause — `aldc-svc-automation` PAT in vault is expired; GITHUB_TOKEN insufficient for GHCR push despite package inheriting repo access
+- did: Accessed Portainer Prod via SSH tunnel (`ssh -L 9446:192.168.31.20:9446 aldc@192.168.31.20` → `https://127.0.0.1:9446/`)
+- did: Reset Portainer admin password using `portainer/helper-reset-password` helper (new password saved in `vault/infra-credentials.md`)
+- found: Rollback target — `ghcr.io/aldc-io/agent-dcgeneral:appsvc-test` (Kamloops KA1 Prod 1C01) and `ghcr.io/aldc-io/agent-dcgeneral-coquitlam:appsvc-test` (Coquitlam VA1 Prod 1C03) — both deployed 2026-03-05. All other dcgeneral agents stopped on both hosts.
+- found: Coquitlam uses separate image package `agent-dcgeneral-coquitlam` — our CI only builds `agent-dcgeneral` (Kamloops). Coquitlam needs separate handling.
+- found: Portainer Prod SSH tunnel procedure + password reset procedure now documented in `vault/infra-credentials.md`
+- unblocked: Generated new `aldc-svc-automation` PAT (`workstation-agent`, no expiry), added as `GHCR_PAT` secret, updated workflow — CI went green ✅
+- image ready: `ghcr.io/aldc-io/agent-dcgeneral:development` built and pushed
+- next: Deploy `:development` image to Kamloops (KA1 Prod 1C01) alongside `appsvc-test` container in Portainer Prod → re-enable Viant schedules in Eclipse 1 → monitor
+
+### 2026-05-04 — Phase 1 code fix implemented
+
+- did: Applied all timeout/error handling fixes to `connector/viant_dsp_reporting.py` (unstaged on `development` branch)
+  - Added `MAX_POLL_ATTEMPTS = 60` constant (~1hr cap)
+  - `get_completed_reports()` now raises `TimeoutError` after max attempts with incomplete report details
+  - `TERMINAL_REPORT_STATUSES = {"failed", "error", "cancelled", "expired"}` — loop breaks and raises on any terminal status
+  - `_get_response_json()` handles HTTP 429 with `Retry-After` sleep before raise
+  - `_download_csv()` helper replaces bare `pandas.read_csv(url)` — uses `requests.get` with 300s timeout + 3-attempt retry
+- decided: 429 handling sleeps Retry-After duration then raises (doesn't retry the request) — acceptable given `_get_response_json()` only receives the response object, not the request; a 429 during polling aborts the run but that's better than hanging indefinitely
+- next: Paul to commit unstaged changes, then Phase 1b — PR into development → master → Kamloops deploy
+
 ### 2026-05-04 — Triage and planning
 
 - did: Investigated Viant connector code, identified root cause (no polling timeout → queue block → schedules disabled), confirmed 3/4 templates inactive in Eclipse 1, created FU92-394 in Jira, created wiki ticket page and workstream tracker
@@ -183,4 +207,16 @@ None yet.
 
 ## Next Session Boot Prompt
 
-Use Phase 1 boot prompt above.
+Use Phase 1b boot prompt above. Additional context for next session:
+
+**CI is green** — `ghcr.io/aldc-io/agent-dcgeneral:development` is ready to deploy. Next session:
+1. Deploy `:development` image as a new container on Kamloops (KA1 Prod 1C01) in Portainer Prod — run alongside `appsvc-test`, do not replace it
+2. Re-enable the three Viant DSP template schedules in Eclipse 1
+3. Monitor connector runs for timeout handling and queue stability
+
+**Portainer access** (needed for deploy step):
+- SSH tunnel: `ssh -L 9446:192.168.31.20:9446 aldc@192.168.31.20` (password: `aldc1234`)
+- Browser: `https://127.0.0.1:9446/` — login: `admin` / (see `vault/infra-credentials.md` § Portainer)
+- KA1 Prod 1C01 = Kamloops | VA1 Prod 1C03 = Coquitlam
+
+**Rollback targets**: `appsvc-test` image on both hosts (2026-03-05)
