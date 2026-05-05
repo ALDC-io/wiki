@@ -203,6 +203,9 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 
 ## Tickets
 
+### Templates
+- [[tickets/_bug-template|_bug-template]] — Bug ticket template with boot prompt, investigation log, ranked causes
+
 ### GEP
 - [[GP-169]] — Marketing activity marketplace attribution. Profile-based mapping of Amazon Ads profiles to canonical marketplaces in `MARKETING_FCT_ACTIVITY`.
 - [[GP-197]] — Future-proof Amazon marketplace filter in `sales_fct_cost.sql`. Replaced hard-coded name list with `IS_AMAZON_MARKETPLACE` flag. Subsumed into GP-204.
