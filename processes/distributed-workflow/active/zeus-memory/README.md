@@ -92,7 +92,7 @@ Cross-wiki references use absolute paths, never wikilinks:
 
 ## Blockers / Open Questions
 
-- 2026-05-02 — **Codebase access**: Paul does not have access to the Zeus Memory codebase yet. Blocks Phase 1+. Phase 0 can proceed from docs only.
+- ~~2026-05-02 — **Codebase access**: Paul does not have access to the Zeus Memory codebase yet. Blocks Phase 1+.~~ **RESOLVED 2026-05-05** — Repo cloned to `C:\Users\PaulRussell\repos\zeus-memory`. Phase 0 can now include codebase exploration.
 - 2026-05-02 — **Current product state**: Wiki describes Zeus Memory as a Streamlit prototype (April 2026). Product has evolved (tenant model, Food Bank Canada demo, 75-person audience, CCE integration). Phase 0 must reconcile wiki with reality.
 - 2026-05-02 — **Demo audience roles**: The 75-person demo — what domains/roles are they in? If user-testing stage, a workshop format could work (CEO, Engineer, Product Owner, DevOps, QA all stress-test differently).
 
@@ -115,7 +115,7 @@ _(none yet)_
 ````
 You are resuming the Zeus Memory workstream, Phase 0: Discovery and Architecture Planning.
 
-CONSTRAINT: Paul does not have codebase access yet. This phase works from existing docs only. Do NOT attempt to explore any Zeus Memory repo.
+Repo cloned at `C:\Users\PaulRussell\repos\zeus-memory`. Codebase exploration is now available.
 
 Boot procedure:
 1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
