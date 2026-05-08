@@ -3,7 +3,7 @@ tags: [entity, tool, connector, amazon-ads, amazon-dsp, oauth]
 aliases: [Amazon Ads Connector, Amazon DSP Connector]
 sources: [Confluence CONN/1298792450]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-05-08
 ---
 
 # Amazon Ads and Amazon DSP Connector
@@ -60,6 +60,25 @@ Add to Dashlane Secrets with name `{client_name}_amazon_refresh_token` → share
 ### Step 5: Test
 
 Use Amazon Ads Postman collection to verify the refresh token works (list campaigns endpoint).
+
+## Regional Endpoints (Non-US)
+
+For UK/EU authorization, use regional endpoints instead of the US defaults:
+
+| Region | Auth URL domain | Token exchange endpoint | Profiles endpoint |
+|---|---|---|---|
+| US (NA) | `amazon.com` | `https://api.amazon.com/auth/o2/token` | `https://advertising-api.amazon.com/v2/profiles` |
+| UK/EU | `amazon.co.uk` | `https://api.amazon.co.uk/auth/o2/token` | `https://advertising-api-eu.amazon.com/v2/profiles` |
+
+Using the wrong endpoint for code exchange will silently fail or return US-only profiles. See `scripts/gp221_uk_token_exchange.ps1` in aldc-shipyard for a working UK exchange script.
+
+### GEP/Navira Active Profiles
+
+| Region | Profile ID | Currency | Account | Seller ID | Marketplace ID |
+|---|---|---|---|---|---|
+| UK | `1236242149887729` | GBP | Global Ecom UK | `AC8RG0YC8GJ0U` | `A1F83G8C2ARO7P` |
+
+12 EU profiles total (UK, DE, FR, IT, ES, NL, SE, PL, IE, BE, AE, SA) under "Global Ecom UK" / "Global Ecom Trading Networks". Token exchanged 2026-05-08.
 
 ## Known Limitations
 
