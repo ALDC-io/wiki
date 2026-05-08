@@ -149,6 +149,16 @@ When you run into a gap or bug that isn't in scope for your current work:
 - **Proposed fix:** (1) Add a naming-convention discovery step to the MODEL SCAN section: after confirming which tables are NOT in the model by Snowflake name, also check whether a plausible display-name variant exists (e.g. title-case, spaces for underscores). (2) When drafting `pbi_model_script.cs`, prompt Paul for the intended display name rather than defaulting to the Snowflake identifier. (3) Update `pbi_scan.py` to accept `--alias` mappings for the REST check step.
 - **Estimated effort:** S–M
 
+### OAuth callback service for automated token exchanges — infra / cross-client
+
+- **Surfaced:** `2026-05-08` during [[GP-221]] UK PPC OAuth call scheduling
+- **Category:** improvement
+- **Priority:** medium
+- **Description:** Every OAuth-based connector onboarding (Amazon Ads, Google Ads, Facebook, TikTok) requires manual coordination: generate auth code, relay it within a 5-minute window, run exchange script. For UK PPC (GP-221), this required scheduling a 3-way call just to paste a code fast enough. The pattern will repeat for every new client and every new OAuth platform.
+- **Root cause / evidence:** The `redirect_uri` is set to `https://amazon.com` (a dummy URL that shows the code in the browser address bar). There is no ALDC-hosted callback endpoint to capture and exchange codes automatically. The 5-minute code expiry makes email/chat relay unreliable (GP-221 failed once already via email relay on 2026-05-01).
+- **Proposed fix:** Build a lightweight OAuth callback service (e.g. FastAPI on Azure App Service or Azure Function) that: (1) hosts per-platform auth URLs with correct regional endpoints baked in (e.g. `/connect/amazon-ads-uk` uses `amazon.co.uk`); (2) acts as `redirect_uri`, captures the code on callback; (3) exchanges the code server-side immediately (no 5-min race); (4) stores the refresh token in a secrets store (Prefect Blocks, Azure Key Vault, or CosmosDB); (5) notifies ALDC (Slack/email) on success/failure. Could start as a single-platform MVP for Amazon Ads, then extend to Google/Facebook/TikTok. The auth URLs sent to clients become one-click self-service links. See also: Windsor.ai's "Authorize via Link" pattern (already proven for Google Ads + Facebook via GP-238/GP-239) as the UX model.
+- **Estimated effort:** M (MVP for Amazon Ads: FastAPI + 1 route + token exchange + Slack notify; L for multi-platform with secrets management)
+
 ---
 
 ## Filed
