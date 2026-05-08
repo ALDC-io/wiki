@@ -124,6 +124,8 @@ sequenceDiagram
   E-->>F: postMessage PARENT_NAVIGATION_CHANGE
 ```
 
+**JWT role refresh (added [[FU92-396]]):** The `jwt` callback in `authOptions.ts` periodically re-fetches `applications` and `groups` from CosmosDB via the `user/list` v1 core API endpoint (5-minute TTL via `ROLE_REFRESH_MS`). This ensures role changes made in Eclipse Admin → User Management take effect within 5 minutes without requiring the user to log out. Prior to this fix, roles were only set at initial login and cached indefinitely in the JWT.
+
 ### 2.4 Iframe ↔ parent URL sync
 
 `pages/_app.tsx:44–204` sets up a bidirectional `postMessage` bridge so the URL bar in Eclipse stays in sync with the DAX app. Mechanism: monkey-patches `history.pushState`/`replaceState`, intercepts `popstate`/`hashchange`, uses a `MutationObserver` + a 2-second interval fallback. Messages:

@@ -3,14 +3,16 @@ tags: [process, operations, jira, scrum]
 aliases: [Jira Board Structure, ALDC Scrum Board]
 sources: []
 created: 2026-05-04
-updated: 2026-05-05
+updated: 2026-05-07
 ---
 
 # Jira Board Structure — ALDC Scrum Board
 
-Cross-project board layout for ALDC's people board (board 38). Three swimlanes separate reactive support work, planned sprint work, and internal research/tooling across all projects.
+Cross-project board layout for ALDC. Three swimlanes separate reactive support work, planned sprint work, and internal research/tooling across all projects.
 
-**Board:** [Board 38](https://analyticlabsdc.atlassian.net/jira/people/712020:2edc7338-25ca-4661-8616-4f5d117be21c/boards/38) (cross-project people board)
+**Original board:** [Board 38](https://analyticlabsdc.atlassian.net/jira/people/712020:2edc7338-25ca-4661-8616-4f5d117be21c/boards/38) — "ALDC - Scrum" board (not a people board as originally assumed). Swimlane config is locked (not board admin).
+
+**Decision (2026-05-07):** Create a new prototype board backed by a saved cross-project JQL filter. Board 38 stays as-is; tickets migrate to the new board once validated.
 
 **Projects:** GP (GEP/Navira), FU92 (Fusion 92), DV (Eclipse), KA (Kit and Ace). ZC (Zeus Chat) excluded — service desk with its own workflow.
 
@@ -168,37 +170,68 @@ The cross-project board maps columns from all three swimlanes:
 | FU92-352 | To Do | (inspect) | (TBD) | (TBD) | Model updates (subtask) |
 | FU92-335 | To Do | (inspect) | (TBD) | (TBD) | Admin screen reload (subtask) |
 
+## Current Status Schemes (audited 2026-05-07)
+
+### GP Project Workflow
+
+All transitions are global (any status → any status). Team-managed project.
+
+| Status | ID | Category | Maps to target column |
+|---|---|---|---|
+| Needs Priority | 10587 | To Do | *(legacy — not in target layout)* |
+| Consulting/Design | 10176 | To Do | *(legacy — not in target layout)* |
+| To Do | 10182 | To Do | To-Do |
+| Development | 10177 | In Progress | In-Progress |
+| QA | 10179 | In Progress | Internal UAT |
+| GEP QA | 10180 | In Progress | Client UAT |
+| Done | 10178 | Done | Done |
+
+**Missing statuses:** Triage, Code Review, Backlog, Waiting On Client
+
+### FU92 Project Workflow
+
+All transitions are global. Team-managed project.
+
+| Status | ID | Category | Maps to target column |
+|---|---|---|---|
+| Needs Priority | 10586 | To Do | *(legacy — not in target layout)* |
+| To Do | 10320 | To Do | To-Do |
+| In Progress | 10321 | In Progress | In-Progress |
+| QA | 10452 | In Progress | Internal UAT |
+| Ready for Customer | 10485 | In Progress | Client UAT |
+| Done | 10322 | Done | Done |
+
+**Missing statuses:** Triage, Code Review, Backlog, Waiting On Client
+
+### Current labels in use (no swimlane labels yet)
+
+GP: `BLOCKED`, `PendingApproval`, `navira-roadmap`, `phase-0`/`1a`/`1b`/`1c`/`2`/`3`/`4`, `credentials`, `infrastructure`, `prefect`, `needs-refinement`
+FU92: `BLOCKED`, `Approved`
+
 ## Implementation Phases
 
-### Phase 0 — Verify Board Capabilities (30 min)
+### Phase 0 — Verify Board Capabilities ✅ COMPLETE (2026-05-07)
 
-Confirm board 38 supports JQL swimlanes before committing. If not, create a new company-managed board with a cross-project filter.
+**Finding:** Board 38 is a Scrum board ("ALDC - Scrum"), not a people board. Swimlane configuration exists but is disabled — Paul is not a board/project admin.
 
-````
-**Phase 0 — Board Capabilities Check**
+**Decision:** Create a new prototype Scrum board backed by a saved cross-project JQL filter. Manual UI process — steps documented below.
 
-1. Read `C:\Users\PaulRussell\repos\wiki\CLAUDE.md`
-2. Read `C:\Users\PaulRussell\repos\wiki\processes\operations\jira-board-structure.md`
+#### New board creation steps (manual)
 
-Steps:
-1. Open board 38 in Jira UI → Board Settings
-2. Check: can swimlanes be configured by JQL query?
-   - People boards are company-managed-style — they SHOULD support JQL swimlanes even though underlying projects are team-managed
-   - If yes → proceed with board 38
-   - If no → create a new company-managed board backed by a cross-project JQL filter
-3. Document current columns and swimlane configuration
-4. Check what filter backs board 38 — note the JQL
-5. For GP and FU92: check current status schemes via Jira API:
-   `GET /rest/api/3/project/{key}/statuses` (cloudId: 239c1bf0-93f4-4201-95fe-ab73ce4a6eff)
-6. Document findings and update this wiki page
-
-**Decision gate:** If board 38 supports JQL swimlanes → Phase 1.
-If not → Phase 1 includes creating a new board.
-````
+1. **Create saved filter:** Filters → Advanced → JQL: `project in (GP, FU92, DV, KA) AND statusCategory != Done ORDER BY priority DESC` → Save as "ALDC Sprint Board"
+2. **Create board:** Boards → Create board → Scrum board → Board from existing Saved Filter → select "ALDC Sprint Board"
+3. **Configure swimlanes:** Board settings → Swimlanes → Select method: Queries → add:
+   - Support: `label = support`
+   - Development: `label = development`
+   - Research & Tooling: `label = research-tooling`
+   - (default "Everything Else" catches unlabeled)
+4. **Configure columns:** after creating missing statuses on project boards
 
 ### Phase 1 — Label Scheme + Column Structure (1-2 hours)
 
-Establish labels and board column layout. No tickets moved yet.
+Establish labels and board column layout on the new prototype board. No tickets moved yet.
+
+**Prerequisite:** New board created per Phase 0 steps above.
 
 ````
 **Phase 1 — Labels + Columns**
@@ -206,23 +239,20 @@ Establish labels and board column layout. No tickets moved yet.
 1. Read `C:\Users\PaulRussell\repos\wiki\processes\operations\jira-board-structure.md`
 
 Steps:
-1. Create labels across GP, FU92, DV, KA projects:
-   - `support`, `development`, `research-tooling`, `waiting-on-client`
-   - Use Jira API: PUT /rest/api/3/issue/{key} or create via UI
+1. Add missing statuses to each project's board (team-managed: Settings → Columns → add column):
+   - GP needs: Triage, Code Review, Backlog, Waiting On Client
+   - FU92 needs: Triage, Code Review, Backlog, Waiting On Client
+   - Note: GP already has QA (→ Internal UAT) and GEP QA (→ Client UAT)
+   - Note: FU92 already has QA (→ Internal UAT) and Ready for Customer (→ Client UAT)
 
-2. Configure board columns (union of all 3 swimlanes):
+2. Configure new board columns (union of all 3 swimlanes):
    Triage | Backlog | To-Do | In-Progress | Code Review | Internal UAT | Waiting On Client | Client UAT | Done
 
-3. Configure swimlanes on board 38 (or new board from Phase 0):
+3. Verify swimlanes configured per Phase 0 step 3:
    - Support: JQL `label = support`
    - Development: JQL `label = development`
    - Research & Tooling: JQL `label = research-tooling`
    - Everything Else: catches unlabeled tickets (triage prompt)
-
-4. Add missing statuses to project workflows where needed:
-   - GP needs: Triage, Code Review, Internal UAT, Client UAT
-   - FU92 needs: Triage, Code Review, Internal UAT, Client UAT, Waiting On Client
-   - Team-managed: add via project board Settings → Columns → add column (creates the status)
 
 Rollback: columns and swimlanes can be reconfigured any time. Labels removed via bulk edit.
 ````
@@ -264,7 +294,7 @@ Rollback: labels removable, status transitions reversible. Snapshot from pre-fli
 ````
 **Phase 3 — Validation**
 
-1. Open board 38 → verify 3 swimlanes display correctly
+1. Open new prototype board → verify 3 swimlanes display correctly
 2. Verify each swimlane shows expected tickets in expected columns
 3. Verify "Everything Else" swimlane is empty
 4. Test sprint filter: R&T tickets should NOT appear on sprint boards
