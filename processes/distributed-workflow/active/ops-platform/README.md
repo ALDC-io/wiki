@@ -4,6 +4,8 @@ aliases: [Ops Platform, ALDC Ops, Launchpad]
 created: 2026-05-08
 updated: 2026-05-08
 phase0_complete: 2026-05-08
+phase1_complete: 2026-05-08
+phase2_complete: 2026-05-09
 ---
 
 # ALDC Launchpad — Client Operations Platform
@@ -86,24 +88,58 @@ Zeus Memory and Zeus Chat should be leveraged at every step to reduce friction:
 - Hub redesigned: metrics, client health grid, activity feed, onboardings, quick actions, collapsible roles
 - Dual-mode navigation: fetch+innerHTML (HTTP) + iframe+postMessage (file://)
 
-### Phase 1: Data Layer + Live Integrations (Priority: high)
-### Phase 2: Artifact Generation + Deploy Step (Priority: high)
-### Phase 3: Client Health + Monitoring (Priority: medium)
-### Phase 4: Zeus Deep Integration (Priority: medium)
-### Phase 5: POC End-to-End Testing (Priority: final gate)
+### ✅ Phase 1: Data Layer + Live Integrations — COMPLETE 2026-05-08
+- `data/state.json` schema: metrics, clients, onboardings, navira phases, activity feed, deadline
+- `data/prospects.json` schema: 8 prospect profiles, scores, Zeus notes, cost models
+- SPA shell pre-loads JSON data layer on boot (`window.LaunchpadData`)
+- Hub page: all metrics, client grid, activity feed, onboardings hydrate from JSON with hardcoded fallback
+- Prospects page: KPIs + comparison bars hydrate from JSON
+- Wizard: Zeus suggestions load from prospects.json; artifact persistence to localStorage + downloadable JSON
+- Progress report: ring charts + deadline counter hydrate from state.json
+- Infrastructure planner: auto-fills from state.json metrics
+- `/navira-sync` skill updated: writes to JSON data layer + queries Zeus Memory + legacy HTML backward compat
+- `data/onboardings/` directory for wizard artifact persistence
+- `CLAUDE.md` created with Zeus Memory usage rule + data layer docs
+### ✅ Phase 2: Platform Dashboard — COMPLETE 2026-05-09
+- `pages/platform/dashboard.html`: 8-tab client-agnostic dashboard (Overview, Roadmap, Architecture, Readiness, Integrations, Capacity, Pipeline, Zeus)
+- `data/platform.json`: 26 features across 9 categories, 7 industry readiness profiles, 7 integrations, scaling projections
+- Architecture decisions: multi-tenant Snowflake + automated RLS, Apache Superset (replacing Power BI), client registry as alignment layer
+- Boot prompt skills `/launchpad-phase{2-7}` for full phased workflow
+- Wiki phase pages created for Phases 2-7 with boot prompt references
+- SPA shell: Platform route + nav link added, platform.json pre-loaded
+
+### Phase 3: Multi-Tenant Foundation (Priority: high)
+- ALDC_WAREHOUSE single database: RAW, ANALYTICS, REFERENCE, ADMIN schemas
+- Client registry (ADMIN.client_registry), automated RLS, `aldc onboard` CLI
+
+### Phase 4: Superset Integration (Priority: high)
+- Apache Superset deployment, dashboard template engine per industry
+- Programmatic dashboard generation via Superset API + RLS per client
+
+### Phase 5: Credential Portal & Self-Serve Onboarding (Priority: high)
+- connect.analyticlabs.io credential portal, onboarding email, self-serve flow
+
+### Phase 6: Zeus Deep Integration (Priority: medium)
+- Zeus Memory + Chat at every wizard step (7 integration points)
+- Attribution scoring, CRM pipeline integration
+
+### Phase 7: E2E Testing (Priority: final gate)
+- Synthetic test client, full onboarding validation, security review
 
 See individual phase pages for boot prompts, acceptance criteria, and detailed scope.
 
 ## Phase Pages
 
 ### Active
-- [[phase-1-data-layer]] — JSON data layer, live Jira/Zeus integration, persistent state
-- [[phase-2-artifacts-deploy]] — Real artifact generation, CLI execution, credential portal stub
-- [[phase-3-client-health]] — Per-client health dashboard, active onboardings tracker
-- [[phase-4-zeus-integration]] — Deep Zeus Memory + Chat integration at every wizard step
-- [[phase-5-poc-e2e-testing]] — Full end-to-end validation with synthetic test client before production rollout
+- [[phase-3-multitenant]] — ALDC_WAREHOUSE, client_registry, automated RLS, aldc onboard CLI
+- [[phase-4-superset]] — Apache Superset deployment, template engine, per-client dashboard generation
+- [[phase-5-credentials]] — connect.analyticlabs.io portal, onboarding email, self-serve flow
+- [[phase-6-zeus]] — Deep Zeus Memory + Chat integration at every wizard step
+- [[phase-7-e2e-testing]] — Full end-to-end validation with synthetic test client
 
 ### Completed
+- [[phase-2-platform-dashboard]] — ✅ 2026-05-09: Client-agnostic dashboard, multi-tenant architecture, Superset, phased workflow
+- [[phase-1-data-layer]] — ✅ 2026-05-08: JSON data layer, live Jira/Zeus integration, persistent state
 - [[phase-0-design-system]] — ✅ 2026-05-08: Design system, landing page overhaul, app rename to Launchpad
 
 ## See Also
