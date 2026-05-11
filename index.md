@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-05-03
+updated: 2026-05-08
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -25,6 +25,9 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 
 ## Entities
 
+### People
+- [[erik-johnston]] — AI Engineer candidate (interview 2026-05-08). Next.js/React/TS strength; complementary hire analysis (7.55/10). Scenario-based interview questions mapped to ALDC use-cases.
+
 ### Clients — Active
 - [[GEP]] — E-commerce analytics client (Navira). Amazon US/UK/CA, SellerCloud, Galactica. 14 connections, 62 templates, 37 warehouse views.
 - [[fusion92]] — Media activation client. Meta, Google, Viant, Trade Desk, Amazon Ads. 11 connections, 50+ templates, 10 warehouse views.
@@ -42,7 +45,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 
 ### Repos
 - [[clients-repo]] — Primary ALDC repo. Per-client Eclipse configs + Snowflake warehouse SQL. 19 active clients, 150+ connections, 300+ templates, 200+ warehouse views.
-- [[aldc-shipyard]] — Workflow automation infrastructure (deploy/validate scripts, PBI XMLA wrapper, per-client manifests, `setup.py` bootstrap, multi-root workspace). Decoupled from `clients`/`connector` CI/CD. Status: **implementation complete** — Tranche H dogfood shipped 2026-04-26. Renamed from `aldc-automation` 2026-04-29.
+- [[aldc-shipyard]] — Workflow automation infrastructure + **ALDC Launchpad** (Client Operations Platform at `ops-platform/`). Deploy/validate scripts, PBI XMLA wrapper, onboarding wizard, prospect intelligence, infrastructure planner, engineering dashboards. Renamed from `aldc-automation` 2026-04-29.
 - [[eclipse_exp]] — Next-gen ALDC platform. Contract-first, AI-native, multi-tenant. FastAPI + Next.js 15 + PostgreSQL RLS. 50 connectors, 87 migrations, AI onboarding, strangler-fig migration from [[Eclipse]] + [[core_api]].
 - [[entities/repos/eclipse|eclipse (repo)]] — Legacy Next.js 14 (Pages Router) portal UI. Auth, account management, connection/template config, iframe app hosting. Every API call proxies to [[core_api]]. Being replaced by [[eclipse_exp]]. *(Note: [[Eclipse]] = platform concept page; this = UI repo page.)*
 - [[core_api]] — ALDC core API service. Eclipse backend (control plane). Hosts warehouse-rebuild functions; reads Eclipse configs from CosmosDB.
@@ -90,6 +93,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[monorepo-research]] — Monorepo + CCE Integration analysis. 38 improvements across 8 categories. Research complete, pending decision.
 - [[openclaw]] — Open-source agent runtime/gateway used by Factoria. Multi-agent isolation, tool policy enforcement, session management.
 - [[workflow-automation]] — Client Workflow Automation — design for automated sandboxed feature-delivery flow targeting GEP. Phase-1 sandbox pattern + phased build roadmap.
+- [[devflow-os]] — Developer Workflow OS. All-in-one dev workflow platform: roadmap viz, boot prompt generation, cross-engineer intelligence, change management, ticket tracking. Built as internal tooling for NeuroLLM, extractable as standalone product. **Stage: idea.**
 
 ---
 
@@ -190,6 +194,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[processes/distributed-workflow/active/observability-platform]] — Active workstream tracker (execution phase: company-wide lightweight observability & monitoring platform — app health, data jobs, on-prem + Azure infra, support inbox). Week 1 complete 2026-04-25.
 - [[processes/distributed-workflow/active/confluence-migration]] — Active workstream tracker (session coordinator for the Confluence ingest; mechanics in [[confluence-migration]]).
 - [[processes/distributed-workflow/active/client-workflow-automation]] — Active workstream tracker (design phase: sandboxed feature-delivery flow for GEP-style work).
+- [[processes/distributed-workflow/active/ops-platform/README|ops-platform (ALDC Launchpad)]] — Active workstream: Client Operations Platform. POC built 2026-05-08. Onboarding wizard, prospect intelligence, infrastructure planner, engineering dashboard. 5 phases: Design System → Data Layer → Artifacts+Deploy → Client Health → Zeus Integration. Goal: onboard any client at scale from a single app.
 - [[processes/distributed-workflow/active/navira/README|navira]] — Active workstream: Navira/GEP integration roadmap. 6 phased workflows (1A–4), 17 interfaces, credentials tracker, 8 dashboard recs, Phase 1A data dictionary, credential validation toolkit. Priority order: Marketing Ad Platforms → Social/Emerging → Agency Sales → Inventory → Competitor → Unstructured.
 - [[processes/distributed-workflow/active/phase6-pbi-automation-plan]] — Phase 6 PBI model automation plan. XMLA-scripted sandbox dataset via Tabular Editor CLI + PBI REST refresh. Resolves "Multi-feature conflict in TEST / PBI" blocker. Level 2 for v1; Deployment Pipelines (Level 3) + TMDL version control deferred to v2.
 - [[processes/distributed-workflow/backlog/wiki-client-restructure]] — Backlog: reorganize wiki into client-first structure (GEP/Fusion92 top-level folders, frontmatter-driven Jira state, hub README per client). ~2-3hr migration script.
@@ -197,6 +202,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[processes/distributed-workflow/active/azure-deploy-automation]] — Active workstream tracker (Phase 1–3: automate CI → stage deploy → Playwright E2E → slot swap for eclipse + core_api). Phased to-do with boot prompts per phase.
 - [[processes/distributed-workflow/active/zeus-memory/README|zeus-memory]] — Active workstream: Automated Tenant Data Source Ingestion. 5 phases (0–4): Discovery → Confluence ingestion → Jira+Git → Batch orchestration → Self-service onboarding. Phase 0 current (no codebase access yet).
 - [[processes/distributed-workflow/archive/repo-documentation]] — ✅ Archived 2026-04-20: Repo documentation workstream complete. 9 ALDC repos documented + cross-repo [[repo-integration-map]]. 10 new wiki pages, 4 memories, 1 potential ticket (`.pbip` migration), 11 stale cross-references flagged.
+- [[processes/distributed-workflow/complete/fu92-394-viant-dsp-fix]] — ✅ Complete 2026-05-08: Viant DSP connector timeout fix fully deployed (Kamloops + Coquitlam), backfill confirmed, PBI validated. FU92-394 Done, FU92-399 Done.
 - [[processes/distributed-workflow/active/fu92-394-viant-dsp-fix]] — Active workstream: FU92-394 Viant DSP connector timeout fix + re-enable + backfill + client comms. 4 phases with boot prompts.
 
 ---
@@ -226,6 +232,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[FU92-395]] — DAX user role error on approved flight. Ken Kocna can't view flight, persists after re-login. Resolved via FU92-396.
 - [[FU92-396]] — Stale JWT role blocking Manual Metrics Input. Fix: periodic role refresh from CosmosDB in JWT callback. PR #35.
 - [[FU92-397]] — NetSuite PO Employee field shows wrong person. Root cause: employee set to project PM, not syncing user. Fix: pass user identity from frontend, look up NS employee.
+- [[FU92-398]] — Meta data discrepancies across all clients for April. Root cause: 25-day connector loading gap (Apr 5–28), self-recovered. No data loss. Ready for Customer.
 
 ### Internal / Research & Tooling
 - [[SHIP-001]] — Rename aldc-shipyard to shipyard. Drop `aldc-` prefix, update all refs. ~15-20 min dedicated session.
@@ -257,7 +264,7 @@ Handwritten notes inbox. Copy `daily/_template.md` as `daily/YYYY-MM-DD.md`, add
 
 Start-of-day task tracker. Generated from previous standup's "Plan for Tomorrow" + unblocked items. Updated throughout the day as work progresses. Feeds into the end-of-day standup.
 
-- [[workplan/2026-05-08]] — GP-221 UK PPC OAuth complete, GP-252 created, Snowflake ACCOUNTADMIN reset
+- [[workplan/2026-05-08]] — GP-221 UK PPC OAuth complete, GP-252 created, Snowflake ACCOUNTADMIN reset, FU92-398 Meta investigation complete
 - [[workplan/2026-05-07]] — FU92-396 JWT role refresh fix (full cycle: code → deploy → production validation) + FU92-397 triage
 - [[workplan/2026-05-05]] — FU92-394 CI deploy + backfill, FU92-395 investigation, GP-218 E2E (blocked)
 - [[workplan/2026-05-04]] — FU92-394 Viant connector fix + FU92-395 DAX permissions triage
@@ -270,7 +277,7 @@ Start-of-day task tracker. Generated from previous standup's "Plan for Tomorrow"
 
 End-of-day summaries for next-morning team standup. Generated by scanning `log.md`, updated wiki pages, and session context. Three sections: What I Did Today, Blockers, Plan for Tomorrow.
 
-- [[standup/2026-05-08]] — GP-221 UK PPC OAuth complete, GP-252 pipeline config created, Snowflake admin reset
+- [[standup/2026-05-08]] — GP-221 UK PPC OAuth complete, GP-252 pipeline config created, Snowflake admin reset, FU92-398 Meta investigation complete
 - [[standup/2026-05-07]] — FU92-396 JWT role fix deployed + validated in production; FU92-397 NetSuite PO Employee bug root-caused
 - [[standup/2026-05-04]] — FU92-394 Viant timeout fix + automatic CI deployment wired, FU92-395 triage, 4 wiki pages
 - [[standup/2026-05-03]] — GP-217 CI/CD pipeline gated + Azure right-sizing (~$265/mo saved)

@@ -1,9 +1,9 @@
 ---
-tags: [distributed-workflow, active, fusion92, viant, bug]
+tags: [distributed-workflow, complete, fusion92, viant, bug]
 aliases: [FU92-394 Viant DSP Fix]
 sources: []
 created: 2026-05-04
-updated: 2026-05-04
+updated: 2026-05-08
 ---
 
 # FU92-394 — Viant DSP Connector Fix
@@ -156,6 +156,30 @@ When done, update the tracker session log and archive this workstream.
 
 ## Session Log
 
+### 2026-05-08 — Resume: client comms sent, Meta ticket created, boot prompt added
+
+- did: Juliann followed up 2026-05-07 asking for background on Viant + flagging Meta discrepancies across all clients for April
+- did: Added comment to FU92-394 in Jira noting Juliann's follow-up and pending Phases 2-4
+- did: Created FU92-398 — "Meta data discrepancies across all clients for April" (High, Bug) — separate investigation after Viant resolved
+- did: Drafted client email for Lori → Juliann acknowledging Viant root cause (high-level), ETA 24hrs for backfill, Meta under investigation
+- did: Created `/fu92-394-viant-fix` boot prompt skill in `aldc-shipyard/.claude/commands/`
+- next: Execute Phase 1b deploy → Phase 2 re-enable + backfill → Phase 3 validate — targeting completion today
+- did: Phase 1b — deployed `ghcr.io/aldc-io/agent-dcgeneral:master` to Kamloops (container `agent-dcgeneral-master`, ID `724ecb155369`). Confirmed hitting prod API (`aldcprodfnapcore1c03-appsvc`). Restart policy set to `no` (safe rollback).
+- did: Phase 2 — re-enabled all 3 Viant DSP template schedules in Eclipse 1. Activated March 2026 partition for each. Triggered manual runs. Backfill completed within minutes (handled by Coquitlam agents).
+- did: Phase 3 partial — Snowflake validation:
+  - CURRENT_CONVERSION_REPORT_CAMPAIGN: fresh data through 05/08/26 (today) — GOOD
+  - CURRENT_PERFORMANCE_REPORT_CAMPAIGN: loaded today but max data date 12/31/25 — NEEDS INVESTIGATION
+  - CURRENT_ROAS_REPORT_CAMPAIGN: loaded yesterday but max data date 12/31/25 — NEEDS INVESTIGATION
+  - CURRENT_DAILY_ORDER_REACH_AND_FREQUENCY: last load 03/02/26 — separate issue (snowflake_v1 connector)
+- found: Coquitlam agents (without timeout fix) still hitting 63-min extraction failures — confirms fix is needed on Coquitlam too
+- found: `:development` image has test config baked in (CI uses config-test.json for development branch). Must use `:master` for prod.
+- found: Code was already merged to master via PR #120 (2026-05-05). CI built `:master` with prod config.
+- resolved: Performance/ROAS max data date 12/31/25 was a red herring — DATE column is TEXT (MM/DD/YY), MAX() sorts lexicographically not chronologically. Actual most recent data: Performance has March 2026, ROAS has May 7 2026, Conversion has May 8 2026. All three tables have thousands of rows loaded after April 2.
+- did: Upgraded container restart policy to `unless-stopped`
+- did: Phase 3 complete — PBI "Activation Model" in FUSION_92 Prod Models workspace refreshed at 20:05 UTC with new data. All 5 recent refreshes Completed. End-to-end data pipeline confirmed.
+- did: Phase 4 — FU92-394 transitioned to Done in Jira with full resolution comment. Client email drafted for Lori → Juliann.
+- done: FU92-394 workstream complete. Monitor 24-48hrs for stability. FU92-398 (Meta discrepancies) still open as separate investigation.
+
 ### 2026-05-04 — Phase 1b: CI unblocked, deployment prep (blocked on PAT)
 
 - did: Pushed `development` branch → triggered CI → build failed with `permission_denied: write_package`
@@ -207,16 +231,4 @@ None yet.
 
 ## Next Session Boot Prompt
 
-Use Phase 1b boot prompt above. Additional context for next session:
-
-**CI is green** — `ghcr.io/aldc-io/agent-dcgeneral:development` is ready to deploy. Next session:
-1. Deploy `:development` image as a new container on Kamloops (KA1 Prod 1C01) in Portainer Prod — run alongside `appsvc-test`, do not replace it
-2. Re-enable the three Viant DSP template schedules in Eclipse 1
-3. Monitor connector runs for timeout handling and queue stability
-
-**Portainer access** (needed for deploy step):
-- SSH tunnel: `ssh -L 9446:192.168.31.20:9446 aldc@192.168.31.20` (password: `aldc1234`)
-- Browser: `https://127.0.0.1:9446/` — login: `admin` / (see `vault/infra-credentials.md` § Portainer)
-- KA1 Prod 1C01 = Kamloops | VA1 Prod 1C03 = Coquitlam
-
-**Rollback targets**: `appsvc-test` image on both hosts (2026-03-05)
+Use `/fu92-394-viant-fix` skill in `aldc-shipyard/.claude/commands/`. It covers Phases 1b-deploy through 4 with Portainer access details, rollback targets, and FU92-398 follow-up.

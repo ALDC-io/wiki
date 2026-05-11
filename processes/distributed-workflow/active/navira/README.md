@@ -51,7 +51,7 @@ Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks 
 
 | Item | Blocker | Owner | Action |
 |---|---|---|---|
-| Amazon UK PPC | No UK advertising profile authorized — refresh token only returns US + CA profiles. Raw Snowflake tables confirmed: no GBP data landing. | Navira | Send OAuth authorization URL; Navira authorizes UK ad profile. ALDC exchanges code, updates connection config, adds UK profile ID to `MARKETPLACE_PROFILE_MAP` in `marketing_fct_activity.sql`. |
+| ~~Amazon UK PPC~~ | ~~No UK advertising profile authorized~~ **RESOLVED 2026-05-08:** UK Profile ID 1236242149887729 exchanged on live call. All 3 marketplaces (US/UK/CA) confirmed active. | ~~Navira~~ | ALDC to update pipeline config + validate GBP data flow. |
 
 ## Jira Ticket Map
 

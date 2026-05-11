@@ -39,6 +39,16 @@ When you run into a gap or bug that isn't in scope for your current work:
 
 ## Open
 
+### Auto-deploy connector agents to on-prem servers — infrastructure
+
+- **Surfaced:** `2026-05-08` during [[FU92-394]] Viant DSP fix deployment
+- **Category:** improvement / tech-debt
+- **Priority:** medium
+- **Description:** Deploying updated connector Docker images to Kamloops and Coquitlam requires manual steps: SSH tunnel to Portainer, authenticate, pull image, recreate container. This was semi-automated via Portainer API in the FU92-394 session, but it's still ad-hoc. A CI/CD step or a dedicated deployment skill could automate the full push-to-prod flow on merge to master.
+- **Root cause / evidence:** Current flow: CI builds image → push to GHCR → manual Portainer pull + container swap. The Portainer API supports image pull and container creation programmatically (proven in FU92-394/FU92-399 sessions). Bottleneck is the SSH tunnel requirement and the lack of a repeatable deployment script.
+- **Proposed fix:** Create a deployment script (PowerShell or Python) that: (1) opens SSH tunnel to Portainer; (2) authenticates via Portainer API; (3) pulls latest `:master` image on target host; (4) stops old container, creates new one with correct env vars, starts it; (5) verifies health via log check. Script parameterised by host (kamloops/coquitlam) and agent_id. Could be triggered as a post-CI webhook or run manually. Also consider `/connector-portainer-deploy` skill in aldc-shipyard.
+- **Estimated effort:** M
+
 ### CI gate: require `pytest tests/` to pass on connector PRs — connector repo
 
 - **Surfaced:** `2026-04-29` during [[phase-0-prefect-foundation]] Sprint 0B (pytest framework built, reliability gap identified)

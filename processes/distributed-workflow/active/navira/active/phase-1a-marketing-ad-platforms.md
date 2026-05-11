@@ -21,7 +21,7 @@ Centralize all marketing spend and performance data into Snowflake so the busine
 | 1   | **Google Ads → Amazon** | Likely highest spend. Establishes the ad-platform ingestion pattern (OAuth, daily pulls, spend/impression/click/conversion schema) that every subsequent connector reuses. |
 | 2   | **Google Ads → D2C**    | Same API, different campaign segmentation. Validates pattern handles multiple attribution paths.                                                                           |
 | 3   | **Amazon PPC UK**       | Same Amazon Advertising API as US PPC. Regional variant tests multi-marketplace handling.                                                                                  |
-| 4   | **Amazon PPC CA**       | Same API, third marketplace.                                                                                                                                               |
+| 4   | **Amazon PPC CA**       | Same API, third marketplace. **Already live** — 68K rows in production (confirmed 2026-05-08).                                                                             |
 | 5   | **Facebook Ads**        | Different API (Meta Marketing API) but same output schema. Proves ingestion pattern is source-agnostic.                                                                    |
 | 6   | **Target+**             | Moved from Phase 1B — confirmed as active spend channel by Heather (2026-04-28). May be API or SFTP/portal export.                                                         |
 

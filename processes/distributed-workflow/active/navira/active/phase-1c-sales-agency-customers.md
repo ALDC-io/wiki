@@ -27,8 +27,8 @@ Extend existing Amazon US pattern with multi-account support.
 
 ## Prerequisites
 
-- [ ] **Resolve I-1:** Determine whether existing private SP-API app (partner `A3VJEVLAWT2I1E`) can be upgraded to public, or whether a new app registration is required — see [[navira-credentials-access]] § "ALDC to Investigate First"
-- [ ] Amazon SP-API **public app** registered and approved (2–4 week lead time — start after I-1 resolved)
+- [x] **~~Resolve I-1~~:** **RESOLVED 2026-05-08.** Amazon does not support converting private → public. New public app registration required via Solution Provider Portal (SPP). Identity verification ~20 min, approval ~1–2 weeks.
+- [ ] Amazon SP-API **public app** registered on SPP and approved (~1–2 week lead time — register now)
 - [ ] Tenant isolation strategy decided (CC5 / Q3 below)
 - [ ] Legal / Data Processing Agreement template for agency customers
 - [ ] Understanding of current Sellercloud/Amazon US integration (Production)
@@ -57,7 +57,7 @@ Extend existing Amazon US pattern with multi-account support.
 
 | Dependency | Detail |
 |---|---|
-| **Amazon SP-API App Registration** | Must be approved before customer onboarding. 2–4 week review. |
+| **Amazon SP-API App Registration** | Must be approved before customer onboarding. ~1–2 week review via SPP. I-1 resolved — new app required (private cannot convert to public). |
 | **Existing Amazon US Pipeline (Production)** | Understanding informs extend vs parallel-build decision. |
 | **Legal / DPA** | Agency customer contracts must authorize data ingestion and storage. Template needed before first onboarding. |
 
@@ -74,7 +74,7 @@ Extend existing Amazon US pattern with multi-account support.
 
 | Ticket | Summary | Sprint | Notes |
 |---|---|---|---|
-| GP-230 | SP-API Registration | S4 | 2–4 week Amazon approval lead time — start early |
+| GP-230 | SP-API Registration (new public app via SPP) | S4 | I-1 resolved — ~1–2 week approval. Register now. |
 | GP-231 | Seller Central Multi-Tenant | S5 | Multi-tenant sales + inventory ingestion |
 
 ## Boot Prompts
@@ -93,8 +93,8 @@ Boot procedure:
 4. Read `C:\Users\PaulRussell\repos\wiki\entities\tools\connectors\amazon-ads.md` — existing Amazon OAuth patterns
 5. Read `C:\Users\PaulRussell\repos\wiki\concepts\patterns\sandbox-feature-delivery.md` — Snowflake isolation patterns (inform multi-tenant design)
 
-**Key investigation (I-1):**
-The existing SP-API app (partner `A3VJEVLAWT2I1E`) is a **private** app serving one seller. Can it be upgraded to public? Or does ALDC need a new registration? Check Amazon's Seller Central developer docs for upgrade path. If new registration required, submit ASAP — 2-4 week approval.
+**I-1 RESOLVED (2026-05-08):**
+The existing SP-API app (partner `A3VJEVLAWT2I1E`) is private and **cannot** be converted to public. Amazon does not offer an upgrade path. A new public app must be registered via the Solution Provider Portal (SPP) at developer.amazonservices.com/solution-provider-portal. Identity verification ~20 min, approval ~1–2 weeks. SPP replaced Seller Central for developer management as of Aug 31, 2025.
 
 **Multi-tenant design decision:**
 - Option A: Separate schemas per customer (`AGENCY_<CUSTOMER>`) — safest, auditable
@@ -103,8 +103,8 @@ The existing SP-API app (partner `A3VJEVLAWT2I1E`) is a **private** app serving 
 Recommend based on expected customer count (ask Navira via Lori — Q1).
 
 **Deliverables:**
-1. I-1 investigation result (upgrade vs new app)
-2. SP-API application submitted (if new registration needed)
+1. ~~I-1 investigation result~~ — DONE: new app required
+2. SP-API public application submitted on SPP
 3. Multi-tenant isolation design document
 4. Legal/DPA template status check
 

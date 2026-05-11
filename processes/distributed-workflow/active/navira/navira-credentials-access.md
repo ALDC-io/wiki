@@ -29,7 +29,7 @@ Credential-related communications from Navira. Newest first.
 | Platform | Auth Method | Required IDs | Status | Phase |
 |---|---|---|---|---|
 | **Google Ads** | Windsor.ai OAuth | MCC Account ID(s) — Amazon vs D2C split TBD | **Windsor auth link sent** (2026-04-30, GP-238). Navira to click: `https://onboard.windsor.ai/co-user-login?access_token=GIkEWABkIeIDb47F77mXBIGKUTnoske8Jn7TOu5Nxs&allowed_sources=google_ads`. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
-| **Amazon Advertising API** | LWA OAuth | US/UK/CA profile IDs | **UK complete** (2026-05-08) — Profile ID 1236242149887729, GBP. 12 EU profiles. US active. CA TBD. | 1A |
+| **Amazon Advertising API** | LWA OAuth | US/UK/CA profile IDs | **All 3 marketplaces active.** UK complete (2026-05-08) — Profile ID 1236242149887729, GBP, 12 EU profiles. US active (708K rows). CA confirmed active (68K rows, 2026-05-08). | 1A |
 | **Meta (Facebook) Ads** | Windsor.ai OAuth | Business Manager ID, Ad Account ID(s) | **Windsor auth link sent** (2026-04-30, GP-239). Navira to click: `https://onboard.windsor.ai/co-user-login?access_token=5UFMADUyRlhi5TnnYXfwTzWDevTewQiCTlUFmqjybX&allowed_sources=facebook`. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
 | **TikTok for Business** | OAuth 2.0 | Business Center ID | Net New — no ALDC connector or credentials exist | 1B |
 | **Email Marketing Platform** | API Key or OAuth | Platform TBD (Klaviyo/Mailchimp/HubSpot?) | TBD — platform not yet identified | 1B |
@@ -73,10 +73,10 @@ Items grouped by phase priority. Each item has a clear ask and context for why w
 3. Is there an existing system user with a long-lived token? (Preferred over personal tokens for automated access — doesn't expire like personal tokens)
 4. Name/email of the Business Manager admin who can create a system user and grant ALDC's app ad account access
 
-**Amazon Ads (UK/CA extension)** — US is already live. Need to confirm multi-region setup.
-1. Does Navira run PPC campaigns in UK and/or CA?
-2. Are UK/CA under the same Amazon Advertising account as US, or separate accounts?
-3. Profile IDs for UK/CA (or confirm ALDC can retrieve them via API — our connector auto-enumerates)
+**Amazon Ads (UK/CA extension)** — All three marketplaces confirmed active (2026-05-08). US (708K rows) + CA (68K rows) in production. UK OAuth completed 2026-05-08.
+1. ~~Does Navira run PPC campaigns in UK and/or CA?~~ **RESOLVED 2026-05-08:** Yes — all three (US, UK, CA) confirmed active.
+2. ~~Are UK/CA under the same Amazon Advertising account as US, or separate accounts?~~ Same account — UK profile returned from same LWA token on 2026-05-08 call.
+3. ~~Profile IDs for UK/CA (or confirm ALDC can retrieve them via API — our connector auto-enumerates)~~ **RESOLVED:** UK Profile ID 1236242149887729. CA already in production.
 
 #### Phase 1B — Social & Emerging
 
@@ -146,10 +146,10 @@ Items ALDC must resolve internally before involving Navira. Prevents asking unne
 
 | # | Item | Investigation | Outcome Determines |
 |---|---|---|---|
-| I-1 | **SP-API private → public app upgrade** | Check Amazon SP-API docs: can a private app be converted to public, or must a new app be registered? | Whether to ask Navira to register a new app vs. upgrade existing one (Phase 1C prerequisite) |
+| I-1 | ~~**SP-API private → public app upgrade**~~ | **RESOLVED 2026-05-08:** Amazon does not support converting private → public. New public app registration required via Solution Provider Portal (SPP) at developer.amazonservices.com/solution-provider-portal. Identity verification ~20 min, approval ~1–2 weeks. SPP replaced Seller Central for developer management as of Aug 31, 2025. ALDC to register now — no Navira action needed until OAuth consent flow ready. | N/A — new app registration is the path; ~1–2 week approval (not 2–4 weeks) |
 | I-2 | **Sellercloud inventory endpoint permissions** | Test existing REST API credentials (`support@aldc.io` on team `globalecomp`) against inventory endpoints (Summary, Warehouse, FBA). Check rate limits. | Whether to ask Navira for a permissions upgrade or separate API user (Phase 2) |
 | I-3 | **Sellercloud VPN dependency for Prefect** | Evaluate whether ACI work pools can be configured with VPN connectivity to `10.13.0.113`, or whether REST-only path is sufficient for inventory. | Whether VPN access is a blocker or can be sidestepped |
-| I-4 | **Amazon Ads UK/CA profile auto-discovery** | Test multi-profile enumeration with existing LWA token — connector line 405–423 retrieves all profiles. If UK/CA profiles exist, they'll show up. | Whether to ask Navira for profile IDs at all, or just confirm regions |
+| I-4 | ~~**Amazon Ads UK/CA profile auto-discovery**~~ | **RESOLVED 2026-05-08:** UK profile exchanged on live call — Profile ID 1236242149887729 (GBP, Europe/London). CA confirmed active in production (68K rows). All 3 marketplaces confirmed. | N/A — all marketplaces resolved |
 | I-5 | ~~**Google Ads — full setup required**~~ | **RESOLVED 2026-04-30:** Using Windsor.ai instead of direct API. No Manager Account, developer token, or OAuth app needed. Windsor auth link sent to Navira via GP-238. Fallback to direct API only if Windsor field verification fails. | N/A — Windsor eliminates the 1–2 week developer token lead time |
 | I-6 | ~~**Facebook App token status**~~ | **RESOLVED 2026-04-30:** Using Windsor.ai instead of direct API. No ALDC Facebook App or token provisioning needed. Windsor auth link sent to Navira via GP-239. Eliminates 60-day token refresh burden. Fallback to direct API only if Windsor field verification fails. | N/A — Windsor handles token lifecycle |
 

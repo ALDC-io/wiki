@@ -130,17 +130,29 @@ See individual phase pages for boot prompts, acceptance criteria, and detailed s
 
 ## Phase Pages
 
+Phases are organized by lifecycle state in subdirectories:
+
+```
+ops-platform/
+├── completed/     ← shipped and verified
+├── active/        ← currently being worked on
+└── backlog/       ← planned, not yet started
+```
+
+### Completed
+- [[phase-0-design-system]] — ✅ 2026-05-08: Design system, landing page overhaul, app rename to Launchpad
+- [[phase-1-data-layer]] — ✅ 2026-05-09: JSON data layer, live Jira/Zeus integration, persistent state
+- [[phase-2-platform-dashboard]] — ✅ 2026-05-09: Client-agnostic dashboard, multi-tenant architecture, Superset, phased workflow
+
 ### Active
+_(none currently — move a backlog phase here when work begins)_
+
+### Backlog
 - [[phase-3-multitenant]] — ALDC_WAREHOUSE, client_registry, automated RLS, aldc onboard CLI
 - [[phase-4-superset]] — Apache Superset deployment, template engine, per-client dashboard generation
 - [[phase-5-credentials]] — connect.analyticlabs.io portal, onboarding email, self-serve flow
 - [[phase-6-zeus]] — Deep Zeus Memory + Chat integration at every wizard step
 - [[phase-7-e2e-testing]] — Full end-to-end validation with synthetic test client
-
-### Completed
-- [[phase-2-platform-dashboard]] — ✅ 2026-05-09: Client-agnostic dashboard, multi-tenant architecture, Superset, phased workflow
-- [[phase-1-data-layer]] — ✅ 2026-05-08: JSON data layer, live Jira/Zeus integration, persistent state
-- [[phase-0-design-system]] — ✅ 2026-05-08: Design system, landing page overhaul, app rename to Launchpad
 
 ## See Also
 
