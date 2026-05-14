@@ -19,14 +19,18 @@ completed: 2026-05-09
 
 ## 8-Tab Structure
 
-1. **Platform Overview** — maturity ring chart, category bars, KPIs
-2. **Feature Roadmap** — filterable table of 26 features
-3. **Architecture** — SVG diagram: multi-tenant Snowflake + Superset + Zeus
-4. **Client Readiness** — industry × category matrix (7×9)
-5. **Integration Status** — 7 integration cards
-6. **Capacity & Cost** — scaling projections chart
-7. **Prospect Pipeline** — scatter plot (close-likelihood vs platform-readiness)
-8. **Zeus Intelligence** — decisions, recommendations, skill gaps
+| # | Tab | Data-driven? | Notes |
+|---|---|---|---|
+| 1 | Platform Overview | Yes | Ring chart + KPIs hydrate from `platform.json.maturity` |
+| 2 | Feature Roadmap | Yes | Table rebuilds from `platform.json.features` |
+| 3 | Architecture | N/A | Structural SVG diagram — data binding not expected |
+| 4 | Client Readiness | **No** | 7×9 matrix is hardcoded HTML — does not read `platform.json.industries` |
+| 5 | Integration Status | Partial | Cards exist; hydration incomplete |
+| 6 | Capacity & Cost | **No** | SVG polygon coords hardcoded — ignores `platform.json.scaling` |
+| 7 | Prospect Pipeline | **No** | SVG scatter plot hardcoded — not generated from data |
+| 8 | Zeus Intelligence | N/A | Placeholder by design |
+
+> **Known gap:** Tabs 4, 6, 7 render hardcoded HTML/SVG. Changes to `platform.json` will not update these views. Data-binding these tabs is deferred to a future polish pass.
 
 ## Architecture Decisions
 

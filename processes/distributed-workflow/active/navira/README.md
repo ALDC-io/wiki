@@ -3,7 +3,7 @@ tags: [workflow, navira, gep, roadmap, client, e-commerce]
 aliases: [Navira Roadmap, Navira Integration, GEP Roadmap]
 sources: [eclipse_exp/frontend/public/navira/navira-roadmap.html, eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-05-03
+updated: 2026-05-13
 ---
 
 # Navira Integration — Workflow Hub
@@ -112,6 +112,37 @@ All GP tickets created 2026-04-30. See individual phase pages for details.
 |---|---|---|---|
 | GP-235 | Discovery & Architecture Design | Backlog | To Do |
 
+### Business Meeting Items (GP-253–GP-267)
+
+Tickets from 2026-05-12 business meeting, originally misfiled under FU92. Moved to GP project 2026-05-13.
+
+#### Dashboard Enhancements
+| Ticket | Summary | Status | ETA |
+|---|---|---|---|
+| GP-263 | Add YTD to SKU Profitability Dashboard | To Do | May 15 |
+| GP-256 | Add Return Rate to SKU Profitability Dashboard | To Do | May 18 |
+| GP-259 | Orders/Return and COGs for SKU Profitability | To Do | May 18 |
+| GP-258 | Incorporate Forecast in SKU Profitability Report | To Do | TBD |
+| GP-255 | Phase 2 Dashboards — Add BSR to data | To Do | May 18 |
+| GP-264 | Marketing Dashboard — All connections | In Progress | Framework submitted 5/12 |
+| GP-266 | Ad Item from Airtable | QA | QA 5/13 |
+
+#### Data / Integration
+| Ticket | Summary | Status | Notes |
+|---|---|---|---|
+| GP-265 | Get Google Ad Spend into data | Blocked | Waiting on Windsor auth from Justin |
+| GP-257 | UK Ads — Justin to provide info | Blocked | Waiting on Justin |
+| GP-260 | Subscribe and Save data and KPIs | Investigation | Discovery phase |
+| GP-254 | Lectric eBikes Integration — Agency Test | Blocked | Waiting for creds |
+| GP-261 | Configure Navira Snowflake to ALDC for ingestion | To Do | |
+
+#### Platform / Admin
+| Ticket | Summary | Status | Notes |
+|---|---|---|---|
+| GP-262 | Eclipse Chat functionality | To Do | ETA May 18 |
+| GP-253 | Name change — GEP to Navira rename | To Do | |
+| GP-267 | UK Order testing — no data in test | Bug | No data in test environment |
+
 ---
 
 ## Cross-Cutting Concerns (CC1–CC7)
@@ -160,6 +191,12 @@ Shared infrastructure decisions that affect ALL phases. Resolved empirically dur
 ### Completed
 
 _(none yet — move workflows here when done)_
+
+## Session Log
+
+| Date | Summary |
+|---|---|
+| 2026-05-13 | Business meeting tickets moved from FU92 to GP (GP-253 through GP-267). 15 items from 2026-05-12 business meeting, originally misfiled under Fusion92 project. Dashboard enhancements (7), data/integration (5), platform/admin (3). Added to Jira Ticket Map above. |
 
 ## See Also
 

@@ -1,13 +1,15 @@
 ---
 tags: [ops-platform, launchpad, phase3, snowflake, multi-tenant, rls]
 created: 2026-05-09
-updated: 2026-05-09
+updated: 2026-05-14
 ---
 
 # Phase 3: Multi-Tenant Foundation
 
-**Boot prompt:** `aldc-shipyard/.claude/commands/launchpad-phase3.md` → `/launchpad-phase3`
-**Status:** Planned
+> **Superseded:** This phase has been built in the `aldc-launchpad` monorepo. See [[../../aldc-launchpad/active/phase-3-multitenant]] for the current tracker.
+
+**Boot prompt:** `aldc-launchpad/.claude/commands/launchpad-phase3.md` → `/launchpad-phase3`
+**Status:** Built (2026-05-14) — moved to aldc-launchpad workstream
 
 ## Goal
 

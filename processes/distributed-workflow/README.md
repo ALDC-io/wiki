@@ -3,7 +3,7 @@ tags: [process, distributed-workflow, meta]
 aliases: [Distributed Workflow, Parallel Sessions]
 sources: []
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-05-12
 ---
 
 # Distributed Workflow
@@ -30,6 +30,11 @@ If you're doing one focused thing in one session, you don't need this. Use [[act
 
 - [[active/confluence-migration]] — session coordinator for the Confluence ingest. Mechanics live in [[confluence-migration]] (the runbook); this tracks per-session state.
 - [[active/client-workflow-automation]] — design (not yet build) of an automated, sandboxed feature-delivery flow for GEP-style work.
+
+### Client workstreams
+
+- [[active/navira/README|Navira]] — e-commerce analytics (Amazon + DTC). Prefect foundation, marketing ad platforms, sales, inventory, competitor data. 4 phases active, 3 backlog.
+- [[active/fusion92/README|Fusion 92]] — dashboards, data pipelines, platform integrations. 11 active (FU92-400–414), 4 backlog, 6 completed. Sprint S3.
 
 When a workstream finishes, move its tracker from `active/` to `archive/` (folder created on first archive).
 

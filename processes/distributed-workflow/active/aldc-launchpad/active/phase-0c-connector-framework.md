@@ -1,14 +1,16 @@
 ---
-tags: [launchpad, connectors, framework, deployment, active]
+tags: [launchpad, connectors, framework, deployment, complete]
 created: 2026-05-13
 updated: 2026-05-13
+deliverables_built: 2026-05-13
+deliverables_complete: 2026-05-13
 ---
 
 # Phase 0C: Connector Framework & Live Deployment
 
 **Boot prompt:** `aldc-launchpad/.claude/commands/launchpad-phase0c.md` → `/launchpad-phase0c`
-**Status:** Active
-**Effort:** 1–2 days
+**Status:** Complete
+**Effort:** 1 day
 **Demo target:** Tomorrow — deploy a connector live from the Launchpad dashboard
 
 ## Goal
@@ -36,6 +38,19 @@ Analyze legacy connector code (prefect-connectors + core_api), create a migratio
 - 2026-05-13 — Amazon Ads US is the demo candidate (already provisioned, known-good)
 
 ## Session Log
+
+### 2026-05-13 — wiki-sync: Phase 0C complete — all 4 deliverables shipped
+
+- did: Built all remaining Phase 0C deliverables. Deploy modal with animated 6-step pipeline (verify credential → resolve image → register deployment → push to work pool → trigger test run → verify data in Snowflake). Framework column added (Eclipse/Prefect Legacy/Prefect v3) — confirmed with Paul that only Exchange Rates is on Prefect (legacy core_api design), all other active connectors are Eclipse template-based. Environment column + filter (QA/UAT/Prod/Not Deployed). Corrected work pool names to actual Azure infrastructure: `azure-aci-qa`, `azure-aci-uat`, `azure-aci-production`. Filter panel redesigned into labeled groups (Client, Environment, Framework, Status, Credential). Freshness monitoring: schedule-aware overdue/stale warnings with pulsing dots, freshness KPI card. Prefect UI link (`prefect.analyticlabs.io`) in header + deep-link "View in Prefect" buttons on active connectors. Inactive status filter for paused/error connectors.
+- decided: core_api is NOT in the Prefect data path — architecture is clean (Prefect → Azure Storage → Snowflake). `global_config.py` env vars (CORE_URL, CORE_API_TOKEN) only needed by legacy connectors. New framework connectors use Prefect Blocks only. Paul confirmed: 0 connectors on Prefect v3 yet, 2 on Prefect Legacy (Exchange Rates), 21 on Eclipse.
+- status: All 4 deliverables complete. Migration catalog (50 connectors), connector template docs, deploy flow UI, live deployment pipeline. Demo-ready.
+- next: Phase 1A — credential tracking dashboard (`/launchpad-phase1a` in new session).
+
+### 2026-05-13 — wiki-sync: deliverables verified
+
+- did: Connector catalog built (`data/connectors.json` — 42 connectors: 8 active, 2 deploying, 4 ready, 28 planned across GEP/F92/ALDC_QA). Connector management page (`pages/connectors/index.html`) built and registered in SPA shell. Data pre-loaded via `window.LaunchpadData.connectors`. By-client breakdown: GEP 17 (4 active, 2 deploying, 3 ready, 8 planned), Fusion92 9 (7 active, 2 planned), ALDC_QA 1 (active).
+- status: Core deliverables 1 (catalog) and 3 (UI page) complete. Deliverable 2 (connector template/generator) and 4 (live deployment pipeline triggering Prefect from UI) not yet built — these are the demo-day items.
+- next: Build deploy flow (UI button → Prefect deployment → data lands). Amazon Ads US is the demo candidate.
 
 ### 2026-05-13 — Phase created
 
