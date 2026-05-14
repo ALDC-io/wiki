@@ -104,9 +104,10 @@ Zeus Memory and Zeus Chat should be leveraged at every step to reduce friction:
 - `pages/platform/dashboard.html`: 8-tab client-agnostic dashboard (Overview, Roadmap, Architecture, Readiness, Integrations, Capacity, Pipeline, Zeus)
 - `data/platform.json`: 26 features across 9 categories, 7 industry readiness profiles, 7 integrations, scaling projections
 - Architecture decisions: multi-tenant Snowflake + automated RLS, Apache Superset (replacing Power BI), client registry as alignment layer
-- Boot prompt skills `/launchpad-phase{2-7}` for full phased workflow
+- Boot prompt skills `/launchpad-phase{2-7}` + `/launchpad-poc-validation` for full phased workflow
 - Wiki phase pages created for Phases 2-7 with boot prompt references
 - SPA shell: Platform route + nav link added, platform.json pre-loaded
+- **Known gaps (deferred):** Tabs 4 (Readiness matrix), 6 (Capacity chart), 7 (Pipeline scatter) render hardcoded HTML/SVG rather than binding to `platform.json` — changes to JSON won't auto-update these views
 
 ### Phase 3: Multi-Tenant Foundation (Priority: high)
 - ALDC_WAREHOUSE single database: RAW, ANALYTICS, REFERENCE, ADMIN schemas
@@ -144,8 +145,13 @@ ops-platform/
 - [[phase-1-data-layer]] — ✅ 2026-05-09: JSON data layer, live Jira/Zeus integration, persistent state
 - [[phase-2-platform-dashboard]] — ✅ 2026-05-09: Client-agnostic dashboard, multi-tenant architecture, Superset, phased workflow
 
+### Validation
+- `/launchpad-poc-validation` — POC golden-path test (run before starting Phase 3)
+
 ### Active
-_(none currently — move a backlog phase here when work begins)_
+_(none currently — this workstream is superseded by [[../aldc-launchpad/README|aldc-launchpad]] as of 2026-05-13)_
+
+> **Note:** The ops-platform POC (Phases 0-2) is complete and preserved here as history. The product has graduated into a monorepo (`aldc-launchpad`) with a new phase structure. See [[../aldc-launchpad/README]] for the active workstream.
 
 ### Backlog
 - [[phase-3-multitenant]] — ALDC_WAREHOUSE, client_registry, automated RLS, aldc onboard CLI
@@ -153,6 +159,8 @@ _(none currently — move a backlog phase here when work begins)_
 - [[phase-5-credentials]] — connect.analyticlabs.io portal, onboarding email, self-serve flow
 - [[phase-6-zeus]] — Deep Zeus Memory + Chat integration at every wizard step
 - [[phase-7-e2e-testing]] — Full end-to-end validation with synthetic test client
+
+> These backlog phases may be re-scoped or absorbed into the new aldc-launchpad workstream.
 
 ## See Also
 

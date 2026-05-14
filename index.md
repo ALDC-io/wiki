@@ -185,16 +185,19 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[tailscale-linux]] — Tailscale install + Remmina remote desktop on Ubuntu. Connects to on-prem Agent VMs.
 - [[powerbi-secret-refresh]] — Operational procedure for refreshing Azure AD PBI registration secrets and updating Django admin. Current expiry table for DISH_DUER, FUSION92, GEP, KIT_ACE.
 - [[executive-snapshot-email]] — Executive Snapshot email automation on Auriga VM 11099. Cron schedule (7:30 AM test, 8:00 AM prod, Pacific time).
+- [[erik-johnston-interview-guide]] — Interview flow guide for Erik Johnston (2026-05-11). 10-section structure with deep-dive questions mapped to ALDC stack.
 
 ### Distributed Workflow
 - [[processes/distributed-workflow/README|distributed-workflow]] — Coordination kit for parallel Claude Code sessions across separate workstreams. Session-level extension of [[CLAUDE|Parallel Ingestion]]. Read first when running multi-front days.
 - [[processes/distributed-workflow/orchestration-pattern]] — Lanes, write isolation, shared-file protocol, performance techniques.
 - [[processes/distributed-workflow/session-lifecycle]] — Boot → plan-mode → approval → implementation → checkpoint → handoff. Includes the consolidated when-to-enter-plan-mode table.
 - [[processes/distributed-workflow/tracker-template]] — Copy this when starting a new workstream.
+- [[processes/distributed-workflow/workflow-diagram]] — Mermaid diagram: full ticket-to-delivery flow through the distributed workflow.
 - [[processes/distributed-workflow/active/observability-platform]] — Active workstream tracker (execution phase: company-wide lightweight observability & monitoring platform — app health, data jobs, on-prem + Azure infra, support inbox). Week 1 complete 2026-04-25.
 - [[processes/distributed-workflow/active/confluence-migration]] — Active workstream tracker (session coordinator for the Confluence ingest; mechanics in [[confluence-migration]]).
 - [[processes/distributed-workflow/active/client-workflow-automation]] — Active workstream tracker (design phase: sandboxed feature-delivery flow for GEP-style work).
-- [[processes/distributed-workflow/active/ops-platform/README|ops-platform (ALDC Launchpad)]] — Active workstream: Client Operations Platform. POC built 2026-05-08. Onboarding wizard, prospect intelligence, infrastructure planner, engineering dashboard. 5 phases: Design System → Data Layer → Artifacts+Deploy → Client Health → Zeus Integration. Goal: onboard any client at scale from a single app.
+- [[processes/distributed-workflow/active/ops-platform/README|ops-platform (ALDC Launchpad POC)]] — Completed POC workstream (Phases 0-2: design system, data layer, platform dashboard). Superseded by aldc-launchpad monorepo.
+- [[processes/distributed-workflow/active/aldc-launchpad/README|aldc-launchpad]] — Active workstream: Two-sided AI delivery platform (monorepo). Credential Exchange Hub, client boards, tracker (Jira replacement), client portal. Phases 0R–1D active. Master platform + per-client portal with Zeus Chat.
 - [[processes/distributed-workflow/active/navira/README|navira]] — Active workstream: Navira/GEP integration roadmap. 6 phased workflows (1A–4), 17 interfaces, credentials tracker, 8 dashboard recs, Phase 1A data dictionary, credential validation toolkit. Priority order: Marketing Ad Platforms → Social/Emerging → Agency Sales → Inventory → Competitor → Unstructured.
 - [[processes/distributed-workflow/active/phase6-pbi-automation-plan]] — Phase 6 PBI model automation plan. XMLA-scripted sandbox dataset via Tabular Editor CLI + PBI REST refresh. Resolves "Multi-feature conflict in TEST / PBI" blocker. Level 2 for v1; Deployment Pipelines (Level 3) + TMDL version control deferred to v2.
 - [[processes/distributed-workflow/backlog/wiki-client-restructure]] — Backlog: reorganize wiki into client-first structure (GEP/Fusion92 top-level folders, frontmatter-driven Jira state, hub README per client). ~2-3hr migration script.
