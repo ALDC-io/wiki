@@ -64,7 +64,8 @@ aldc-launchpad/
 
 | Skill | Purpose |
 |---|---|
-| `/launchpad-phase0r` | Monorepo restructure |
+| `/launchpad-phase0r` | Monorepo restructure (DONE) |
+| `/launchpad-phase0c` | Connector framework + live deployment pipeline (DEMO) |
 | `/launchpad-phase1a` | Credential tracking dashboard + client boards (DEMO) |
 | `/launchpad-phase1b` | Secure credential submission (Azure Functions + Key Vault) |
 | `/launchpad-phase1c` | Prefect Block provisioning (Key Vault → Blocks) |
@@ -81,14 +82,16 @@ aldc-launchpad/
 ```
 
 ### Active
-- [[phase-0-monorepo-restructure]] — Graduate ops-platform into `aldc-launchpad` monorepo. `/launchpad-phase0r`
+- [[phase-0c-connector-framework]] — Connector framework analysis, migration catalog, live deployment pipeline. DEMO PRIORITY. `/launchpad-phase0c`
 - [[phase-1a-credential-dashboard]] — Credential tracking dashboard + client boards + client selector. DEMO PRIORITY. `/launchpad-phase1a`
 - [[phase-1b-credential-submission]] — Azure Functions + Key Vault + OAuth callback (5-min fix). `/launchpad-phase1b`
 - [[phase-1c-prefect-provisioning]] — One-click Key Vault → Prefect Block provisioning. `/launchpad-phase1c`
 - [[phase-1d-automation]] — Reminder chains, health monitoring, Windsor auto-verify. Deferred.
 
 ### Completed
-_(inherited from ops-platform POC — see [[../ops-platform/README]] for Phases 0-2)_
+- [[phase-0-monorepo-restructure]] — Monorepo created, ops-platform migrated, submodule added. `/launchpad-phase0r` (2026-05-13)
+
+_(Also inherited from ops-platform POC — see [[../ops-platform/README]] for legacy Phases 0-2)_
 
 ### Backlog
 - Tracker Foundation — UI-driven Jira replacement with AI backend
@@ -101,6 +104,12 @@ _(inherited from ops-platform POC — see [[../ops-platform/README]] for Phases 
 
 ## Session Log
 
+### 2026-05-13 — Phase 0R completed + Phase 0C created
+
+- did: Executed Phase 0R monorepo restructure. Created `aldc-launchpad/` with full directory tree, migrated all ops-platform files to `platform/master/`, added prefect-connectors submodule, created client-registry.json (GEP + Fusion92), CLAUDE.md, 16 skill files with updated paths, placeholder READMEs. Verified all 11 SPA routes resolve correctly. Created Phase 0C (Connector Framework & Live Deployment) — new demo-priority phase for analyzing legacy connectors and building a deploy-from-dashboard pipeline. Updated execution-path.md with Lane D. Created `migrations/connectors/` directory and wiki tracker for Phase 0C.
+- decided: Phase 0C runs alongside Phase 1A for maximum demo impact. Amazon Ads US is the live deploy candidate. core_api analyzed as read-only reference (extract patterns, leave the rest). Four parallel lanes after 0R: D (connectors), A (frontend), B (backend), C (data).
+- next: `/launchpad-phase0c` from aldc-launchpad repo for connector framework. `/launchpad-phase1a` for credential dashboard.
+
 ### 2026-05-13 18:00 — Workstream created: product architecture + credential exchange hub plan
 
 - did: Deep research across design doc, wiki, Zeus Memory, ops-platform codebase. Reviewed credential_exchange_hub_design_doc.md. Created approved implementation plan (4 phases: 0R restructure, 1A dashboard, 1B submission, 1C provisioning, 1D automation). Created 5 wiki phase trackers, 6 skill/command files, CLAUDE.md draft for monorepo. Created new `aldc-launchpad` workstream separate from old `ops-platform` workstream.
@@ -109,32 +118,34 @@ _(inherited from ops-platform POC — see [[../ops-platform/README]] for Phases 
 
 ## Parallel Execution Path
 
-After Phase 0R (sequential), three lanes run in parallel:
+After Phase 0R (DONE), four lanes run in parallel:
 
 ```
-              Phase 0R (sequential, 1-2 days)
+              Phase 0R ✅ DONE
                         │
-          ┌─────────────┼─────────────┐
-          ▼             ▼             ▼
-     LANE A         LANE B        LANE C
-     Frontend       Backend       Data + Boards
-     /phase1a       /phase1b      (credentials.json,
-     3-5 days       5-7 days      board cards, F92)
-     pages/         api/          data/, shared/
-          │             │             │
-          └──────┬──────┘             │
-                 ▼                    │
-           Integration (1 day)       │
-                 ▼                    │
-            Phase 1C (3-4 days) ◄────┘
-                 ▼
-            Phase 1D (deferred)
+     ┌──────────────────┼──────────────────┐
+     │                  │                  │
+     ▼                  ▼                  ▼
+  LANE D           LANE A+B            LANE C
+  Connectors       Frontend+Backend    Data + Boards
+  /phase0c         /phase1a /phase1b   (credentials.json,
+  1-2 days         3-5 / 5-7 days     board cards, F92)
+  migrations/      pages/ api/        data/, shared/
+  connectors/
+     │                  │                  │
+     │            ┌─────┴─────┐            │
+     │            ▼           ▼            │
+     │      Integration  (1 day)           │
+     │            ▼                        │
+     └──────► Phase 1C (3-4 days) ◄────────┘
+                  ▼
+             Phase 1D (deferred)
 ```
 
-**Lane isolation**: A writes pages/styles, B writes api/infra, C writes data/shared. No cross-lane edits.
+**Lane isolation**: A writes pages/styles, B writes api/infra, C writes data/shared, D writes migrations/ + connector templates. No cross-lane edits.
 
-**Critical path to demo**: 0R (Day 1) → 1A + C in parallel (Day 2-3) = demo in 3 days.
-**Critical path to full flow**: 0R → 1A + 1B parallel → integrate → 1C = ~9 days.
+**Critical path to full demo**: 0R ✅ → 0C + 1A + C in parallel (Day 2-3) = demo in 3 days (credentials + live deploy).
+**Critical path to full flow**: 0R ✅ → 1A + 1B + 0C parallel → integrate → 1C = ~9 days.
 
 Full execution path with day-by-day schedule: `aldc-launchpad/api/credential-exchange/execution-path.md`
 
