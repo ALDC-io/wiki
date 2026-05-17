@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-05-08
+updated: 2026-05-17
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -60,6 +60,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[entities/repos/power_bi|power_bi (repo)]] — Binary-artefact store for ALDC's Power BI reports. ~94 `.pbix` files + 3 `.pbit` templates + 6 CosmosDB report-JSON companions, Git LFS (~16 GB), no code. Organised `common/` (Retail starter set), `custom/<CLIENT>/` (bespoke, dated snapshots), `internal/`, `sales/` (pre-sales demos), `templates/` (stale; canonical copies in Nextcloud). Active clients: GEP (20 snapshots, 2026-03 latest), Fusion92 (13 snapshots, 2025-12 latest). Legacy: DISH_DUER, BOOK_DEPOT, KIT_ACE, ALDC_FINANCE. No CI/CD; all deploys are manual Publish from Power BI Desktop — see [[gep-snowflake-pbi-deployment]] / [[model-deploy-production]]. For Power-BI-the-tool see [[entities/tools/power-bi|Power BI (tool)]].
 
 ### Tools
+- [[orchestrator]] — Session Orchestrator (ALDC Launchpad). Autonomous multi-stage pipeline executor — launches isolated Claude Code sessions in git worktrees, manages concurrency, monitors execution, surfaces results via web UI. 15 pipeline types identified (connector credential retrieval, Prefect implementation, Snowflake warehousing, bug fix, new client onboarding, existing client migration, Azure provisioning, Eclipse→Prefect migration, dbt, Cube, data quality, CI/CD, incident response, credential rotation, documentation sync). Context-enriched sessions (wiki + client registry + credentials + tracker data + prior learnings pre-loaded).
 - [[Snowflake]] — Data warehouse. Star schema with shared_dim_*, *_fct_*, extract_*, report_common. Manual deployment.
 - [[Eclipse]] — Connector platform. JSON-based connections + templates. Pulls from APIs/DBs, loads into Snowflake.
 - [[Power BI]] — Reporting layer. Consumes report_common views. Refresh cadence per semantic model (GEP Test: scheduled daily; ad-hoc refresh available). See [[Power BI]] § Model Refresh.
@@ -93,6 +94,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[monorepo-research]] — Monorepo + CCE Integration analysis. 38 improvements across 8 categories. Research complete, pending decision.
 - [[openclaw]] — Open-source agent runtime/gateway used by Factoria. Multi-agent isolation, tool policy enforcement, session management.
 - [[workflow-automation]] — Client Workflow Automation — design for automated sandboxed feature-delivery flow targeting GEP. Phase-1 sandbox pattern + phased build roadmap.
+- [[neurospect]] — NeuroSpect. AI trading intelligence platform for ICT/Smart Money traders. 13-component architecture: Trader Workspace, Prop Shield, ICT Event Engine, EdgeLab, Mentor, Edge Forensics, NeuroCore, NSLM, NeuroGraph, NeuroScore, NeuroFund Elite, NeuroQuant, NeuroTrader. v3 roadmap (13 phases, data-first). Orchestrator UI with autonomous pipeline. **Stage: Phase 0 active, marketing site live.**
 - [[devflow-os]] — Developer Workflow OS. All-in-one dev workflow platform: roadmap viz, boot prompt generation, cross-engineer intelligence, change management, ticket tracking. Built as internal tooling for NeuroLLM, extractable as standalone product. **Stage: idea.**
 
 ---
