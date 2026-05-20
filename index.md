@@ -229,6 +229,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-217]] — CI/CD Pipeline + Infrastructure Right-Sizing. Docker publish gated behind quality gate, standalone `docker-publish.yml` removed. PostgreSQL D2ads_v5→B1ms, App Service P2v3→S1. ~$265/mo saved. 2026-05-03.
 - [[GP-218]] — QA/UAT/Prod Work Pools & Promotion Pipeline. 3 Work Pools, 3 worker Container Apps, 3 Snowflake blocks, `short_code` fix, promotion pipeline documented. Infra complete 2026-05-02, GEP E2E pending PR #1.
 - [[GP-248]] — Prefect Snowflake Environment Isolation. 3 databases (`QA/TEST/PROD_DG1_GEP_PREFECT`), 3 `PREFECT_SVC` service accounts, 2 PBI workspaces. Done 2026-05-02.
+- [[GP-256]] — Add Return Rate KPIs (unit-based) to SKU Profitability Dashboard. Two measures: per-SKU + brand-level. Heather confirmed unit-based 2026-05-04.
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 
 ### Fusion92
