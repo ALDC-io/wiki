@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
-sources: [clients repo report_common/ directories, Obsidian vault notes, daily/2026-04-17.md, GP-208 Data Source Settings check 2026-04-21]
+sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20]
 created: 2026-04-16
-updated: 2026-04-24
+updated: 2026-05-20
 ---
 
 # Power BI
@@ -55,10 +55,17 @@ Defined in `__REPORT_COMMON_VIEWS` and per-client `snowflake/report_common/` dir
 
 ## Power BI Workspaces (GEP)
 
-| Workspace | Snowflake Environment | Branch | Refresh Cadence |
-|-----------|----------------------|--------|-----------------|
-| GEP Test Models | `TEST_DG1_GEP` | `GEP/user-testing` | **Scheduled — once daily at 07:00 Pacific** (next scheduled fire 2026-04-22 07:00; last fire 2026-04-21 07:07:10 — PBI drift of a few minutes is normal). Ad-hoc refresh also available on demand. |
-| Production | `PROD_DG1_GEP` | `main` | See semantic model refresh settings in the Production workspace (confirm before quoting). |
+| Workspace | Workspace ID | Dataset | Dataset ID | Snowflake Env | Refresh Cadence |
+|-----------|-------------|---------|-----------|--------------|-----------------|
+| GEP Test Models | `a29d4c01-4a8f-4a1e-8784-4d7dedcde940` | Data Model | `66151728-f00f-4a08-af91-6687de5f13dc` | `TEST_DG1_GEP` | **Daily 07:00 Pacific** — confirmed running. Owner: `paul.russell@aldc.io` |
+| GEP Test Reports (LEGACY) | `7f47a5e0-b619-4aea-b69a-259d4d4315fa` | Daily Sales | `8c935a8f-50c0-4404-8756-28853c9a8623` | `TEST_DG1_GEP` | No schedule. Last refresh Oct 2024 — **stale, archive candidate** |
+| GEP Prod Models | `de58032f-c282-46fb-8b8f-88900df997d1` | Data Model | `74a529b3-5112-4f1e-9ee6-9ab642b288c4` | `PROD_DG1_GEP` | **Hourly, 02:00–16:00 Pacific**. Owner: `paul.russell@aldc.io` |
+| GEP Prod Reports | `11b7df98-b2bd-4cea-a01c-42d8a63a7134` | Daily Sales | `c35abad7-c685-4ddb-a352-2b761f98618e` | `PROD_DG1_GEP` | No schedule. |
+| GEP Sandbox Models | `8545f3cb-4e2d-4985-bf31-79066248c9be` | GEP_Sandbox_Current | `fb41970d-2beb-4ed9-9f82-35c6439b35ea` | Per-ticket sandbox DB | Manual only. |
+
+> ⚠️ **Do not use GEP Test Reports for UAT.** The "Daily Sales" dataset there has no scheduled refresh and is stale (last refresh Oct 2024). Always use **GEP Test Models → Data Model** for UAT validation. **Action item (2026-05-20):** Rename "GEP Test Reports" to "GEP Test Reports (LEGACY - DO NOT USE)" and archive. Owner: `karen.prete@aldc.io` — confirm nothing depends on it before archiving.
+
+> Note: an earlier wiki entry (daily/2026-04-17.md) recorded wrong workspace/dataset IDs (`85c00659` / `1ac238e9`). Those point to "Account Summary Test Canada DG1" (a different client). The correct IDs are in the table above — verified 2026-05-20 via Power BI REST API.
 
 ## Model Refresh
 
@@ -97,6 +104,37 @@ After a Snowflake warehouse change, the scheduled refresh will eventually pick i
 - **Stale data**: PBI model not refreshed after Snowflake deploy — always refresh after deploying warehouse changes
 - **Schema mismatch**: If Snowflake view columns change, PBI model may error on refresh — update the PBI model to match
 - **Date columns**: Some date columns may not import correctly into PBI models — may need research per ticket (noted in [[GP-208]] to-do)
+- **Dataset owner removed from Azure AD**: If the dataset owner's account is deleted or deprovisioned, scheduled refresh is automatically disabled and all stored credentials are wiped. Error code: `DMTS_UserNotFoundInADGraphError`. Fix: take over the dataset (Settings → Take over), re-enter all data source credentials from Dashlane, re-enable scheduled refresh. See incident 2026-05-20 (GEP Prod Models). **Long-term**: use a dedicated service account as dataset owner so individual offboarding doesn't break refreshes.
+
+## PBI Diagnostic Tool
+
+`scripts/pbi/` in `aldc-launchpad` (committed `bff0663`, 2026-05-20). Multi-client CLI for PBI health checks, refresh history, and DAX verification. Replaces ad-hoc diagnostic scripts.
+
+```bash
+# Health check for all GEP workspaces
+python -m scripts.pbi health GEP
+
+# Verify Amazon UK data is in the model
+python -m scripts.pbi verify "GEP Test Models" "Data Model" --check entity --entity "Amazon UK"
+
+# Marketplace breakdown with order line counts
+python -m scripts.pbi verify "GEP Test Models" "Data Model" --check marketplace
+
+# Refresh history for a dataset
+python -m scripts.pbi refresh-history "GEP Test Models"
+```
+
+**Auth**: Three-tier — Azure CLI token first (zero-prompt if `az login` active), then MSAL file cache (`scripts/pbi/.token_cache.bin`, gitignored), then device-code. After the first device-code login, subsequent runs are silent.
+
+**Known PBI API constraints (GEP Import-mode datasets):**
+- `GET /datasets/{id}/tables` → HTTP 404 — only works for Push datasets, not Import
+- `EVALUATE INFO.TABLES()` → DAX error — not supported at GEP model compatibility level
+- Table discovery: use `EVALUATE ROW("cnt", COUNTROWS('TableName'))` probing per table name
+- Correct client ID for device-code: `7f67af8a-fedc-4b08-8b4e-37c4d127b6cf` (Power BI Desktop). The `ea0616ba` client ID in old wiki notes is rejected (AADSTS65002)
+- All ALDC service principal secrets in `vault/infra-credentials.md` are expired as of 2026-05-20 — SP auth requires secret rotation in Azure Portal
+
+**GEP model table names** (confirmed via DAX probing, 2026-05-20):
+`Marketplace`, `Order`, `Order Line`, `Product`, `Vendor`, `Location`
 
 ## XMLA Automation (GEP)
 

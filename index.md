@@ -220,7 +220,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 ### GEP
 - [[GP-169]] — Marketing activity marketplace attribution. Profile-based mapping of Amazon Ads profiles to canonical marketplaces in `MARKETING_FCT_ACTIVITY`.
 - [[GP-197]] — Future-proof Amazon marketplace filter in `sales_fct_cost.sql`. Replaced hard-coded name list with `IS_AMAZON_MARKETPLACE` flag. Subsumed into GP-204.
-- [[GP-200]] — Amazon UK addition to orders. End-to-end new-marketplace onboarding (Eclipse connection/template + SQL UNION + deployment runbook).
+- [[GP-200]] — Amazon UK addition to orders. End-to-end new-marketplace onboarding (Eclipse connection/template + SQL UNION + deployment runbook). UAT in progress — data confirmed present 2026-05-20; customer meeting 2026-05-21.
 - [[GP-203]] — Add Canadian traffic data to `TRAFFIC_FCT_ACTIVITY`. Defended per-marketplace grain during PR review.
 - [[GP-204]] — CSV-driven marketplace metadata (net discount, DTC fee, Amazon flag). Self-service CSV replaces hard-coded CASE statements in order-line facts.
 - [[GP-207]] — Prod-to-test data share setup. Re-pointed all GEP warehouse SQL to `PROD_DG1_GEP` share so test and prod reference the same raw data.
