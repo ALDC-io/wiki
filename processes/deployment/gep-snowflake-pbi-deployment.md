@@ -3,7 +3,7 @@ tags: [process, deployment, gep, snowflake, power-bi, runbook]
 aliases: [GEP Deployment Runbook, Snowflake Deployment, PBI Deployment, GEP Deploy]
 sources: [sources/obsidian-import/deployments/Order of Operations.md, sources/obsidian-import/deployments/GP-200.md, sources/obsidian-import/deployments/Future Improvements - CREATE TICKET FOR THIS.md, sources/obsidian-import/work/Documentation/Knowledge Transfer/Deployment Steps-Guide - Paul.md, sources/obsidian-import/work/Documentation/Knowledge Transfer/Deployment Steps-Guide - Steven.md]
 created: 2026-04-16
-updated: 2026-04-21
+updated: 2026-05-22
 ---
 
 # GEP Snowflake + Power BI Deployment Runbook
@@ -259,6 +259,49 @@ For production deployment of the [[Power BI]] model (from Steven's deployment gu
 3. Ensure task-tracking scratch files are not committed (gitignored/unstaged)
 4. File any follow-up tickets identified during deploy
 
+## Post-Deploy Verification Checklist
+
+Run these after any warehouse view deployment on `wj66376` (production). Added 2026-05-22 following GP-PENDING-sales-data-outage-2026-05-22 (task chain suspended 14 hours due to cross-database grant loss).
+
+### PD-1: Verify task chain health
+
+After deploying views, confirm the root task is still in `started` state and not silently suspended:
+
+```sql
+-- Run after any warehouse view deployment on wj66376
+SHOW TASKS IN DATABASE PROD_DG1_GEP;
+-- Verify TASK_WAREHOUSE_ORDERLINE_0 state = 'started' (not 'suspended')
+-- If suspended: check last_suspended_reason, fix the issue, then:
+ALTER TASK WAREHOUSE.TASK_WAREHOUSE_ORDERLINE_0 RESUME;
+EXECUTE TASK WAREHOUSE.TASK_WAREHOUSE_ORDERLINE_0;
+```
+
+> Snowflake auto-suspends the root task after repeated failures. A suspended task produces **no error in the deploy output** — it silently stops materializing data. This was the root cause of the 2026-05-22 outage.
+
+- [ ] `TASK_WAREHOUSE_ORDERLINE_0` state = `started`
+- [ ] If suspended: identify `last_suspended_reason`, resolve root cause, RESUME + EXECUTE
+
+### PD-2: Verify cross-database grants
+
+`SHARED_FCT_EXCHANGE_RATE` depends on `PROD_DG1_ALDC_LIBRARY` (cross-database). Verify the task service role can still reach it — this grant can be silently lost after certain DDL operations:
+
+```sql
+-- SHARED_FCT_EXCHANGE_RATE depends on PROD_DG1_ALDC_LIBRARY (cross-database)
+-- Verify the task role has access:
+USE ROLE PROD_DG1_ROLE_CORE_SVC_DA8904DB;
+SELECT COUNT(*) FROM PROD_DG1_ALDC_LIBRARY.WAREHOUSE.SHARED_FCT_EXCHANGE_RATE;
+-- If this fails, re-grant as ACCOUNTADMIN:
+USE ROLE ACCOUNTADMIN;
+GRANT USAGE ON DATABASE PROD_DG1_ALDC_LIBRARY TO ROLE PROD_DG1_ROLE_CORE_SVC_DA8904DB;
+GRANT USAGE ON SCHEMA PROD_DG1_ALDC_LIBRARY.WAREHOUSE TO ROLE PROD_DG1_ROLE_CORE_SVC_DA8904DB;
+GRANT SELECT ON ALL VIEWS IN SCHEMA PROD_DG1_ALDC_LIBRARY.WAREHOUSE TO ROLE PROD_DG1_ROLE_CORE_SVC_DA8904DB;
+```
+
+- [ ] `SELECT COUNT(*) FROM PROD_DG1_ALDC_LIBRARY.WAREHOUSE.SHARED_FCT_EXCHANGE_RATE` returns a row count (not an auth error)
+- [ ] If it fails: re-grant as ACCOUNTADMIN and re-run the manual task trigger (Phase 6)
+
+See [[GP-PENDING-sales-data-outage-2026-05-22]] for full incident context.
+
 ## Pitfalls / Gotchas
 
 These were all encountered during real deployments and cost significant debugging time. Read them before deploying.
@@ -324,6 +367,21 @@ Sparse matrices with many empty cells make it easy to misalign rows and columns 
 ### 7. Expired Power BI credentials
 
 If a semantic model refresh fails, check for expired credentials first: **... -> Settings -> Data source credentials -> Edit credentials**. Use anonymous browser mode when logging in to Power BI web with service account credentials.
+
+### 8. Dataset owner removed from Azure AD (incident 2026-05-20)
+
+**Symptom:** Refresh fails with `DMTS_UserNotFoundInADGraphError`. Email notification says the dataset owner's account no longer exists in Azure AD. Scheduled refresh is auto-disabled and all stored credentials are wiped.
+
+**Fix (step-by-step):**
+1. Go to the workspace (e.g., **GEP Prod Models**) → three dots on the **Semantic model** row → **Settings**
+2. Click **Take over** in the banner at the top of the settings page
+3. Expand **Data source credentials** → click **Edit credentials** for each source:
+   - Snowflake (x2): Basic auth, credentials from Dashlane **"Snowflake PBI Prod"** entry, Privacy = Organizational
+   - Web (x1): Anonymous, Privacy = Organizational
+4. Scroll to **Refresh** section → toggle **On** → set schedule → **Apply**
+5. Trigger **Refresh now** to verify before waiting for the scheduled run
+
+**Prevention:** The dataset owner should be a shared service account, not a personal account. When a person's Azure AD account is deprovisioned, their PBI dataset ownership breaks immediately.
 
 ## Future Improvements
 

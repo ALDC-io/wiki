@@ -3,7 +3,7 @@ tags: [entity, tool, snowflake, data-warehouse]
 aliases: [Snowflake, SF]
 sources: [clients repo snowflake/ directories, __TEMPLATE_ACCOUNT/snowflake/readme.txt, INFRA/1532067843, INFRA/1034092551, CORE/1571160065, CORE/374341641, CORE/418873390]
 created: 2026-04-16
-updated: 2026-04-18
+updated: 2026-05-22
 ---
 
 # Snowflake
@@ -387,6 +387,48 @@ Best practices from the review:
 - Monthly query credit budget: ~60 credits/month (target ceiling from that engagement)
 - Monitor reader account daily
 
+## Task Suspension Diagnosis
+
+When warehouse tables appear stale (PBI reports show old data), check task state **before** investigating data sources. Snowflake auto-suspends a task DAG's root task after repeated errors — this is a common silent failure mode.
+
+> Pattern added after GP-268 (2026-05-22). See also [[GP-PENDING-sales-data-outage-2026-05-22]] for a real incident where this caused a 14-hour outage.
+
+### Diagnostic steps
+
+```sql
+-- Step 1: Check task state (connect to wj66376 as ACCOUNTADMIN)
+SHOW TASKS IN DATABASE PROD_DG1_GEP;
+-- Look for state='suspended', last_suspended_reason='SUSPENDED_DUE_TO_ERRORS'
+
+-- Step 2: Find the failing step via task history
+SELECT NAME, STATE, SCHEDULED_TIME, ERROR_CODE, ERROR_MESSAGE
+FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
+    SCHEDULED_TIME_RANGE_START => DATEADD('hour', -48, CURRENT_TIMESTAMP()),
+    RESULT_LIMIT => 50
+))
+WHERE NAME LIKE 'TASK_WAREHOUSE_ORDERLINE%'
+ORDER BY SCHEDULED_TIME DESC;
+
+-- Step 3: If task history is empty, check query history
+SELECT QUERY_TEXT, ERROR_CODE, ERROR_MESSAGE, EXECUTION_STATUS, START_TIME
+FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY
+WHERE QUERY_TEXT LIKE 'CREATE OR REPLACE TABLE WAREHOUSE.%'
+AND START_TIME >= DATEADD('day', -2, CURRENT_TIMESTAMP())
+AND EXECUTION_STATUS = 'FAIL'
+ORDER BY START_TIME DESC;
+
+-- Step 4: Fix the issue, then resume
+ALTER TASK WAREHOUSE.TASK_WAREHOUSE_ORDERLINE_0 RESUME;
+EXECUTE TASK WAREHOUSE.TASK_WAREHOUSE_ORDERLINE_0;
+```
+
+### Key notes
+
+- Snowflake auto-suspends the **root task** of a DAG after repeated errors — not just the failing child task.
+- `TASK_HISTORY` may return no rows for the failing task depending on account/time range. Always start with `SHOW TASKS` to check state.
+- `INFORMATION_SCHEMA.TASK_HISTORY` is the fast path; fall back to `SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY` if rows are missing.
+- After fixing the underlying issue, both `RESUME` and an explicit `EXECUTE` are needed to get the task chain running immediately without waiting for the next scheduled window.
+
 ## See Also
 
 - [[star-schema-convention]] — naming patterns
@@ -397,3 +439,4 @@ Best practices from the review:
 - [[core_api]] — API service that manages Snowflake connections and queries
 - [[data-share-pattern]] — Snowflake data share setup patterns
 - [[fusion92-data-architecture]] — Fusion92-specific Snowflake setup decisions
+- [[GP-PENDING-sales-data-outage-2026-05-22]] — real incident where task suspension caused a 14-hour outage

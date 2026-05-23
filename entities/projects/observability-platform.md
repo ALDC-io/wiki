@@ -5,7 +5,7 @@ sources:
   - processes/distributed-workflow/active/observability-platform.md
   - C:/Users/PaulRussell/.claude/plans/fancy-inventing-aho.md
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-05-22
 ---
 
 # Observability Platform
@@ -46,6 +46,25 @@ v1 lands the alerting and the dashboard for these and the rest of the §F2 inven
 - Client-visible SLA dashboards (GEP, Fusion92).
 - Non-prod environment monitors (Test / QA / Dev) — `test.yaml` and `qa.yaml` ship stubbed.
 - v2 MCP server / CLI / agent classifier — sketched in [[observability-architecture]] § v2 Seam.
+
+## Recommended Alerts
+
+High-priority alert rules that should be implemented in Plane 3 (job-health monitors). Listed here as backlog items pending the Week 2/3 implementation sessions.
+
+### Snowflake Task Suspension (Priority: Critical)
+
+**What:** Poll `SHOW TASKS IN DATABASE PROD_DG1_GEP` every 15 minutes and alert if any task has `state='suspended'` and `last_suspended_reason='SUSPENDED_DUE_TO_ERRORS'`.
+
+**Why this matters:** [[GP-PENDING-sales-data-outage-2026-05-22]] was a 14-hour outage caused by an auto-suspended root task. The suspension happened at 19:52 PT and was not detected until a client report the following morning (09:14 PT). A 15-minute check would have caught this within one poll cycle.
+
+**Implementation:**
+- Run via the existing Snowflake connection (account `wj66376`, role `PROD_DG1_CORE_ADMIN` or `ACCOUNTADMIN`).
+- Query: `SHOW TASKS IN DATABASE PROD_DG1_GEP` — parse output for `state = 'suspended'` AND `last_suspended_reason = 'SUSPENDED_DUE_TO_ERRORS'`.
+- Alert to `#observability-dev` (dev) / `#observability` (prod) Slack channel.
+- Severity: **P1 (Critical)** — stale data ships to client immediately.
+- Recovery: auto-resolve when task returns to `state = 'scheduled'` or `state = 'started'`.
+
+**Diagnostic runbook:** See [[Snowflake]] § Task Suspension Diagnosis for the SQL to diagnose and resume.
 
 ## Owners
 

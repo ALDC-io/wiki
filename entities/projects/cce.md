@@ -26,6 +26,7 @@ CCE is actively used within ALDC (as of March-April 2026). The system includes:
 - **Auto-learn** that captures session metadata (tools used, files modified, duration) to Zeus Memory on session end
 - **178 skills** and **14 commands** in the skill library
 - **Tool usage logger** with a 50-tool checkpoint for learning capture
+- **Leaderboard integration** — team_roster/user_normalize/_USER_ALIASES must be updated in three places when adding new team members: cce_config.py, cce_learnings_leaderboard.py, memory_routes.py (fix deployed 2026-05-22)
 
 The design documents for current state (Design and Issues) exist as placeholders, suggesting ongoing iteration.
 

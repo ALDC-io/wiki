@@ -85,6 +85,49 @@ For each agent (repeat 1-4 times depending on environment):
 
 ## Pitfalls / Gotchas
 
+### CRITICAL: Containers MUST run with `--privileged` mode
+
+Agent containers mount a CIFS share from the co-located `agent-nextcloud` container at startup via `run.sh`:
+
+```bash
+mount -t cifs -o username=agent,password=$NEXTCLOUD_PASSWORD,domain=WORKGROUP \
+  //agent-nextcloud/nextcloud /media/nextcloud
+```
+
+This requires `SYS_ADMIN` capability. **If the container is not privileged, the mount fails silently** — the agent starts and appears healthy, but `/media/nextcloud/` is empty. All templates reading CSV supplement files will fail with `[Errno 2] No such file or directory`.
+
+**When deploying via Portainer:** Duplicate/Edit → Capabilities tab → enable **Privileged mode**.
+
+**When deploying via CLI:**
+```bash
+docker run -d --name <name> --restart unless-stopped \
+  --network agent-bridge \
+  --privileged \
+  --cap-add SYS_ADMIN --cap-add DAC_READ_SEARCH \
+  --env-file env_vars \
+  ghcr.io/aldc-io/agent-<name>:master
+```
+
+**To verify a running container has the correct privileges:**
+```bash
+docker inspect <container> --format 'Privileged={{.HostConfig.Privileged}} CapAdd={{.HostConfig.CapAdd}}'
+# Expected: Privileged=true
+```
+
+**Note:** Portainer web exec console does NOT inherit SYS_ADMIN even in a privileged container. Mount commands from exec will fail with "Unable to apply new capability set." — use a container restart instead.
+
+### Samba password must match NEXTCLOUD_PASSWORD env var
+
+The `agent-nextcloud` container runs `smbd` and serves the NextCloud data as a Samba share. The Samba password for the `agent` user must match the `NEXTCLOUD_PASSWORD` env var in the agent container (currently `ALDCAgent007_`).
+
+If auth fails (`NT_STATUS_LOGON_FAILURE` from smbclient), reset the Samba password from inside the `agent-nextcloud` container:
+
+```bash
+(echo "ALDCAgent007_"; echo "ALDCAgent007_") | smbpasswd -s agent
+```
+
+Verify Samba is running: `pgrep -la smbd` (should show 2 `smbd -D` processes).
+
 ### Docker Login Issues
 If the build fails to push to the container registry:
 ```bash

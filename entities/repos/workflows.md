@@ -46,7 +46,7 @@ sources:
   - repos/workflows/fusion_92/F92_notification_retrofitting_app/migrate.py
   - repos/workflows/fusion_92/F92_notification_retrofitting_app/requirements.txt
 created: 2026-04-20
-updated: 2026-04-27
+updated: 2026-05-21
 ---
 
 # workflows (repo)
@@ -212,6 +212,8 @@ Orchestrates the PO sync. Steps: read flight + parent job from core_api → look
 
 Hard-coded `CLIENT_ID = "98fe3659-b606-4550-9b16-c5e51a792618"` (the ALDC Microsoft Ads app registration — not a secret, but flagged as a tech-debt hard-code). Reads `MICROSOFT_ADS_CLIENT_SECRET`, `account_id`, `MICROSOFT_ADS_CONNECTION_ID`. Flow: fetch `work/connectionlist` → extract `developer_token` + `refresh_token` → call `oauth_client.request_oauth_tokens_by_refresh_token(refresh_token)` → call `work/connectionupdate` with new refresh token. Runs daily at 07:00 UTC (`function_app.py:275`). Cross-link: [[connector-token-refresh]] documents the manual fallback when this workflow fails.
 
+**`MetaAdsTokenRefreshWorkflow`** (`workflows/meta_ads.py`) — Daily refresh of Meta/Facebook long-lived access tokens (~60-day expiry). Reads `app_id`, `appsecret`, `access_token` from CosmosDB connection doc `1df7d48a` via core_api, exchanges via Meta Graph API `fb_exchange_token` grant, writes new token back. Added 2026-05-21 per [[FU92-415]]. Same structural pattern as `MicrosoftAdsTokenRefreshWorkflow`. Env var: `META_ADS_CONNECTION_ID`. Runs daily at 08:00 UTC (`function_app.py:302`). Cross-link: [[connector-token-refresh]] documents the manual fallback.
+
 **`FlightCheckSnowflakeSyncWorkflow`** (`dax_api/sync/lib.py:122+`)
 
 Uploads job / flight / flight-metrics Cosmos docs to Snowflake via [[core_api]]'s `datastore/upload` endpoint (`sync/lib.py:332–362`). Three hard-coded `DataStoreDocument` instances with UUIDs that must exist in the per-environment data stores: `JOB` (`61e68798-20f5-4a38-b7e1-ffcb00e5d767`), `FLIGHT` (`54a3d07c-c8cd-40bc-8b75-822dbf1c007d`), `FLIGHT_METRICS` (`20ae845b-334b-4dd4-ade7-a28dc87142be`). Upload batch size `MAX_UPLOAD_ROWS = 10_000`. Excludes heavy fields before upload: `EXCLUDED_JOB_FIELDS = ["audit_trail", "calculations"]`, `EXCLUDED_FLIGHT_FIELDS = ["audit_trail", "rejection_notes", "metrics", "changed_fields", "calculations"]` (`sync/lib.py:78–85`). `only_recent` flag limits the pull to the last `RECENT_DAYS_TO_PULL = 30` days.
@@ -274,10 +276,11 @@ Six timer-triggered functions run on a recurring basis. Cron strings use NCronta
 | `f92_out_of_range_pacing_notifications` | `0 0 15 * * 2,4` | `0 0 14 * * 2,4` | 9am Tue + Thu | Pacing out-of-range emails |
 | `f92_flight_end_pacing_notifications` | `0 0 15 * * *` | `0 0 14 * * *` | 9am daily | Flight-end pacing emails to creators |
 | `f92_refresh_microsoft_ads_token` | `0 0 7 * * *` | `0 0 7 * * *` | 7am UTC (midnight PST) | Microsoft Ads OAuth token refresh |
+| `f92_refresh_meta_ads_token` | `0 0 8 * * *` | `0 0 8 * * *` | 8am UTC (1am PST) | Meta/Facebook long-lived token refresh ([[FU92-415]]) |
 | `f92_flight_check_job_sync` | `0 20,50 10-23 * * *` | `0 20,50 10-23 * * *` | HH:20 + HH:50, 10:20–23:50 UTC | Upload job docs to Snowflake |
 | `f92_flight_check_flight_sync` | `0 20,50 10-23 * * *` | `0 20,50 10-23 * * *` | HH:20 + HH:50, 10:20–23:50 UTC | Upload flight docs to Snowflake |
 
-Note: the `f92_refresh_microsoft_ads_token` schedule does not toggle with DST because the token refresh is not time-sensitive to the Fusion business day. The sync functions run twice an hour from ~3:20am–4:50pm PST (covering the US business day). The notification functions follow the Fusion-requested send times.
+Note: the `f92_refresh_microsoft_ads_token` and `f92_refresh_meta_ads_token` schedules do not toggle with DST because token refresh is not time-sensitive to the Fusion business day. The sync functions run twice an hour from ~3:20am–4:50pm PST (covering the US business day). The notification functions follow the Fusion-requested send times.
 
 ---
 
@@ -405,6 +408,7 @@ Canonical schema: `local.settings.template.json` (committed). Values fill in `lo
 | `MICROSOFT_ADS_CLIENT_ID` | Template says "SAME IN ALL ENVS" but `bing_ads.py:31` **ignores this env var** and hard-codes `"98fe3659-b606-4550-9b16-c5e51a792618"` — see § Pitfalls |
 | `MICROSOFT_ADS_CLIENT_SECRET` | From Dashlane |
 | `MICROSOFT_ADS_CONNECTION_ID` | Cosmos connection document ID for the Microsoft Ads connection |
+| `META_ADS_CONNECTION_ID` | Cosmos connection document ID for the Meta/Facebook Ads connection (`1df7d48a-2deb-4477-b9b0-31f654d27152`) |
 
 **Disable-timers-locally pattern:** `local.settings.template.json` sets `AzureWebJobs.<func>.Disabled: true` for every timer function. This prevents `func host start` from firing timers during local development. Always keep this pattern when deriving a local settings file.
 
@@ -506,6 +510,7 @@ This makes this repo an outlier in the ALDC Azure-deployed portfolio — contras
 3. After deploy, in Azure Portal → Function App → Configuration, set all env vars from § Environment variables.
 4. For the **staging slot**: add the following app settings and mark each as **"Deployment Slot"** scoped (checkbox in Azure Portal) so a slot-swap does not carry them into production:
    - `AzureWebJobs.f92_refresh_microsoft_ads_token.Disabled = true`
+   - `AzureWebJobs.f92_refresh_meta_ads_token.Disabled = true`
    - `AzureWebJobs.f92_flight_check_flight_sync.Disabled = true`
    - `AzureWebJobs.f92_flight_check_job_sync.Disabled = true`
    - `AzureWebJobs.f92_out_of_range_pacing_notifications.Disabled = true`
@@ -572,6 +577,7 @@ HTTP 200 (even for errors) + JSON envelope: `{"response": {"code": <int>, "messa
 | `f92_out_of_range_pacing_notifications` | `0 0 15 * * 2,4` | `0 0 14 * * 2,4` | Pacing out-of-range (Tue + Thu) |
 | `f92_flight_end_pacing_notifications` | `0 0 15 * * *` | `0 0 14 * * *` | Flight-end pacing (daily) |
 | `f92_refresh_microsoft_ads_token` | `0 0 7 * * *` | `0 0 7 * * *` | Microsoft Ads token refresh |
+| `f92_refresh_meta_ads_token` | `0 0 8 * * *` | `0 0 8 * * *` | Meta/Facebook token refresh ([[FU92-415]]) |
 | `f92_flight_check_job_sync` | `0 20,50 10-23 * * *` | `0 20,50 10-23 * * *` | Job doc Snowflake upload (2×/hr) |
 | `f92_flight_check_flight_sync` | `0 20,50 10-23 * * *` | `0 20,50 10-23 * * *` | Flight doc Snowflake upload (2×/hr) |
 
@@ -629,6 +635,7 @@ Supporting helpers: `dax_api/lib/date.py` (timezone/date utilities for `America/
 | core_api (inter-service) | Bearer token (`core_api_token`) in `Authorization` header, per-environment |
 | NetSuite (outbound) | OAuth2 `client_credentials` grant with ES256 JWT client assertion; 15-minute JWT expiry |
 | Microsoft Ads (outbound) | OAuth2 refresh-token flow via `bingads.authorization.OAuthWebAuthCodeGrant`; refresh token persisted in Cosmos connection document, refreshed daily by `f92_refresh_microsoft_ads_token` |
+| Meta/Facebook Ads (outbound) | Long-lived access token (~60-day expiry) re-exchanged daily via `fb_exchange_token` grant by `f92_refresh_meta_ads_token`; token persisted in Cosmos connection document `1df7d48a` |
 
 ---
 
@@ -674,8 +681,11 @@ Supporting helpers: `dax_api/lib/date.py` (timezone/date utilities for `America/
 
 - [[dax-media-app]] — the product this repo's `F92_workflow_app` is the backend of. Business scope, statuses, phases, NetSuite PO sync rules, UAT history. Heaviest cross-link.
 - [[entities/repos/flight-check|flight-check (repo)]] — the Next.js frontend that calls every HTTP route in this repo. See its § API surface for the caller side of every endpoint. *(Not [[flight-check]], the ops runbook.)*
-- [[connector-token-refresh]] — documents the manual fallback when `f92_refresh_microsoft_ads_token` fails. The runbook already references "the Fusion workflow function app" — that is `F92_workflow_app` in this repo.
+- [[connector-token-refresh]] — documents the manual fallback when `f92_refresh_microsoft_ads_token` or `f92_refresh_meta_ads_token` fails. Full audit matrix (2026-05-21).
 - [[bing-ads]] — Bing Ads / Microsoft Advertising connector page.
+- [[facebook-ads]] — Meta/Facebook Ads connector page. Operational status + token refresh details.
+- [[FU92-415]] — Meta token refresh automation ticket.
+- [[FU92-416]] — Trade Desk + Viant auth investigation ticket.
 - [[fusion92]] — the client. `FUSION_ACCOUNT_ID = "0fc00e34"` and the `America/Chicago` timezone decisions originate here.
 - [[core_api]] — every HTTP handler and workflow in this repo calls core_api via `DaxCoreAPIClient` or `LegacyCoreAPIClient`. Notification emails are queued through core_api's `application/email` endpoint.
 - [[core-api-data-model]] — context for the `datastore/upload` and `datastore/get` endpoints used by the Snowflake sync workflow.

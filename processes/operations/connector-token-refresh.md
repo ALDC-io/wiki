@@ -1,14 +1,26 @@
 ---
-tags: [process, operations, connector, oauth, token-refresh, bing-ads]
+tags: [process, operations, connector, oauth, token-refresh, bing-ads, meta, facebook]
 aliases: [Connector Token Refresh, Bing Ads OAuth Token Regeneration]
 sources: [Confluence CONN/1575747585, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-18
-updated: 2026-04-27
+updated: 2026-05-21
 ---
 
 # Connector Token Refresh
 
-Operational runbook for refreshing OAuth tokens across connectors. Currently documented for Microsoft Advertising (Bing Ads). Other connectors with token expiry: [[facebook-ads]] (60-day long-lived token).
+Operational runbook for refreshing OAuth tokens across connectors. Full audit completed 2026-05-21.
+
+## Token Refresh Audit (2026-05-21)
+
+| Connector | Client | Auth Type | Expiry | Auto-Refresh | Status |
+|---|---|---|---|---|---|
+| `microsoft_bing_ads_v1` | Fusion92 | OAuth refresh_token | 90 days | Daily workflow (07:00 UTC) | Covered |
+| `facebook_business_v1` | Fusion92 | Long-lived access_token | ~60 days | Daily workflow (08:00 UTC) | Covered ([[FU92-415]]) |
+| `amazon_ads_v1` | Fusion92, GEP | OAuth refresh_token | Long-lived | Connector auto-exchanges | Low risk |
+| `amazon_sellercentral_v1` | GEP | OAuth refresh_token | Long-lived | Connector auto-exchanges | Low risk |
+| `windsorai_v1` | Fusion92 | Static API key | Never | Windsor manages OAuth | No risk |
+| `trade_desk_my_reports_v1` | Fusion92 | Static auth_token | **Unknown** | None | [[FU92-416]] |
+| `viant_dsp_reporting_v1` | Fusion92 | Basic auth | **Unknown** | None | [[FU92-416]] |
 
 ## Microsoft Advertising (Bing Ads) — 90-day refresh
 
@@ -89,7 +101,85 @@ Write-Output $response.Content
 
 A successful XML response confirms the token is working.
 
+## Meta / Facebook Ads — ~60-day refresh
+
+Meta long-lived access tokens expire approximately every 60 days. An automated refresh workflow runs daily, deployed as part of [[FU92-415]].
+
+### Automated Refresh Workflow
+
+Deployed in the **Fusion workflow function app** ([[workflows|workflows repo]] — `F92_workflow_app`).
+
+- **Timer:** `f92_refresh_meta_ads_token` — daily at 08:00 UTC (1 AM PST)
+- **Workflow:** `workflows/meta_ads.py` — `MetaAdsTokenRefreshWorkflow`
+- **Connection:** `1df7d48a-2deb-4477-b9b0-31f654d27152` (Meta Ads, account `0fc00e34`)
+- **Env var:** `META_ADS_CONNECTION_ID` must be set in Function App config
+
+**Behaviour:** Reads `app_id`, `appsecret`, `access_token` from CosmosDB connection doc → calls Meta Graph API `fb_exchange_token` endpoint → writes new token back → logs days until expiry.
+
+**Constraint:** Meta tokens can only be refreshed when they are at least 24 hours old. Daily refresh keeps the token continuously alive.
+
+### Manual Process (When Automated Refresh Fails)
+
+#### Step 1: Generate a temporary access token
+
+1. Go to https://developers.facebook.com → App Dashboard → Tools → Graph API Explorer
+2. Select the ALDC app (App ID: `812919267215628`)
+3. Generate a User Access Token with `ads_read` permission
+4. Copy the temporary token
+
+#### Step 2: Exchange for long-lived token
+
+```python
+import requests
+
+response = requests.get(
+    "https://graph.facebook.com/v21.0/oauth/access_token",
+    params={
+        "grant_type": "fb_exchange_token",
+        "client_id": "812919267215628",
+        "client_secret": "<appsecret from meta.json>",
+        "fb_exchange_token": "<temporary_token>",
+    },
+)
+new_token = response.json()["access_token"]
+print(f"New token: {new_token}")
+print(f"Expires in: {response.json().get('expires_in', 'unknown')} seconds")
+```
+
+#### Step 3: Update CosmosDB connection document
+
+Use Postman or the script at `aldc-launchpad/scripts/_sync_meta_templates.py` (adapt for connection update):
+
+```
+POST {{core_api_url}}work/connectionupdate
+{
+    "account_id": "0fc00e34",
+    "connection": "1df7d48a-2deb-4477-b9b0-31f654d27152",
+    "document": {
+        "connection": {
+            "app_id": "812919267215628",
+            "appsecret": "<appsecret>",
+            "access_token": "<new_long_lived_token>"
+        }
+    }
+}
+```
+
+#### Step 4: Validate
+
+Wait for the next scheduled connector run, or trigger manually. Check that data appears in `PROD_DG1_FUSION_92.META.*` tables.
+
+## Trade Desk + Viant — Unknown Lifespan ([[FU92-416]])
+
+Both connectors use non-standard static credentials with undocumented lifespans. Investigation ticket [[FU92-416]] tracks determining whether these need automated refresh.
+
+- **Trade Desk:** `TTD-Auth` header with Base64 token. 2 active templates. Connection `2aa7e056`.
+- **Viant DSP:** Basic auth (Base64 of `user:pass`). 2 active templates. Connection `a73a6943`. Connector source explicitly notes: "It is not clear at this time what the life of this token will be."
+
 ## See Also
 
 - [[bing-ads]] — Bing Ads connector documentation
-- [[facebook-ads]] — Facebook long-lived token (~60 day expiry)
+- [[facebook-ads]] — Facebook long-lived token (~60 day expiry), operational status
+- [[trade-desk]] — Trade Desk connector documentation
+- [[FU92-415]] — Meta token refresh automation ticket
+- [[FU92-416]] — Trade Desk + Viant auth investigation ticket

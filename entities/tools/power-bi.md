@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
-sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20]
+sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21]
 created: 2026-04-16
-updated: 2026-05-20
+updated: 2026-05-22
 ---
 
 # Power BI
@@ -53,6 +53,15 @@ Defined in `__REPORT_COMMON_VIEWS` and per-client `snowflake/report_common/` dir
 - `RETAIL_DAILY_SALES_FACT.sql` — unions budget and actual sales data
 - `RETAIL_DAILY_SALES_LOCATION.sql`
 
+## Power BI Workspaces (Fusion92)
+
+| Workspace | Model | Owner | Refresh Cadence | Notes |
+|-----------|-------|-------|-----------------|-------|
+| FUSION_92 Prod Models | Activation Model | `paul.russell@aldc.io` | Scheduled (verify post-takeover) | Taken over 2026-05-22 (FU92-417) |
+| FUSION_92 Test Models | Activation Model | `paul.russell@aldc.io` | Scheduled (verify post-takeover) | Taken over 2026-05-22 (FU92-417) |
+
+> **Incident 2026-05-22:** Both Fusion92 Activation Model datasets failed refresh — previous owner removed from Azure AD (`DMTS_UserNotFoundInADGraphError`). Paul took over both, re-entered Snowflake credentials, refreshed successfully. See FU92-417.
+
 ## Power BI Workspaces (GEP)
 
 | Workspace | Workspace ID | Dataset | Dataset ID | Snowflake Env | Refresh Cadence |
@@ -63,7 +72,11 @@ Defined in `__REPORT_COMMON_VIEWS` and per-client `snowflake/report_common/` dir
 | GEP Prod Reports | `11b7df98-b2bd-4cea-a01c-42d8a63a7134` | Daily Sales | `c35abad7-c685-4ddb-a352-2b761f98618e` | `PROD_DG1_GEP` | No schedule. |
 | GEP Sandbox Models | `8545f3cb-4e2d-4985-bf31-79066248c9be` | GEP_Sandbox_Current | `fb41970d-2beb-4ed9-9f82-35c6439b35ea` | Per-ticket sandbox DB | Manual only. |
 
-> ⚠️ **Do not use GEP Test Reports for UAT.** The "Daily Sales" dataset there has no scheduled refresh and is stale (last refresh Oct 2024). Always use **GEP Test Models → Data Model** for UAT validation. **Action item (2026-05-20):** Rename "GEP Test Reports" to "GEP Test Reports (LEGACY - DO NOT USE)" and archive. Owner: `karen.prete@aldc.io` — confirm nothing depends on it before archiving.
+> ⚠️ **Do not use GEP Test Reports for UAT.** The "Daily Sales" dataset there has no scheduled refresh and is stale (last refresh Oct 2024). Always use **GEP Test Models → Data Model** for UAT validation. **Action item:** Rename "GEP Test Reports" workspace to "GEP Test Reports (LEGACY - DO NOT USE)" and archive. Owner: `karen.prete@aldc.io` — nothing depends on it as of 2026-05-21 (Eclipse Test was the last dependency, now resolved).
+
+> **Eclipse Test report fix (2026-05-21):** GEP/Navira users accessing reports via `eclipse-test.aldc.io/account/reports/` were seeing stale data because the Eclipse Django app's report record (pk=51, Postgres) pointed to Power BI Report ID `a86256ca-7fa8-439e-9b28-605107640086` in the legacy workspace. Fixed by updating the `power_bi_report` field to `15128c39-dcbf-4ed5-a52b-02080f0ed315` (the "Data Model" report in GEP Test Models workspace). Report renamed from "Daily Sales" to "Test Data Model". The PBI Report ID is stored in Eclipse's Django Postgres database (`aldctestpgdbportal1c01.postgres.database.azure.com`, database `eclipse`), NOT in [[core_api]] CosmosDB. Update scripts in `aldc-launchpad/scripts/pbi/`.
+>
+> **Prod risk:** GEP Prod Reports workspace (`11b7df98`) also has no refresh schedule and its "Daily Sales" report (`7564da58-7788-4b73-9e7a-fb3d1ffd590b`) may have the same issue if prod Eclipse embeds it. Verify whether prod users access reports through Eclipse prod — if so, apply the same fix pointing to GEP Prod Models report (`1d096c9d-4839-49e5-992c-b755de578098`).
 
 > Note: an earlier wiki entry (daily/2026-04-17.md) recorded wrong workspace/dataset IDs (`85c00659` / `1ac238e9`). Those point to "Account Summary Test Canada DG1" (a different client). The correct IDs are in the table above — verified 2026-05-20 via Power BI REST API.
 
@@ -104,7 +117,9 @@ After a Snowflake warehouse change, the scheduled refresh will eventually pick i
 - **Stale data**: PBI model not refreshed after Snowflake deploy — always refresh after deploying warehouse changes
 - **Schema mismatch**: If Snowflake view columns change, PBI model may error on refresh — update the PBI model to match
 - **Date columns**: Some date columns may not import correctly into PBI models — may need research per ticket (noted in [[GP-208]] to-do)
-- **Dataset owner removed from Azure AD**: If the dataset owner's account is deleted or deprovisioned, scheduled refresh is automatically disabled and all stored credentials are wiped. Error code: `DMTS_UserNotFoundInADGraphError`. Fix: take over the dataset (Settings → Take over), re-enter all data source credentials from Dashlane, re-enable scheduled refresh. See incident 2026-05-20 (GEP Prod Models). **Long-term**: use a dedicated service account as dataset owner so individual offboarding doesn't break refreshes.
+- **Marketplace table is a bridge table, not a dimension**: The GEP Marketplace table has 19,934 rows — one per unique product-marketplace combination (MARKETPLACE_KEY is a hash). It is NOT a simple dimension with one row per marketplace name. Using Marketplace Name as a row field in a table visual resolves to the bridge-table grain (e.g., 174 rows for Amazon UK instead of the expected 435 order lines). Fix: use Marketplace Name as a **slicer or filter**, then use **Count Distinct of Order Line ID** as the measure. Never put Marketplace Name and Order Line ID in the same table visual as row fields. See [[GP-200]] Pitfall 4.
+- **Client workspace access not provisioned for UAT**: GEP Test Models workspace only has internal ALDC accounts by default. External client users (e.g., `jshuster@navira.io`) need a provisioned `@gep.aldc.io` account + PBI PPU license + workspace Viewer access before they can test. Karen Prete or Lori Beck have M365 admin rights. See [[GP-200]] UAT findings 2026-05-21.
+- **Dataset owner removed from Azure AD**: If the dataset owner's account is deleted or deprovisioned, scheduled refresh is automatically disabled and all stored credentials are wiped. Error code: `DMTS_UserNotFoundInADGraphError`. Fix: take over the dataset (Settings → Take over), re-enter all data source credentials from Dashlane, re-enable scheduled refresh. Incidents: GEP Prod Models 2026-05-20; Fusion92 Prod + Test Models 2026-05-22 (FU92-417, both taken over by `paul.russell@aldc.io`, refreshes confirmed green). **Long-term**: use a dedicated service account as dataset owner so individual offboarding doesn't break refreshes.
 
 ## PBI Diagnostic Tool
 

@@ -3,7 +3,7 @@ tags: [entity, tool, connector, facebook, meta, marketing-api, oauth]
 aliases: [Facebook Marketing API Connector, Meta Ads Connector, Facebook Ads Connector]
 sources: [Confluence CONN/898695196, Confluence CONN/899645489]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-05-21
 ---
 
 # Facebook Marketing API Connector
@@ -96,6 +96,30 @@ FacebookAdsApi.init(app_id=app_id, app_secret=app_secret, access_token=long_live
 my_account = AdAccount(f'act_{ad_account_id}')
 campaigns = my_account.get_campaigns()
 ```
+
+## Operational Status (2026-05-21)
+
+### Fusion92 — Two data paths
+
+| Path | Connector | Accounts | Status |
+|---|---|---|---|
+| Windsor (`windsorai_v1`) | `ad_insights_windsor.json` | BCBSM x3 + ~20 others | **Active** — daily, current through today |
+| Direct API (`facebook_business_v1`) | Per-account templates | RBA, CCCU, PCU | RBA active; CCCU/PCU set to **inactive** (no campaigns since Nov 2023) |
+
+- **Windsor table:** `META.CURRENT_FACEBOOK_AD_INSIGHTS` — 1.9M rows, $1.2M May spend
+- **Direct tables:** `META.CURRENT_AD_SET_{account}_AD_SET_INSIGHTS` — only RBA actively loading
+- **Utility table:** `WAREHOUSE_UTILITY.ALL_META_AD_SET_INSIGHTS` unions both paths
+
+### Token status
+
+- **Windsor:** OAuth managed by Windsor.ai — no ALDC action needed
+- **Direct API:** Long-lived token in Eclipse connection `1df7d48a` (`meta.json`) — **no auto-refresh, expires ~60 days**
+- **Jira:** [[FU92-415]] — Token refresh automation ticket (precedent: [[FU92-246]] MS Ads refresh)
+
+### Known issues
+
+- April 2026 25-day loading gap ([[FU92-398]]) caused by Viant queue blockage disabling all Fusion schedules + expired token. Fully resolved, no data loss.
+- CCCU and PCU accounts stopped running Meta campaigns in Nov 2023. Templates set to inactive 2026-05-21.
 
 ## Key Notes
 

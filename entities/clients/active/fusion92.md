@@ -3,7 +3,7 @@ tags: [entity, client, fusion92, media, advertising]
 aliases: [Fusion92, Fusion 92]
 sources: [clients repo FUSION_92/ directory]
 created: 2026-04-16
-updated: 2026-04-16
+updated: 2026-05-22
 ---
 
 # Fusion92
@@ -75,9 +75,19 @@ Media activation and advertising analytics client. Aggregates campaign performan
 
 - [[custom-fusion-92-audience-api]] — DIOS-to-DAX API. Takes raw audience data from Fusion's internal DIOS web app, joins + formats per destination ad platform (Reddit, Meta, etc), outputs to Nextcloud. Runs on-prem due to 60 GB-memory / 2–5 minute request constraints.
 
+## Power BI Workspaces
+
+| Workspace | Model | Owner | Status |
+|-----------|-------|-------|--------|
+| FUSION_92 Prod Models | Activation Model | `paul.russell@aldc.io` | Active — taken over 2026-05-22 |
+| FUSION_92 Test Models | Activation Model | `paul.russell@aldc.io` | Active — taken over 2026-05-22 |
+
+Previous dataset owner was removed from Azure AD, breaking scheduled refresh. Both models taken over and credentials re-entered 2026-05-22 (FU92-417). See [[Power BI]] § Fusion92 Workspaces.
+
 ## Active Tickets
 
 - [[FU92-342]] — (see ticket page)
+- [[FU92-417]] — PBI Activation Model dataset owner takeover (Done, 2026-05-22)
 
 ## ALDC Team
 

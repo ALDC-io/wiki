@@ -1,13 +1,13 @@
 ---
-tags: [ops-platform, launchpad, credentials, oauth, azure-functions, active]
+tags: [ops-platform, launchpad, credentials, oauth, azure-functions, completed]
 created: 2026-05-13
-updated: 2026-05-14
+updated: 2026-05-21
 ---
 
 # Phase 1B: Secure Credential Submission
 
 **Boot prompt:** `aldc-launchpad/.claude/commands/launchpad-phase1b.md` → `/launchpad-phase1b`
-**Status:** In Progress — scaffold + backend + dashboard wiring complete, 11/11 local tests passing. Remaining: Azure provisioning + production deploy.
+**Status:** Complete — QA deployed (2026-05-21). All functions live at `func-aldc-cred-qa.azurewebsites.net`, Key Vault at `aldc-cred-vault-qa`, RBAC active, E2E verified. UAT/Prod promotion via same Bicep with `env=uat`/`env=prod`.
 **Effort:** 5–7 days
 **Depends on:** Phase 1A (dashboard), Phase 0R (monorepo)
 
@@ -68,10 +68,10 @@ Security: Key Vault stores secrets, credentials.json stores metadata only.
 
 | # | Deliverable | Status | Notes |
 |---|---|---|---|
-| 1 | Azure Key Vault `aldc-credential-vault` | Bicep ready | `infra/credential-vault.bicep` — Standard tier, Canada Central, RBAC auth, purge protection |
-| 2 | Azure Function App (6 functions) | Built + tested | `api/credential-exchange/function_app.py` — all 6 routes, 11/11 E2E tests passing locally |
+| 1 | Azure Key Vault `aldc-cred-vault-qa` | Deployed (QA) | `infra/credential-vault.bicep` — parameterized `env` (qa/uat/prod), Standard tier, Canada Central, RBAC auth, purge protection, soft delete 90d |
+| 2 | Azure Function App (8 functions) | Deployed (QA) | `func-aldc-cred-qa.azurewebsites.net` — 8 HTTP endpoints, Python 3.11, consumption plan, managed identity with Key Vault Secrets Officer |
 | 3 | Client submission page | Built | `platform/portal/connect/submit.html` — multi-state (API key form, OAuth auth, user/pass), dark theme, security headers |
-| 4 | Dashboard integration | Wired | "Request from Client" → `generate-link`/`generate-oauth-url`, "Enter Credential" → `enter-credential`, "Validate" → `get-status`, toast notifications, copy-link + email UI |
+| 4 | Dashboard integration | Wired + live | Dashboard points to QA API, function key auth via `apiHeaders()`, localStorage key storage (`setApiKey()`) |
 
 ### Function Inventory
 
@@ -82,7 +82,9 @@ Security: Key Vault stores secrets, credentials.json stores metadata only.
 | `enter-credential` | `POST /api/credentials/enter` | Function key | Working — engineer direct entry |
 | `oauth-callback` | `GET /api/oauth/callback/{provider}` | Anonymous (state) | Working — mock in dev, real HTTP in prod |
 | `generate-oauth-url` | `POST /api/credentials/generate-oauth-url` | Function key | Working — Amazon LWA + TikTok adapters |
-| `get-status` | `GET /api/credentials/{id}/status` | Function key | Working — metadata only |
+| `get-status` | `GET /api/credentials/{id}/status` | Function key | Working — metadata only, accepts `?secretName=` for Key Vault lookup |
+| `validate` | `POST /api/credentials/{id}/validate` | Function key | Working — provider-specific validation against Key Vault secret |
+| `provision` | `POST /api/credentials/{id}/provision` | Function key | Working — creates Prefect blocks across environments |
 
 ### Files Created
 
@@ -106,6 +108,13 @@ infra/
 ```
 
 ## Session Log
+
+### 2026-05-21 — Client credential portal built + OAuth flow E2E verified
+
+- did: Built complete client-facing credential portal for Navira/GEP meeting. **Azure deployment**: Bicep parameterized (env: qa/uat/prod), deployed Key Vault (`aldc-cred-vault-qa`) + Function App (`func-aldc-cred-qa`, 12 endpoints) + Storage static website (`staldccredqa.z9.web.core.windows.net`). **Client dashboard** (`dashboard.html`): token-gated (30-day HMAC), shows all 12 GEP credentials with status badges, Jira ticket refs (GP-238/239/240/245, ALDC-119, GP-219/230), progress bar (42%), action buttons per credential type. Sorted: actionable items first. Playwright verified (all checks pass, 0 console errors, mobile responsive). **Amazon UK OAuth flow** — solved 5-minute token expiry: updated Amazon LWA adapter with regional endpoints (NA/EU/FE), `amazon-ads-uk` routes to `eu.account.amazon.com` (auth) and `api.amazon.co.uk` (token exchange). OAuth callback now verifies token by calling `advertising-api-eu.amazon.com/v2/profiles` before storing. Configured `AMAZON_LWA_CLIENT_ID` + `AMAZON_LWA_CLIENT_SECRET` on Function App. Registered callback URL in Amazon Developer Console. **E2E tested**: portal → "Authorize Now" → Amazon EU login → authorize → callback exchanged code in milliseconds → verified against EU profiles API → stored in Key Vault (`gep-prefect--amazon-ads-uk--oauth`) → auto-redirect back to dashboard. **Inline detail forms**: draft credentials (Target+, SmartScout, Purchasing System, TikTok, Email Marketing) have credential-specific input forms instead of "reply by email". Client submits → stored in Key Vault → Jira comment posted on linked ticket (`JIRA_API_TOKEN` configured). **Credential audit**: cross-referenced all credentials against Jira (ALDC-119, GP-219, GP-230, GP-238, GP-239, GP-240, GP-245). Added 3 missing credentials from ALDC-140 master tracker: Target+ (GP-240), SmartScout (GP-245), Purchasing System (GP-245). Corrected Amazon UK status from "validated" to "pending_client" (previous auth code expired). Added `lastVerified` dates and `storage: eclipse` indicators to validated credentials.
+- decided: QA only for the meeting (no UAT/Prod — adds risk without benefit). Client dashboard uses HMAC token auth (no login — shareable link, 30-day TTL). Azure Blob Storage static website for hosting (SWA CLI had binary issues). OAuth state param carries dashboard return URL for post-auth redirect. Amazon LWA adapter uses regional endpoints dict (na/eu/fe). Jira notification via REST API with Paul's API token. Inline forms replace email-based info collection.
+- status: Portal live and tested. 12 credentials, OAuth flow verified end-to-end, inline forms + Jira notification working. Windsor auth links to be added tomorrow before meeting.
+- next: Add Windsor auth links (Google Ads GP-238, Meta GP-239) to portal. Delete test OAuth token from Key Vault. Meeting with Navira.
 
 ### 2026-05-14 — Credential data corrected, provider search, committed
 
