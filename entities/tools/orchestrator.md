@@ -3,7 +3,7 @@ tags: [tool, platform, aldc-launchpad, automation, orchestration]
 aliases: [Session Orchestrator, Claude Code Orchestrator, Pipeline Executor]
 sources: []
 created: 2026-05-15
-updated: 2026-05-15
+updated: 2026-05-26
 ---
 
 # Session Orchestrator
@@ -78,29 +78,70 @@ Self-enrichment instructions tell the spawned session to:
 - Fetch live Jira issue status via Atlassian MCP
 - Synthesize pre-loaded + live context before starting work
 
-## Pipeline Types (Proposed — Not Yet Implemented)
+## Pipeline Types (Production — 6 Active, 1 Deferred)
 
-15 reusable pipeline types identified as DAG templates. Each stage = one Claude Code session in a worktree:
+Migrated from proposed list to production DAG-based execution. Each stage is either a `claude-p` session, a `script` (Python callable), or a `gate` (manual approval or condition poll).
 
-1. **Connector credential retrieval** — OAuth token exchange, credential validation
-2. **Prefect implementation** — flow + task design, testing, deployment
-3. **Snowflake warehousing** — schema design, SQL development, testing
-4. **Bug fix** — investigation, root cause, fix, testing, deployment
-5. **New client onboarding** — discovery, setup, template config, go-live
-6. **Existing client migration** — from legacy to new framework
-7. **Azure provisioning** — infrastructure as code, deployment, validation
-8. **Eclipse → Prefect migration** — connector port, testing, cutover
-9. **dbt development** — schema design, model implementation, testing
-10. **Cube semantic layer** — metric definition, dimension design, validation
-11. **Data quality monitoring** — rules, testing, alerting
-12. **CI/CD infrastructure** — GitHub Actions, deployment gates, testing
-13. **Incident response** — triage, mitigation, root cause, prevention
-14. **Credential rotation** — secret refresh, key management, deployment
-15. **Documentation sync** — wiki updates, runbook generation, knowledge transfer
+| Type | Stages | Purpose |
+|---|---|---|
+| `connector-migration` | 15 | Eclipse → Prefect v3 migration (analyze → create-flow → test → PR → deploy → verify → parity) |
+| `credential-provision` | 6 | Credential collection → Key Vault → Prefect Block |
+| `data-parity-test` | 5 | Post-migration data validation (legacy vs Prefect output) |
+| `connector-promotion` | 14 | QA → UAT → Prod with gates and parity checks |
+| `client-onboarding` | — | Provision new client end-to-end (Snowflake, RBAC, blocks) |
+| `connector-activation` | — | Deploy migrated connector for a specific client |
+| `prefect-infra` | deferred | One-time setup (already complete) |
 
-**Architecture:** Each pipeline type is a DAG of reusable stages. Each pipeline run creates a PR at completion.
+## Pipeline Engine (2026-05-26)
 
-**Next Step:** Opus plan-mode session to design the pipeline DAG system.
+**Location:** Migrated to `prefect-connectors/orchestrator/` (was `aldc-launchpad/scripts/`)
+
+**DAG Execution:**
+- Stages define `depends_on: [...]` for dependency ordering
+- `_find_ready_stages()` computes which stages can run in parallel
+- DAG view in UI shows parallel execution capability
+- Auto-advance on success unless `auto_advance: false` (manual gate)
+
+**Stage Types:**
+- `claude-p` — launches `claude -p` subprocess in git worktree
+- `script` — calls Python callable directly (jira_ops, prefect_ops, snowflake_ops, git_ops, gate_checks)
+- `gate` — manual approval or condition-based polling (Docker image ready, CI checks pass)
+
+**Gate Auto-Policy:** Configurable conditions per gate (e.g., `tests_pass: true`, `parity_score_min: 99.5`). Auto-approves if conditions met.
+
+## Engine Modules (14 total)
+
+| Module | Purpose |
+|---|---|
+| `circuit_breaker.py` | Closed/open/half_open state machine for Prefect/Snowflake/GHCR/Jira calls. Prevents cascading failures. |
+| `pipeline_agent.py` | Monitors stage failures, classifies errors, auto-retries (max 2), failure pattern learning via memory store, global pause on recurring failures, stale-dispatch watchdog. |
+| `analytics.py` | Per-connector cost tracking, budget forecasting, stage metrics (avg/p95 duration, cost, success rate). |
+| `audit.py` | Append-only pipeline event log per pipeline (stage started/completed/failed, gate approvals, rollbacks). |
+| `memory.py` | Per-scope persistent memory (decisions, learnings, incidents). Keyword search. Used by pipeline agent for failure correlation. |
+| `notifications.py` | Webhook dispatch (Slack/Teams/generic), exponential backoff retry, delivery logging. |
+| `quality_observatory.py` | Parity score aggregation, per-table metrics (row counts, schema match, freshness). |
+| `health_monitor.py` | Polls Prefect/Snowflake for runtime metrics. Alert rules engine (gt/lt/eq operators). |
+| `wave_scheduler.py` | Batch connector migrations in ordered waves with parallelism control. |
+| `rollback.py` | Backward walk from failed stage with undo callable registry. |
+| `validation.py` | Auto-checks session output (command, file_exists, grep). Quality gate mapping. |
+| `events.py` | In-memory event bus, SSE pub/sub, ring buffer. |
+| `work_guard.py` | Git repo safety checks, session lock files. |
+| `canary.py` | Canary/shadow deployment validation against production Snowflake. |
+
+## Hardening (2026-05-26 session)
+
+Key fixes and features added during pipeline hardening sprint:
+
+1. **Agent retry was broken** — `advance_pipeline()` only matches dispatched/pending stages, so retrying a failed stage silently did nothing. Fixed: agent uses `restart_from_stage()` which resets to pending and re-dispatches.
+2. **Stale dispatch recovery** — `recover_stale_pipelines()` scans on startup + periodic watchdog for stages stuck in dispatched >30min.
+3. **`create_pr` commits before pushing** — Claude sessions don't always commit their work. Script now calls `commit_changes()` first and verifies commits exist ahead of main.
+4. **Prefect deployment name** — Was generating `name/name` with a slash causing API 500s. Fixed to just `name`.
+5. **Circuit breaker** — Prevents cascading Prefect API failures across all pipelines.
+6. **Stage metrics** — Cost/tokens/duration now flow from sessions to pipeline stage objects for analytics.
+7. **Failure pattern learning** — Memory store tracks incidents; global pause if 3+ pipelines fail at same stage within 30min.
+8. **Test coverage** — 74 → 122 tests.
+
+**Remaining (phases 5-9):** Hard budget enforcement, SLA auto-escalation, performance dashboard UI, configurable parallelism, prompt effectiveness tracking.
 
 ## UI Design
 

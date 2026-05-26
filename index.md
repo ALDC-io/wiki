@@ -230,7 +230,9 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-217]] — CI/CD Pipeline + Infrastructure Right-Sizing. Docker publish gated behind quality gate, standalone `docker-publish.yml` removed. PostgreSQL D2ads_v5→B1ms, App Service P2v3→S1. ~$265/mo saved. 2026-05-03.
 - [[GP-218]] — QA/UAT/Prod Work Pools & Promotion Pipeline. 3 Work Pools, 3 worker Container Apps, 3 Snowflake blocks, `short_code` fix, promotion pipeline documented. Infra complete 2026-05-02, GEP E2E pending PR #1.
 - [[GP-248]] — Prefect Snowflake Environment Isolation. 3 databases (`QA/TEST/PROD_DG1_GEP_PREFECT`), 3 `PREFECT_SVC` service accounts, 2 PBI workspaces. Done 2026-05-02.
-- [[GP-256]] — Add Return Rate KPIs (unit-based) to SKU Profitability Dashboard. Two measures: per-SKU + brand-level. Heather confirmed unit-based 2026-05-04.
+- [[GP-256]] — Add Return Rate KPIs (unit-based) to SKU Profitability Dashboard. DAX measure deployed to Prod via XMLA 2026-05-22. Navira-demo frontend update remaining.
+- [[GP-259]] — Orders/Return and COGs for SKU Profitability. Measures already exist in GEP Prod model. Navira-demo frontend update remaining.
+- [[GP-261]] — Navira Snowflake → ALDC ingestion. First Snowflake-to-Snowflake connector. Architecture decision: Prefect ETL Pipeline (2026-05-25). Awaiting Justin's response.
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 - [[GP-PENDING-infra-connector-failures]] — PENDING: four long-running infra failures (NFS mount missing, SQL Server unreachable, Eclipse Core API DNS, Fusion92 expired credentials). Discovered 2026-05-22. 10 GEP + 7 F92 templates failing, 13–27+ days stale.
 - [[GP-PENDING-sales-data-outage-2026-05-22]] — RESOLVED incident: ~14-hour task chain suspension (2026-05-21 19:52 – 2026-05-22 09:14 PT). `PROD_DG1_ROLE_CORE_SVC_DA8904DB` lacked USAGE on `PROD_DG1_ALDC_LIBRARY`; `SALES_FCT_ORDERLINE` view expansion failed at step 7; Snowflake auto-suspended root task. Fix: explicit USAGE + SELECT grants. PBI refreshed 16:18 UTC. +1,387 orders / +5,114 order lines recovered.
@@ -238,6 +240,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 ### Fusion92
 - [[FU92-342]] — Viant campaign conversions fact table. Root cause: CONVERSION_EVENT_ID missing from connector PK caused duplicates. Fixed at source.
 - [[FU92-394]] — Viant DSP actuals missing after 4/2. Connector timeout bug → schedules disabled → never re-enabled. Fix + backfill.
+- [[FU92-393]] — NetSuite sandbox 500 error. Root cause: wrong Client ID stored in Azure env var. Fix: new integration + cert + updated env vars on aldctestfnapf921c01. **Status: In Progress — auth fixed, needs E2E PO sync test.**
 - [[FU92-395]] — DAX user role error on approved flight. Ken Kocna can't view flight, persists after re-login. Resolved via FU92-396.
 - [[FU92-396]] — Stale JWT role blocking Manual Metrics Input. Fix: periodic role refresh from CosmosDB in JWT callback. PR #35.
 - [[FU92-397]] — NetSuite PO Employee field shows wrong person. Root cause: employee set to project PM, not syncing user. Fix: pass user identity from frontend, look up NS employee. **Status: Deployed to Production 2026-05-22 — Awaiting Client Confirmation.**

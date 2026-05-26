@@ -3,7 +3,7 @@ tags: [entity, repo, prefect-connectors, aldc, prefect, data-plane]
 aliases: [prefect-connectors, prefect connectors repo]
 sources: [GP-247 session 2026-05-01, GP-218 work pool setup 2026-05-02, entities/repos/connector.md, entities/tools/prefect.md]
 created: 2026-05-01
-updated: 2026-05-02
+updated: 2026-05-26
 ---
 
 # prefect-connectors
@@ -109,9 +109,22 @@ Flow run `astute-waxbill` (UUID `ef442cb4`): **COMPLETED**
 - Snowflake target: `QA_DG1_ALDC_QA.EXCHANGE_RATES.*` on og35375
 - All pipeline layers proven: GHCR pull → managed identity → Prefect server → Snowflake
 
+## Connector Orchestrator (2026-05-26)
+
+The repo now includes a full pipeline orchestrator at `orchestrator/`. Run with `python -m orchestrator` (serves at port 8765). See [[orchestrator]] for full engine documentation.
+
+**Key capabilities:**
+- 6 production pipeline types (connector-migration, credential-provision, data-parity-test, connector-promotion, client-onboarding, connector-activation)
+- 14 engine modules (circuit breaker, pipeline agent, analytics, audit, memory, notifications, quality, health, waves, rollback, validation, events, work guard, canary)
+- Web UI with connector table, pipeline DAG view, session monitor, quality/health/analytics dashboards
+- 122 tests (up from 74 after 2026-05-26 hardening sprint)
+
+**Active migration pipelines (2026-05-26):** 6 connectors in flight — exchangeratesapi (GP-271), seller_cloud (GP-272), amazon_ads (GP-273), amazon_sellercentral (GP-274), shopify_conn (KA-15), windsorai (GP-275). PRs: #11, #12, #13.
+
 ## See Also
 
 - [[connector]] — legacy data-plane repo (still live, do NOT archive)
+- [[orchestrator]] — pipeline engine documentation (14 engine modules, hardening status)
 - [[Prefect]] — orchestration infrastructure, Azure resources, Work Pool config
 - [[connector-development-standards]] — canonical Prefect connector pattern
 - [[phase-0-prefect-foundation]] — Phase 0 sprint results and roadmap

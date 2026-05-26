@@ -3,7 +3,7 @@ tags: [workflow, navira, credentials, auth, questionnaire]
 aliases: [Navira Credentials, Navira Auth Questionnaire]
 sources: [eclipse_exp/frontend/public/navira/navira-auth-questionnaire.html]
 created: 2026-04-27
-updated: 2026-04-30
+updated: 2026-05-25
 audited: 2026-04-28
 ---
 
@@ -19,6 +19,7 @@ Credential-related communications from Navira. Newest first.
 
 | Date | From | To | Subject | Key Details |
 |---|---|---|---|---|
+| 2026-05-25 | Paul Russell (paul.russell@aldc.io) | — (system) | Windsor auto-link-generation deployed | Windsor API integrated into `func-aldc-cred`. `GET /api/windsor/check-status` and `POST /api/windsor/generate-link` endpoints live. Client credential dashboard now generates fresh Windsor OAuth links at click time — eliminates expired-link problem. Google Ads + Meta/Facebook supported. `WINDSOR_API_KEY` set on Function App. |
 | 2026-05-08 | Paul Russell (paul.russell@aldc.io) | Lori Beck (lori.beck@aldc.io) | GP-221 UK PPC OAuth complete | UK token exchange completed. Profile ID **1236242149887729** (GBP, Europe/London). 12 EU profiles returned (UK, DE, FR, IT, ES, NL, SE, PL, IE, BE, AE, SA). No further Navira action needed. ALDC to update pipeline config + validate data flow. |
 | 2026-05-07 | Justin Shuster (jshuster@navira.io) | Paul Russell (paul.russell@aldc.io) | UK credentials call scheduling | Live call scheduled **Fri 2026-05-08, 12:30–1:30 PM EST** (9:30–10:30 AM PST) with Justin + third party to complete UK Amazon Ads OAuth code exchange in real time. Codes expire in ~5 min — live call ensures immediate exchange. |
 | 2026-04-30 | Paul Russell (paul.russell@aldc.io) | Lori Beck (via Jira GP-238, GP-239) | Windsor auth links for Google Ads + Facebook Ads | Decision: use Windsor.ai (ALDC existing Plus account, $0 incremental cost). Auth links generated for Navira to click: Google Ads (`google_ads`) + Facebook Ads (`facebook`). Posted to GP-238 and GP-239. Pending Navira authorization. |
@@ -28,9 +29,9 @@ Credential-related communications from Navira. Newest first.
 
 | Platform | Auth Method | Required IDs | Status | Phase |
 |---|---|---|---|---|
-| **Google Ads** | Windsor.ai OAuth | MCC Account ID(s) — Amazon vs D2C split TBD | **Windsor auth link sent** (2026-04-30, GP-238). Navira to click: `https://onboard.windsor.ai/co-user-login?access_token=GIkEWABkIeIDb47F77mXBIGKUTnoske8Jn7TOu5Nxs&allowed_sources=google_ads`. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
+| **Google Ads** | Windsor.ai OAuth | MCC Account ID(s) — Amazon vs D2C split TBD | **Auto-generated links** (2026-05-25). Windsor API integration deployed to `func-aldc-cred` — links generated at click time via portal, never expire before use. Previous static links expired before Justin's ads person could click. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
 | **Amazon Advertising API** | LWA OAuth | US/UK/CA profile IDs | **All 3 marketplaces active.** UK complete (2026-05-08) — Profile ID 1236242149887729, GBP, 12 EU profiles. US active (708K rows). CA confirmed active (68K rows, 2026-05-08). | 1A |
-| **Meta (Facebook) Ads** | Windsor.ai OAuth | Business Manager ID, Ad Account ID(s) | **Windsor auth link sent** (2026-04-30, GP-239). Navira to click: `https://onboard.windsor.ai/co-user-login?access_token=5UFMADUyRlhi5TnnYXfwTzWDevTewQiCTlUFmqjybX&allowed_sources=facebook`. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
+| **Meta (Facebook) Ads** | Windsor.ai OAuth | Business Manager ID, Ad Account ID(s) | **Auto-generated links** (2026-05-25). Windsor API integration deployed — links generated at click time. Pending Navira authorization. ALDC field verification needed post-auth. | 1A |
 | **TikTok for Business** | OAuth 2.0 | Business Center ID | Net New — no ALDC connector or credentials exist | 1B |
 | **Email Marketing Platform** | API Key or OAuth | Platform TBD (Klaviyo/Mailchimp/HubSpot?) | TBD — platform not yet identified | 1B |
 | **Target+** | API or SFTP | Seller account | TBD — platform not yet confirmed | 1B |

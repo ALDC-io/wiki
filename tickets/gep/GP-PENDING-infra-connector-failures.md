@@ -1,9 +1,9 @@
 ---
-tags: [ticket, gep, fusion92, infrastructure, connector, operations, pending, incident]
+tags: [ticket, gep, fusion92, infrastructure, connector, operations, resolved, incident]
 aliases: [GP-269, GP-PENDING-infra-connector-failures, Infra Connector Failures, NFS Mount Missing, SQL Server Unreachable, Eclipse Core API DNS]
 sources: []
 created: 2026-05-22
-updated: 2026-05-22
+updated: 2026-05-25
 first_alerted: ~2026-05-09
 ---
 
@@ -13,7 +13,7 @@ Four long-running infrastructure failures discovered 2026-05-22 during investiga
 
 ## Status
 
-`in-progress` — Issues 1, 2, 3, and 4A fully resolved and verified 2026-05-22. Issue 4A production-verified: 3,233+ partitions completed successfully with new secret. Only Issue 4B remains — blocked on Fusion92 IP whitelist request.
+`resolved` — GP-269 closed 2026-05-25. All GEP issues resolved and stable for 3+ days. Backup containers removed from Kamloops + Coquitlam. Issue 4B (Viant DSP IP whitelist) split to [[FU92-418]].
 
 ### Resolution Log (2026-05-22)
 
@@ -281,7 +281,7 @@ A Snowflake network policy on the Viant DSP account `zj81514` is blocking the co
 - [x] ~~Update Dashlane entries~~ — secret + refresh token updated 2026-05-22
 - [ ] Remove backup containers (`*-backup-pre-envupdate`) on Kamloops + Coquitlam after 24h stability
 - [ ] **BLOCKED:** Whitelist request sent to Fusion92 via Lori + Support (CC Mike Stuart) 2026-05-22. Awaiting response. Agent IP `50.98.149.51` on Snowflake account `zj81514` (Issue 4B)
-- [ ] Renew ALDC Email MCP Server secret before 2026-05-25 (discovered during tenant audit)
+- [x] ~~Renew ALDC Email MCP Server secret before 2026-05-25~~ — new secret `ALDC Email MCP_26_05_24` created by JK 2026-05-23 (expires 2028-05-22). Recorded in `vault/infra-credentials.md`. ALDC-175 created for automated expiry monitoring.
 - [ ] Review 38 expired tenant secrets for cleanup or renewal
 
 ## See Also
