@@ -128,20 +128,34 @@ Migrated from proposed list to production DAG-based execution. Each stage is eit
 | `work_guard.py` | Git repo safety checks, session lock files. |
 | `canary.py` | Canary/shadow deployment validation against production Snowflake. |
 
-## Hardening (2026-05-26 session)
+## Hardening (2026-05-26 — all 9 phases complete)
 
-Key fixes and features added during pipeline hardening sprint:
+### Phases 1-4 (morning session)
 
-1. **Agent retry was broken** — `advance_pipeline()` only matches dispatched/pending stages, so retrying a failed stage silently did nothing. Fixed: agent uses `restart_from_stage()` which resets to pending and re-dispatches.
-2. **Stale dispatch recovery** — `recover_stale_pipelines()` scans on startup + periodic watchdog for stages stuck in dispatched >30min.
-3. **`create_pr` commits before pushing** — Claude sessions don't always commit their work. Script now calls `commit_changes()` first and verifies commits exist ahead of main.
-4. **Prefect deployment name** — Was generating `name/name` with a slash causing API 500s. Fixed to just `name`.
-5. **Circuit breaker** — Prevents cascading Prefect API failures across all pipelines.
-6. **Stage metrics** — Cost/tokens/duration now flow from sessions to pipeline stage objects for analytics.
-7. **Failure pattern learning** — Memory store tracks incidents; global pause if 3+ pipelines fail at same stage within 30min.
-8. **Test coverage** — 74 → 122 tests.
+1. **Circuit breaker** — Prevents cascading Prefect/Snowflake/GHCR API failures.
+2. **Stage metrics** — Cost/tokens/duration flow from sessions to stage objects.
+3. **Failure pattern learning** — Memory store tracks incidents; global pause if 3+ pipelines fail at same stage within 30min.
+4. **Agent retry fix** — `restart_from_stage()` replaces broken `advance_pipeline()` for retries. Stale dispatch recovery on startup + watchdog.
+5. **Test coverage** — 74 → 122 tests.
 
-**Remaining (phases 5-9):** Hard budget enforcement, SLA auto-escalation, performance dashboard UI, configurable parallelism, prompt effectiveness tracking.
+### Phases 5-9 (afternoon session)
+
+5. **Hard budget enforcement** — Pipeline-level budget cap (auto-calculated at 120% of stage budgets). Pauses pipeline if cumulative cost exceeds cap. `POST /api/pipelines/{id}/resume` to unblock with optional new budget.
+6. **SLA auto-escalation** — Critical health alerts auto-create Jira tickets with 60-minute dedup cooldown per connector+metric. `POST /api/health/escalate`.
+7. **Performance dashboard** — Analytics tab shows stage metrics table (runs, success rate, avg/p95 duration, cost) and prompt effectiveness table. Configuration panel for max_parallel.
+8. **Configurable parallelism** — `ORCHESTRATOR_MAX_PARALLEL` env var + `PATCH /api/config` runtime update. Recreates thread pool.
+9. **Prompt effectiveness tracking** — Records pass/fail per template:stage in `on_session_complete`. `GET /api/analytics/prompt-effectiveness`.
+
+### Pipeline infrastructure (first end-to-end run)
+
+- **verify-blocks stage** — New stage before `deploy-prefect` that checks required Prefect blocks exist. Auto-creates from Key Vault (primary + cred vault) if missing. Also verifies Snowflake infrastructure block.
+- **Entrypoint resolution** — Fuzzy catalog matching with stripped-underscore comparison. Also scans deployments directory as fallback. Fixed `exchangeratesapi` → `exchange_rates.py` mismatch.
+- **verify-data** — Resolves target database from account short_code (`QA_DG1_GEP_PREFECT`) and schema from connector catalog.
+- **Parity check** — Cross-account: compares Prefect QA output (`og35375`) vs production Snowflake (`wj66376`) using separate prod credentials. Row counts, schema comparison, aggregates.
+- **CI auto-trigger** — `image-gate` now auto-triggers `gh workflow run CI --ref development` if no recent build exists. `workflow_dispatch` added to ci.yml.
+- **Credential loader** — BOM fix for Snowflake JSON, prod admin secret, cred vault URL. Defensive `or {}` guards.
+
+**Test count:** 144 tests (22 new for phases 5-9).
 
 ## UI Design
 
