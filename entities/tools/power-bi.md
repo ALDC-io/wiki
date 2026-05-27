@@ -147,6 +147,7 @@ python -m scripts.pbi refresh-history "GEP Test Models"
 - Table discovery: use `EVALUATE ROW("cnt", COUNTROWS('TableName'))` probing per table name
 - Correct client ID for device-code: `7f67af8a-fedc-4b08-8b4e-37c4d127b6cf` (Power BI Desktop). The `ea0616ba` client ID in old wiki notes is rejected (AADSTS65002)
 - All ALDC service principal secrets in `vault/infra-credentials.md` are expired as of 2026-05-20 — SP auth requires secret rotation in Azure Portal
+- **Eclipse Test 403 for GEP/Navira users (2026-05-27):** Root cause was zero Navira/GEP user documents in the Test CosmosDB (`aldctestcsdb1c01`), not a PBI SP or workspace issue. Fixed by copying 51 user documents from prod CosmosDB. The PBI embed SPs (`Power BI REST API GEP` and `GEP Admin`) have valid secrets through 2026-12 and Contributor access on GEP Test Models workspace.
 
 **GEP model table names** (confirmed via DAX probing, 2026-05-20):
 `Marketplace`, `Order`, `Order Line`, `Product`, `Vendor`, `Location`

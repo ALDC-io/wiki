@@ -429,6 +429,21 @@ EXECUTE TASK WAREHOUSE.TASK_WAREHOUSE_ORDERLINE_0;
 - `INFORMATION_SCHEMA.TASK_HISTORY` is the fast path; fall back to `SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY` if rows are missing.
 - After fixing the underlying issue, both `RESUME` and an explicit `EXECUTE` are needed to get the task chain running immediately without waiting for the next scheduled window.
 
+## Automated Data Share Sync
+
+A scheduled task on the prod account (`wj66376`) auto-syncs all `CURRENT_*` and `COMBINED_*` views into the `PROD_DG1_GEP` outbound share. This prevents test task chain failures caused by new views being added to the database but not granted to the share.
+
+| Component | Location |
+|---|---|
+| Stored procedure | `PROD_DG1_GEP.MAINTENANCE.SYNC_DATA_SHARE` |
+| Scheduled task | `PROD_DG1_GEP.MAINTENANCE.TASK_SYNC_DATA_SHARE` — daily 05:00 PT |
+| Audit log | `PROD_DG1_GEP.MAINTENANCE.SHARE_SYNC_LOG` |
+| Service account | `PROD_DG1_CORE_ADMIN` (ACCOUNTADMIN) |
+
+The procedure scans `INFORMATION_SCHEMA.VIEWS` for all `CURRENT_*`/`COMBINED_*` views, ensures USAGE on each schema, and grants SELECT to the share. Idempotent — re-granting an existing grant is a no-op.
+
+> Added 2026-05-27 after a 6-week silent task chain failure on `TEST_DG1_GEP`. Root cause: `WAREHOUSE_SOURCE.SALES_DIM_ORDER_BASE` referenced `PROD_DG1_GEP.AMAZON.CURRENT_REPORT_ALL_ORDERS` (added for [[GP-200]]) which was never granted to the share. 40 total missing views were found and added. See [[GP-PENDING-share-sync-automation]].
+
 ## See Also
 
 - [[star-schema-convention]] — naming patterns
@@ -440,3 +455,4 @@ EXECUTE TASK WAREHOUSE.TASK_WAREHOUSE_ORDERLINE_0;
 - [[data-share-pattern]] — Snowflake data share setup patterns
 - [[fusion92-data-architecture]] — Fusion92-specific Snowflake setup decisions
 - [[GP-PENDING-sales-data-outage-2026-05-22]] — real incident where task suspension caused a 14-hour outage
+- [[GP-PENDING-share-sync-automation]] — automated share sync (prevents missing-object failures)
