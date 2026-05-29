@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-05-22
+updated: 2026-05-29
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -73,7 +73,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[Postman]] — API client for reproducing and debugging Eclipse template calls during warehouse-load investigations.
 - [[SSMS]] — SQL Server Management Studio. Edits intermediate SQL Server DB between Snowflake and PBI (GEP partition runs, reprocessing old data).
 - [[Confluence]] — Team wiki. Holds detailed dataflow diagrams, per-client SSMS setup, Prefect/Azure docs (Brayden's offboarding space).
-- [[Windsor]] — Windsor.ai marketing data aggregation. Used by Fusion92; Eclipse pulls via `windsor` connection. Auth + account management documented.
+- [[Windsor]] — Windsor.ai marketing data aggregation. Used by Fusion92 + GEP/Navira; Eclipse pulls via `windsorai_v1`. Auth + account management documented. Field-selection gaps (revenue not selected by default), row-splitting gotcha, cross-client account caveat.
 - [[proxmox]] — Proxmox VE hypervisor: host administration, guest provisioning (Windows/Linux), disk expansion, vGPU (NVIDIA M40) setup.
 - [[mailjet]] — Mailjet email service: API credentials, Python integration, @aldc.io sender domain.
 - [[dashboard]] — Eclipse Dashboard feature: CosmosDB dashboard/dataset documents + Postgres report row. Synapse analytics integration.
@@ -108,6 +108,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 ### Architecture
 - [[observability-architecture]] — v1 design: component diagram, data flows, full alert system (throttle/escalation/recovery/grouping/blast-radius/staleness), OBSERVABILITY.JOB_RUNS schema, fate-sharing mitigations, rejected alternatives. Week 1 complete 2026-04-25.
 - [[data-pipeline-flow]] — End-to-end: Eclipse/connector → Azure Storage → Snowflake source schemas → WAREHOUSE_SOURCE → WAREHOUSE → REPORT_COMMON → (SQL Server) → Power BI.
+- [[cross-channel-marketing-attribution]] — Tiered marketing measurement model (platform ROAS → blended MER → product-grounded → causal). Why platform-attributed value isn't truth; the `MARKETING_EFFICIENCY` reconciliation view tying spend to actual orders. Drives a follow-on ticket beyond [[GP-225]].
 - [[flight-check-engineering-guide]] — Consolidated engineering + onboarding guide for the Flight Management app (DAX Media App). Synthesises [[entities/repos/flight-check|flight-check]] + [[workflows]] + [[dax-media-app]] with architecture/data-flow Mermaid diagrams, full integration table, and an end-to-end local dev setup walkthrough.
 - [[repo-integration-map]] — Cross-repo map of ALDC's 12-repo estate: current data flow, dependency graph, strangler-fig overlay (eclipse_exp absorption + Prefect migration), and per-repo integration notes.
 - [[azure-environments]] — Subscription-to-environment mapping (Production 2, TEST 1, Quality 1, Development 2, QA for Prefect, etc.). Deployment-slot flow. Access state.
@@ -226,7 +227,8 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-203]] — Add Canadian traffic data to `TRAFFIC_FCT_ACTIVITY`. Defended per-marketplace grain during PR review.
 - [[GP-204]] — CSV-driven marketplace metadata (net discount, DTC fee, Amazon flag). Self-service CSV replaces hard-coded CASE statements in order-line facts.
 - [[GP-207]] — Prod-to-test data share setup. Re-pointed all GEP warehouse SQL to `PROD_DG1_GEP` share so test and prod reference the same raw data.
-- [[GP-199]] — ASIN Brand Campaign Attribution. Design for attributing SB spend to targeted ASINs instead of all brand ASINs. Two approaches proposed (ad creative vs purchase-based). Awaiting client response.
+- [[GP-199]] — ASIN Brand Campaign Attribution. Attributes SB spend to targeted ASINs (ad-creative equal-split). Deployed to Prod 2026-05-21, client UAT. Confirmed safe to promote independently of [[GP-225]] (cost-only allocation).
+- [[GP-225]] — Unified Marketing Schema Design (Snowflake). Phase 1A prerequisite. Finding: `MARKETING_FCT_ACTIVITY` already unifies all channels; Q3 (attribution) → store raw; Q8 (SKU map) → no ASIN→SKU dimension yet. Real blocker = Google/Meta revenue not loaded from [[Windsor]] (field-selection gap, not capability gap).
 - [[GP-208]] — Inventory feed ingestion & modelling. Phase 1 (current snapshot) built on existing Sellercloud + Amazon FBA pipelines — no data share. Data dictionary at [[gep-inventory-data-dictionary]]. Phase 2 (historical accumulation) pending.
 - [[GP-217]] — CI/CD Pipeline + Infrastructure Right-Sizing. Docker publish gated behind quality gate, standalone `docker-publish.yml` removed. PostgreSQL D2ads_v5→B1ms, App Service P2v3→S1. ~$265/mo saved. 2026-05-03.
 - [[GP-218]] — QA/UAT/Prod Work Pools & Promotion Pipeline. 3 Work Pools, 3 worker Container Apps, 3 Snowflake blocks, `short_code` fix, promotion pipeline documented. Infra complete 2026-05-02, GEP E2E pending PR #1.
@@ -234,6 +236,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-256]] — Add Return Rate KPIs (unit-based) to SKU Profitability Dashboard. DAX measure deployed to Prod via XMLA 2026-05-22. Navira-demo frontend update remaining.
 - [[GP-259]] — Orders/Return and COGs for SKU Profitability. Measures already exist in GEP Prod model. Navira-demo frontend update remaining.
 - [[GP-261]] — Navira Snowflake → ALDC ingestion. First Snowflake-to-Snowflake connector. Architecture decision: Prefect ETL Pipeline (2026-05-25). Awaiting Justin's response.
+- [[GP-PENDING-missing-cogs-cost-history]] — Catalog-wide blank-COGS / overstated margin on SKU Profitability (Heather "Missing COGs"). Root cause = cost-history horizon (begins 2024-05-30 vs sales from 2023) + cost-field/timing lag. Fix (back-fill + field fallback) validated: ~$21M COGS recovered, zero regression. Awaiting Navira's option choice (2026-05-28).
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 - [[GP-PENDING-infra-connector-failures]] — PENDING: four long-running infra failures (NFS mount missing, SQL Server unreachable, Eclipse Core API DNS, Fusion92 expired credentials). Discovered 2026-05-22. 10 GEP + 7 F92 templates failing, 13–27+ days stale.
 - [[GP-PENDING-sales-data-outage-2026-05-22]] — RESOLVED incident: ~14-hour task chain suspension (2026-05-21 19:52 – 2026-05-22 09:14 PT). `PROD_DG1_ROLE_CORE_SVC_DA8904DB` lacked USAGE on `PROD_DG1_ALDC_LIBRARY`; `SALES_FCT_ORDERLINE` view expansion failed at step 7; Snowflake auto-suspended root task. Fix: explicit USAGE + SELECT grants. PBI refreshed 16:18 UTC. +1,387 orders / +5,114 order lines recovered.

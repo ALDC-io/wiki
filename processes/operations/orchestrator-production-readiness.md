@@ -8,6 +8,8 @@ updated: 2026-05-25
 
 # Orchestrator Production Readiness Plan
 
+> ⚠️ **SHELVED — 2026-05-28.** This plan hardens the **Prefect** connector-promotion pipeline, which is parked along with the Prefect migration. Not the live process. Retained as history. Live work + full context: [[processes/distributed-workflow/active/navira/README|Navira workstream]].
+
 **Goal:** Get the orchestrator pipeline engine to the point where it can safely deploy, validate, and promote connectors from QA → UAT → Prod with rollback capability and evidence capture at every gate.
 
 **Current state:** Pipeline engine runs, sessions launch, DAG execution works. But the stage scripts are ~30% implemented (skeletons/TODOs), there's no rollback mechanism, no data validation, and no evidence capture. The UI shell exists but isn't wired to live backend state.

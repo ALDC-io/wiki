@@ -3,7 +3,7 @@ tags: [ticket, gep, fusion92, infrastructure, connector, operations, resolved, i
 aliases: [GP-269, GP-PENDING-infra-connector-failures, Infra Connector Failures, NFS Mount Missing, SQL Server Unreachable, Eclipse Core API DNS]
 sources: []
 created: 2026-05-22
-updated: 2026-05-25
+updated: 2026-05-27
 first_alerted: ~2026-05-09
 ---
 
@@ -22,8 +22,13 @@ Four long-running infrastructure failures discovered 2026-05-22 during investiga
 - **Secondary issue:** Samba password in the `agent-nextcloud` containers' passdb did not match the `NEXTCLOUD_PASSWORD` env var (`ALDCAgent007_`). Reset via `smbpasswd -s agent` on both hosts.
 - **Fix:** Recreated agent containers on both Coquitlam and Kamloops with `--privileged` mode enabled via Portainer. CIFS mounts confirmed working on both hosts. All 10 templates will resume on next scheduled run.
 
-**Issue 2 — SQL Server: LIKELY SELF-HEALED**
-- TCP connectivity to Galactica SQL Server (`192.168.35.138:1433`) confirmed from inside the Coquitlam agent container via socket test. The container restart on 2026-05-21 may have resolved a Docker networking issue. Monitoring for template success on next run.
+**Issue 2 — SQL Server DNS: RESOLVED 2026-05-27**
+- **Root cause:** Docker's internal DNS resolver (`127.0.0.11` in the container's `/etc/resolv.conf`) cannot resolve ALDC's local domain `*.prod.site3.aldc`. The Eclipse connection uses the FQDN `galactica.prod.site3.aldc` (not the IP `192.168.35.138`), so ODBC login times out at the DNS stage. The 2026-05-22 TCP test was a **false negative** — it tested via IP directly, not the FQDN, so it passed while templates continued to fail.
+- **Why Kamloops works:** The Kamloops agent (`192.168.35.70`) is on the same subnet as Galactica (`192.168.35.138`) and has local DNS that resolves `.prod.site3.aldc`. Coquitlam (`192.168.22.70`) is cross-site and lacks this DNS.
+- **Fix:** Recreated `agent-dcgeneral-coquitlam-master` container with `--add-host galactica.prod.site3.aldc:192.168.35.138`. This injects the mapping into the container's `/etc/hosts` and survives container restarts. Verified: DNS resolves, TCP connects, ODBC authenticates and queries successfully. NFS mount also healthy.
+- **Backup:** Old container preserved as `agent-dcgeneral-coquitlam-master-backup-pre-dnsfix`.
+- **SSH keys:** Installed ed25519 key-based auth on both Coquitlam (`192.168.22.70`) and Kamloops (`192.168.35.70`) for passwordless access from Paul's workstation.
+- **Recurrence note:** This is the 10th occurrence of this root cause per observability alerts. The `--add-host` flag makes it durable across container restarts, but any future container recreation (e.g. env var update via Portainer) must preserve the `--add-host` or the issue will return. Consider adding `galactica.prod.site3.aldc` to the Docker host's DNS or adding an `extra_hosts` entry to the Portainer stack/template.
 
 **Issue 3 — Eclipse Core API DNS: SELF-RESOLVED**
 - Both `api.eclipse.analyticlabs.io` and `aldcprodfnapcore1c01.azurewebsites.net` resolve correctly. Transient DNS blip; no action needed.
@@ -146,21 +151,47 @@ Multiple Eclipse connectors targeting an on-prem SQL Server are failing with ODB
 
 GEP financial currency data is stale; calendar/time dimension data is stale. Fusion92 time and periodicity dimensions are stale — these feed into financial and performance reporting. Any aggregation relying on time-grain lookups will silently return stale or incorrect results.
 
-### Suggested Remediation
+### Actual Resolution (2026-05-27)
 
-1. Identify which on-prem SQL Server is the source — check Eclipse connection config for the affected templates to get host/IP
-2. Verify network connectivity from the relevant Agent VMs: `telnet <host> 1433` or `Test-NetConnection <host> -Port 1433`
-3. Check if the source SQL Server service is running (Windows Services or `systemctl`)
-4. Check if a VPN/tunnel between agent and SQL Server is still established (see [[local-network]] for on-prem topology)
-5. If connectivity is confirmed broken, escalate to the team owning the SQL Server
-6. Once connectivity is restored, re-run all 7 affected templates and verify data freshness
-7. Add SQL Server connectivity probes to [[observability-platform]]
+**Connection config:** `clients/GEP/eclipse/connections/sql_server.json` — server `galactica.prod.site3.aldc`, database `ALDC_LIBRARY`, user `eclipse`, connector `sqlserver_v1`, connection ID `5b6336a4-5c49-483d-b281-eee8ad315e22`.
+
+**Diagnostic steps that identified the root cause:**
+1. `docker exec` into agent container → `python3 socket.getaddrinfo("galactica.prod.site3.aldc", 1433)` → `Name or service not known` (DNS failure)
+2. `cat /etc/resolv.conf` → only `nameserver 127.0.0.11` (Docker internal DNS, no ALDC domain knowledge)
+3. TCP test via IP `192.168.35.138:1433` → OK (SQL Server is healthy)
+4. Confirmed Kamloops agent resolves the FQDN natively (same-subnet DNS)
+
+**Fix applied:**
+```bash
+docker stop agent-dcgeneral-coquitlam-master
+docker rename agent-dcgeneral-coquitlam-master agent-dcgeneral-coquitlam-master-backup-pre-dnsfix
+docker run -d --name agent-dcgeneral-coquitlam-master --network agent-bridge \
+  --restart unless-stopped --privileged --workdir /app/agent \
+  --add-host galactica.prod.site3.aldc:192.168.35.138 \
+  [env vars preserved from original] \
+  ghcr.io/aldc-io/agent-dcgeneral-coquitlam:master /bin/sh -c "/app/scripts/run.sh"
+```
+
+**Post-fix verification:** DNS resolves, ODBC connects and queries, NFS mount healthy, `ExtraHosts: ["galactica.prod.site3.aldc:192.168.35.138"]` confirmed in container config.
+
+**Host-level fix (2026-05-27):** Added `192.168.35.138 galactica.prod.site3.aldc` to `/etc/hosts` on the Docker host `aldcproddock1c03` (`192.168.22.70`) itself. This means all future containers on this host inherit the mapping automatically — even if someone recreates the agent container without `--add-host`, DNS will still resolve via the host's `/etc/hosts`. This is the belt-and-suspenders fix that prevents the 10th+ recurrence.
+
+**SSH key auth (2026-05-27):** Installed ed25519 key-based SSH auth on both Docker hosts (`aldc@192.168.22.70` and `aldc@192.168.35.70`) from Paul's workstation. Future on-prem investigations will not require repeated password entry.
+
+### Remediation Runbook (for future recurrence)
+
+1. Check if the container has `ExtraHosts` set: `docker inspect <container> --format "{{json .HostConfig.ExtraHosts}}"`
+2. If empty, the container was recreated without `--add-host` — recreate with it
+3. Always test DNS resolution using the FQDN, not the IP — the IP test gives false negatives for this class of issue
+4. Any container recreation on Coquitlam must include `--add-host galactica.prod.site3.aldc:192.168.35.138`
+5. ~~Long-term: add `galactica.prod.site3.aldc` to Docker host-level DNS (`/etc/hosts` on `aldcproddock1c03`) or configure a proper DNS server for `.prod.site3.aldc` domain~~ **DONE 2026-05-27** — entry added to `/etc/hosts` on `aldcproddock1c03`. All containers now inherit this mapping. The per-container `--add-host` is still good practice as defense-in-depth.
 
 ### See Also
 
-- [[local-network]] — On-prem network: Nginx, Tailscale VPN, on-prem topology
+- [[local-network]] — On-prem network; Galactica at `192.168.35.138` on Nostromo (Kamloops)
 - [[agent-builds]] — Agent VM setup; ODBC Driver 18 noted for Ubuntu workaround
 - [[observability-platform]] — Monitoring; SQL Server connectivity should be a named probe
+- `clients/GEP/eclipse/connections/sql_server.json` — Eclipse connection config for Galactica
 
 ---
 

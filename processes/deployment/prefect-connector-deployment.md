@@ -8,6 +8,8 @@ updated: 2026-05-02
 
 # Prefect Connector Deployment Guide
 
+> ⚠️ **SHELVED — 2026-05-28.** The Prefect migration is on hold; this runbook is **not** the live deployment path. Connectors deploy via the legacy **[[Eclipse]]** pipeline. Retained as historical reference. Live work + full context: [[processes/distributed-workflow/active/navira/README|Navira workstream]].
+
 How to run and deploy Prefect connectors in any environment: local dev, Azure QA, and Azure Prod. Covers environment switching and the auth required to reach the Azure server.
 
 See also: [[Prefect]] (architecture + resource inventory), [[prefect-v3-reference]] (Prefect v3 concepts), `/prefect-connector` skill (step-by-step workflow).

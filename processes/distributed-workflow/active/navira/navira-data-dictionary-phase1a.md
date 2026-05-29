@@ -3,7 +3,7 @@ tags: [workflow, navira, data-dictionary, phase-1a, google-ads, meta, amazon-ads
 aliases: [Navira Data Dictionary, Phase 1A Data Dictionary]
 sources: [eclipse_exp/frontend/public/navira/navira-phase1a-data-dictionary.html]
 created: 2026-04-27
-updated: 2026-04-27
+updated: 2026-05-29
 ---
 
 # Navira Phase 1A — API Data Dictionary
@@ -111,10 +111,23 @@ Field-level findings from reading the production connector implementations in `c
 ## Cross-Platform Notes
 
 - **Currency:** Google Ads uses micros (÷ 1M), Meta uses account currency directly, Amazon uses marketplace currency. Normalize to USD in the ETL with original currency preserved.
-- **Attribution windows:** Vary by platform (Google: configurable, Meta: 7-day click / 1-day view default, Amazon: 14-day). Decision needed on whether to use platform defaults or align (see Phase 1A Q3).
+- **Attribution windows:** Vary by platform (Google: configurable, Meta: 7-day click / 1-day view default, Amazon: 14-day). **Resolved (2026-05-29, [[GP-225]] / Phase 1A Q3): store raw platform attribution, do NOT normalize.** Prod `MARKETING_FCT_ACTIVITY` already surfaces Amazon on the **30-day** window columns (`PURCHASES30D`/`SALES30D`); Windsor returns Google/Meta on their native windows and can't be re-windowed. **Headline window DECIDED 2026-05-29 (Paul): keep 30d** (matches current warehouse; revisit only if Navira requests).
 - **Campaign ID as key:** Always use numeric IDs as primary keys, never campaign names (mutable across all platforms).
 - **Retroactive adjustments:** Ad platforms retroactively adjust data for 7–30 days. Design ingestion with configurable lookback window.
 - **Rate limiting patterns from production:** All three connectors implement exponential backoff. Amazon Ads caps at 5 minutes, SP-API at 60 seconds, Meta uses a fixed sleep per campaign. The Prefect implementation should use Prefect's built-in retry/backoff decorators where possible, but the SP-API and Amazon Ads connectors need request-level backoff (not flow-level) for pagination and report polling.
+
+## Revenue / Conversion Field Gap via Windsor (2026-05-29)
+
+GEP pulls Google + Meta through [[Windsor]] (`windsorai_v1`). The current GEP templates are 1:1 clones of Fusion92's and inherited the same gap: **conversion value / revenue is not selected.** This — not attribution-window alignment — is the real blocker for cross-channel ROAS.
+
+- **Google** (`templates/windsor/google_ads.json`): carries `conversions` and `roas`, but **not** `conversions_value`. `marketing_fct_activity.sql` Branch 6 loads `CONVERSIONS` and hardcodes `SALES_AMOUNT = 0`. Fix: add `{"name": "conversions_value"}` to the template, map in SQL. (`all_conversions` / `all_conversions_value` available too but double-count view-through — hold back.)
+- **Meta** (`templates/windsor/meta_ads.json`): selects **only video-view actions** — no purchase actions, no `action_values`. Branch 7 hardcodes both `CONVERSIONS = 0` and `SALES_AMOUNT = 0`. Fix: add `actions_purchase` (count) + `action_values_purchase` (value) — **field names VERIFIED 2026-05-29** against live `GET https://connectors.windsor.ai/facebook/fields`. Variants: `actions_omni_purchase`/`action_values_omni_purchase` (plural), `actions_offsite_conversion_fb_pixel_purchase`/`action_values_offsite_conversion_fb_pixel_purchase`. **`action_value_omni_purchase`, `purchases`, `purchases_value`, `purchase_roas` do NOT exist — do not use.**
+- **Not a Windsor limitation** — Windsor exposes these fields (confirmed in the live catalog); they were never added. Creds verified 2026-05-29.
+- ⚠️ **Platform value ≠ actual revenue.** `conversions_value` / `action_values_purchase` are each platform's *own attributed* conversion value (its pixel + its window). They double-count across channels and won't reconcile to `SALES_FCT_*` orders. They give correct *per-channel* ROAS but are NOT a cross-channel source of truth — see [[cross-channel-marketing-attribution]].
+- ⚠️ **Row-splitting:** both template comments warn that some Windsor field combinations split rows (same PK, partial data) and corrupt the merge. Test one day grouped by PK before activating. Meta is highest-risk.
+- ⚠️ **Cross-client filter:** the team Windsor key pulls all Fusion92 accounts — a per-client account filter is needed in the GEP templates before real-TEST/Eclipse activation.
+
+See [[GP-225]] for the full plan and clone-validation status.
 
 ## Business Logic (to be filled by Navira)
 

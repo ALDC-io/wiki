@@ -3,7 +3,7 @@ tags: [concept, architecture, local-network, infra, tailscale, vpn, storage, pro
 aliases: [Local Network, ALDC Local Network, Nginx Proxy Manager, TrueNAS, Covenant, kookiet]
 sources: [Confluence INFRA/1630371841, INFRA/1024622602, INFRA/961576965, CORE/1749811201, TECH/1772421124 (On-Prem Servers, Brayden Offboarding)]
 created: 2026-04-18
-updated: 2026-04-27
+updated: 2026-05-27
 ---
 
 # ALDC Local Network Infrastructure
@@ -109,7 +109,7 @@ SSH credentials for all machines: `aldc/aldc1234` — see `vault/infra-credentia
 | Common Name | VM Name | IP | Proxmox Host | Portainer | Purpose |
 |---|---|---|---|---|---|
 | Production Docker Host (Kamloops) | `aldcproddock1c01` | 192.168.35.70 | Nostromo (192.168.30.80:8006) | Production (192.168.31.20:9446) | Production [[connector]] agents. Also runs the Sellercloud VPN agent. |
-| Production Docker Host (Coquitlam) | `aldcproddock1c03` | 192.168.22.70 | Infinity (192.168.22.71:8006) | Production (192.168.31.20:9446) | Secondary production [[connector]] agents (no Sellercloud VPN). |
+| Production Docker Host (Coquitlam) | `aldcproddock1c03` | 192.168.22.70 | Infinity (192.168.22.71:8006) | Production (192.168.31.20:9446) | Secondary production [[connector]] agents (no Sellercloud VPN). `/etc/hosts` has `galactica.prod.site3.aldc → 192.168.35.138` (added 2026-05-27, required for cross-site DNS). |
 | Support Docker Host | `aldcsuptdock1c01` | 192.168.31.20 | Nostromo (192.168.30.80:8006) | Support (192.168.31.20:9444) | Testing/QA resources + [[custom-fusion-92-audience-api|DIOS API]]. All publicly accessible on-prem services run here. |
 | Workstation agent | `wks-agent` | 192.168.31.210 | Nostromo (192.168.30.80:8006) | N/A | Building and pushing [[connector]] Docker images. See [[connector-docker-deployment]]. |
 | Galactica SQL Server | `server-galactica` | 192.168.35.138 | Nostromo (192.168.30.80:8006) | N/A | SQL Server for miscellaneous connector data. Local domain: `galactica.prod.site3.aldc`. |

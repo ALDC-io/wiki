@@ -3,7 +3,7 @@ tags: [workflow, navira, phase-1a, marketing, google-ads, facebook-ads, amazon-p
 aliases: [Navira Phase 1A, Marketing Ad Platforms]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html, eclipse_exp/frontend/public/navira/navira-phase1a-data-dictionary.html]
 created: 2026-04-27
-updated: 2026-04-30
+updated: 2026-05-29
 ---
 
 # Phase 1A — Marketing Data: Ad Platforms
@@ -38,7 +38,7 @@ Centralize all marketing spend and performance data into Snowflake so the busine
 
 - **Unified marketing schema** in Snowflake: date, channel, campaign, ad_group, ad, marketplace, spend, impressions, clicks, conversions, revenue, ACOS/ROAS calculated fields
 - **Daily automated ingestion** with configurable lookback window (ad platforms retroactively adjust numbers for 7–30 days)
-- **Attribution alignment:** consistent attribution window definitions across platforms for apples-to-apples cross-channel ROAS
+- **Attribution alignment:** store each platform's **native** attribution as-is (do NOT normalize windows across channels — Q3 decision). Apples-to-apples cross-channel comparison is achieved not by forcing a common window but via **blended MER grounded in actual orders** — see [[cross-channel-marketing-attribution]].
 - **Currency normalization:** USD base with conversion for UK (GBP) and CA (CAD)
 - **SKU-level mapping:** link ad campaigns to internal product SKUs for profitability analysis
 - **Error handling & alerting:** retry logic for API rate limits, alerts on ingestion failures or data gaps
@@ -53,6 +53,13 @@ Centralize all marketing spend and performance data into Snowflake so the busine
 | Q3 | Attribution window and model for ROAS reporting today? (last-click 7-day, first-click 30-day?) Store raw platform attribution or apply custom model? | Schema design, transformation layer |
 | Q4 | Which Business Manager ID owns the Meta ad accounts? System user token or user-level token with manual refresh? | Reliability of automated daily pulls |
 | Q8 | How are campaigns linked to SKUs today? ASIN in Amazon, UTM in Google, product catalog in Meta? Master mapping table or needs building? | Mapping/resolution service vs existing Corporate Data join |
+
+### Resolutions (2026-05-29, via [[GP-225]] schema review)
+
+- **Q3 → store raw platform attribution; do NOT normalize across channels.** Production `MARKETING_FCT_ACTIVITY` already carries each platform's native attribution as-is (Amazon SP/SD on the **30-day** window columns, Google data-driven via [[Windsor]], Meta 7d-click/1d-view). Windsor only returns platform-native attribution and can't be re-windowed, so "raw" is also the only practical option. **Amazon headline window DECIDED 2026-05-29 (Paul): keep 30-day** (matches current prod; revisit only if Navira requests). Soft confirm left for Lori/Heather: OK seeing each platform on its native window, labelled, side by side.
+- **Q8 → partially answered by [[GP-199]]; the ASIN↔SKU bridge already exists for Navira.** The unified fact has a `PRODUCT_ID` grain; GP-199 fills it with ASIN for Amazon SB, SP uses `ADVERTISEDSKU`. Correction (2026-05-29): `SHARED_DIM_PRODUCT_BASE` **already maps ASIN ↔ internal SKU** for Navira (from the Sellercloud product master) — so the bridge itself is present; what's missing is wiring it into the marketing/sales reconciliation (and a per-entity product dim for *agency* customers, whose ASINs aren't in Navira's master). See [[cross-channel-marketing-attribution]] for how this enables Amazon product-grounded ROAS. Google/Meta SKU linkage (UTM/catalog) is the genuine later build (gated Phase 2).
+- **Cross-channel ROAS blocker — Google/Meta revenue not loaded.** Branch 6 (Google) hardcodes `SALES_AMOUNT = 0`; Branch 7 (Meta) hardcodes `CONVERSIONS = 0` and `SALES_AMOUNT = 0`. This is a [[Windsor]] **field-selection gap, not a capability gap** — the GEP templates (cloned from Fusion92) never selected `conversions_value` (Google) or purchase `action_values` (Meta only pulls video actions). Windsor creds verified 2026-05-29, so the external blocker is gone; remaining work = expand template fields + map in SQL. Field names VERIFIED against the live Windsor catalog 2026-05-29 (Google `conversions_value`; Meta `actions_purchase`/`action_values_purchase`). See [[GP-225]] for the field list + the row-splitting gotcha + the cross-client account-filter caveat.
+- **…but the field fix delivers per-channel ROAS only (Tier 1) — not cross-channel truth.** Platform-attributed value double-counts and won't reconcile to actual orders. The grounded source-of-truth model (blended MER + Amazon product-grounding, denominator = real `SALES_FCT_*` orders) is designed in **[[cross-channel-marketing-attribution]]** and is a separate Phase-1 build beyond GP-225. Decisions locked 2026-05-29: blended MER as headline metric; Google/Meta product linkage deferred to a gated Phase 2; reporting currency USD; Amazon window 30d.
 
 ## Dependencies
 
@@ -91,7 +98,7 @@ See [[navira-data-dictionary-phase1a]] for field-level API specs covering Google
 ### Future sprints
 | Ticket | Summary | Sprint | Notes |
 |---|---|---|---|
-| GP-225 | Unified Marketing Schema Design | S3 | Snowflake schema — prerequisite for all 1A connectors |
+| GP-225 | Unified Marketing Schema Design | S3 | Snowflake schema — prerequisite for all 1A connectors. See [[GP-225]] — schema largely exists; Q3/Q8 resolved; revenue-load gap is the real blocker |
 | GP-221 | Amazon UK PPC OAuth — Build | S3 | Technical implementation once GP-241 unblocks access |
 | GP-226 | Google Ads Connector | S4 | Depends on GP-183 decision + GP-238 credentials |
 | GP-222 | Facebook Ads Connector | S4 | Depends on GP-239 credentials |

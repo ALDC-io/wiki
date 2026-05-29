@@ -14,6 +14,8 @@ tracker_platform_steps_1_11_complete: 2026-05-15
 
 # ALDC Launchpad — Client Delivery Platform
 
+> ⚠️ **Partially parked — 2026-05-29.** Several Launchpad workstreams are shelved: the **credential portal** (`connect.analyticlabs.io`, `credentials.json`), **Prefect connector promotion / orchestrator pipeline**, and the **`/launchpad-wiki-sync` data-layer→wiki flow**. The data layer (`platform/master/data/*.json`) is **not** maintained as source of truth — Key Vault + [[Eclipse]] is. Do not run `/launchpad-wiki-sync` or treat the data layer / credential status here as current. Active client delivery (GEP/Navira) lives in the [[processes/distributed-workflow/active/navira/README|Navira workstream]]. Client code is **GEP**, not `GEP_PREFECT`. Session log below is retained as history.
+
 **Repo:** `aldc-launchpad/` (monorepo, graduating from `aldc-shipyard/ops-platform/`)
 **Status:** Active — Orchestrator hardening Phases 0, 0.5, C, D, E ALL COMPLETE (2026-05-25). 21-stage connector-promotion pipeline with rollback gates, evidence capture, gate approval context cards, work pool health checks, and credential pre-flight validation. Next: test the full pipeline on Sellercloud (Definition of Done). See [[orchestrator-production-readiness]].
 **Owner:** Paul Russell

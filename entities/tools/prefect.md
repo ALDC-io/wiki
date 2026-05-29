@@ -8,6 +8,8 @@ updated: 2026-05-03 (cost analysis)
 
 # Prefect
 
+> ⚠️ **SHELVED — 2026-05-28.** The Prefect migration is on hold (it was blocking data delivery) and is **NOT** the live connector path. All connectors run on the legacy **[[Eclipse]]** pipeline. Do not propose Prefect for new data sources or treat the content below as current. Live work + full context: [[processes/distributed-workflow/active/navira/README|Navira workstream]] (Eclipse + [[Windsor]]). This page is retained as historical reference.
+
 Workflow orchestration platform being adopted at ALDC to replace the legacy [[Eclipse]] connector scheduling. The migration (PRE-000) converts all legacy connectors to Prefect-compatible flows.
 
 ## Migration Context (PRE-000)

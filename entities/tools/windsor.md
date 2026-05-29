@@ -1,14 +1,25 @@
 ---
-tags: [entity, tool, windsor, marketing, data-aggregation, fusion92]
+tags: [entity, tool, windsor, marketing, data-aggregation, fusion92, gep, navira]
 aliases: [Windsor, Windsor.ai]
-sources: [CF92/1675001857, CF92/1675919361]
+sources: [CF92/1675001857, CF92/1675919361, clients/GEP/eclipse/templates/windsor/google_ads.json, clients/GEP/eclipse/templates/windsor/meta_ads.json]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-05-29
 ---
 
 # Windsor
 
-Windsor.ai is a marketing data aggregation platform used by [[fusion92]]. It connects to ad platforms (Facebook Ads, Google Ads, etc.) and exposes a unified data feed that [[Eclipse]] pulls from via the `windsor` connection in the Fusion92 client config.
+Windsor.ai is a marketing data aggregation platform used by [[fusion92]] and (from 2026-05) [[GEP]]/Navira. It connects to ad platforms (Facebook Ads, Google Ads, etc.) and exposes a unified data feed that [[Eclipse]] pulls from via the `windsorai_v1` connector. Each pull template declares a `fields` list selecting which Windsor columns to ingest.
+
+## GEP / Navira Usage (2026-05)
+
+GEP pulls Google Ads + Meta via Windsor — templates at `clients/GEP/eclipse/templates/windsor/google_ads.json` and `meta_ads.json`, cloned from Fusion92's proven templates. Creds verified 2026-05-29. Feeds Branches 6 (Google) and 7 (Meta) of `MARKETING_FCT_ACTIVITY`. See [[GP-225]] and [[navira-data-dictionary-phase1a]].
+
+### Field-selection gaps & gotchas
+
+- **Conversion value / revenue must be explicitly selected.** The Fusion92 templates (and the GEP clones) **never selected revenue**: Google carries `conversions` + `roas` but not `conversions_value`; Meta selects only video-view actions, no purchase `actions`/`action_values`. Result: cross-channel ROAS can't be computed until those fields are added. This is a **field-selection gap, not a Windsor capability gap** — Windsor exposes them.
+- **Validate field names before adding.** Use `GET https://connectors.windsor.ai/{platform}/fields?api_key={KEY}` (e.g. `/facebook/fields`, `/google_ads/fields`) — returns a JSON array of `{id, name, type, ...}`. **Verified 2026-05-29** for GEP's key: Google revenue = **`conversions_value`** (+ `all_conversions_value`, `conversion_value`, `adnetwork_revenue`, `roas`); Meta purchase = **`actions_purchase`**/**`action_values_purchase`** (variants `actions_omni_purchase`/`action_values_omni_purchase`, `actions_offsite_conversion_fb_pixel_purchase`/`action_values_offsite_conversion_fb_pixel_purchase`). **Non-existent (don't use): `action_value_omni_purchase` (singular), `purchases`, `purchases_value`, `purchase_roas`, `website_purchase_roas`.** Key lives as `WINDSOR_API_KEY` on Function App `func-aldc-cred` (rg `aldcprodrsgpconnector1c`).
+- **Row-splitting risk** (called out verbatim in both GEP + Fusion92 template comments): *some combinations of fields cause Windsor to split one logical row into two sharing the same primary key, each with partial data* — this corrupts the Snowflake merge. After adding fields, test a single day grouped by PK for >1 row before activating.
+- **Team API key pulls ALL accounts** authenticated in Windsor across clients — so the GEP key also returns Fusion92's accounts. A per-client account filter must be built into the template before real activation.
 
 ## Authentication & Platform Setup
 
@@ -55,4 +66,7 @@ If an expected account does not appear in Windsor's account list, the likely cau
 ## See Also
 
 - [[fusion92]] — client using Windsor; `windsor` Eclipse connection
+- [[GEP]] — Navira Google/Meta via Windsor (2026-05)
+- [[GP-225]] — unified marketing schema; the revenue-load gap detail
+- [[navira-data-dictionary-phase1a]] — field-level reference + revenue gap
 - [[Eclipse]] — pulls data from Windsor

@@ -8,6 +8,8 @@ updated: 2026-05-26
 
 # Session Orchestrator
 
+> ⚠️ **Connector-promotion use case SHELVED — 2026-05-28.** The orchestrator's headline pipeline (Prefect connector promotion QA→UAT→Prod) is parked along with the [[prefect|Prefect]] migration and the credential portal. The generic session-runner may be reused later, but do not treat the connector-promotion / credential pipelines below as the live process. Live work + full context: [[processes/distributed-workflow/active/navira/README|Navira workstream]].
+
 Autonomous multi-stage pipeline execution system for ALDC Launchpad. Spawns isolated Claude Code sessions in git worktrees, manages concurrency, monitors execution, and surfaces results via web UI.
 
 ## Core Infrastructure

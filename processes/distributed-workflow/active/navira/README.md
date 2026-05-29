@@ -3,10 +3,19 @@ tags: [workflow, navira, gep, roadmap, client, e-commerce]
 aliases: [Navira Roadmap, Navira Integration, GEP Roadmap]
 sources: [eclipse_exp/frontend/public/navira/navira-roadmap.html, eclipse_exp/frontend/public/navira/navira-project-plan.html]
 created: 2026-04-27
-updated: 2026-05-13
+updated: 2026-05-28
 ---
 
 # Navira Integration — Workflow Hub
+
+> ## ⚠️ Current Approach & Shelved Context (2026-05-29)
+> **This is the authoritative "what's live vs shelved" note.** Other Prefect/portal pages point here.
+>
+> **LIVE:** Navira/GEP delivery runs on the **legacy [[Eclipse]] pipeline** (`connector` repo) → Snowflake DWH → Power BI / Eclipse dashboards. New ad-platform data (Google Ads, Meta) lands via the Eclipse `windsorai_v1` connector ([[Windsor]]). Current focus: **DWH schema design + Windsor data landing**. The canonical client code is **GEP** (Eclipse `short_code`, account `da8904db`) — **NOT** `GEP_PREFECT`.
+>
+> **SHELVED — do NOT treat as live or propose for new work:**
+> - **Prefect migration** (shelved 2026-05-28 — was blocking delivery). Affects [[prefect|Prefect]], [[prefect-connectors]], [[orchestrator|Session Orchestrator]] connector-promotion, and Phase 0 Prefect Foundation. Do not suggest Prefect connectors for new data sources.
+> - **Credential portal + Launchpad data layer** (parked 2026-05-29). The `connect.analyticlabs.io` portal, `credentials.json`, and the `/launchpad-wiki-sync` (data-layer → wiki) flow are **not** source of truth. **Key Vault + Eclipse is the system of record.** Update GEP work directly in this workstream + the GEP ticket pages, not via the data layer.
 
 Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks the active delivery of new data interfaces into the Navira DataWarehouse (Snowflake + Power BI + Eclipse/Zeus Chat).
 
@@ -29,7 +38,7 @@ Navira (formerly [[GEP]]) is an e-commerce analytics client. This folder tracks 
 
 | Phase | Domain | Interfaces | Priority | Status |
 |---|---|---|---|---|
-| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **In Progress** — G1–G3/G5 done (GP-213–216, GP-220). Repo fork done (GP-247). Prefect Server validated (GP-243). Snowflake env isolation done (GP-248). Work Pools done (GP-218, E2E blocked on Snowflake staging DB). CI/CD gated pipeline done (GP-217). Next: GP-218 E2E (after Snowflake password reset), Sellercloud migration (GP-219). |
+| **0** | Prefect Foundation | Framework hardening (6 gaps) + migrate Sellercloud + resolve CC1–CC7 | P0 | **SHELVED** — Prefect migration deprioritized 2026-05-28. Focus shifted to DWH schema design using existing Eclipse pipeline. |
 | **1A** | Marketing — Ad Platforms | Google Ads (Amazon + D2C), Facebook Ads, Amazon PPC UK/CA, Target+ | P1 | Tickets created (GP-221, GP-222, GP-223, GP-225, GP-226, GP-227). Sprint S3/S4. |
 | **1B** | Marketing — Social & Emerging | TikTok Shops, Creator Connections, Email Campaigns | P1 | Tickets created (GP-228, GP-229). Sprint S5. Needs refinement. |
 | **1C** | Sales — Agency Customers | Seller Central (Sales), Seller Central (Inventory) | P1 | Tickets created (GP-230, GP-231). Sprint S4/S5. |
@@ -77,10 +86,10 @@ All GP tickets created 2026-04-30. See individual phase pages for details.
 | Ticket | Summary | Sprint | Status |
 |---|---|---|---|
 | GP-221 | Amazon UK PPC OAuth | S3 | BLOCKED |
-| GP-222 | Facebook Ads Connector | S4 | To Do |
+| GP-222 | Facebook Ads Connector | S4 | In Progress — No longer Prefect — stays on Eclipse |
 | GP-223 | Target+ Connector | S4 | To Do |
 | GP-237 | Access & Credentials Epic (GP-238–245) | S2+ | Ongoing |
-| GP-225 | Unified Marketing Schema Design | S3 | To Do |
+| GP-225 | Unified Marketing Schema Design | S3 | In Progress |
 | GP-226 | Google Ads Connector | S4 | To Do |
 | GP-227 | Historical Backfill | S5 | To Do |
 
@@ -130,10 +139,10 @@ Tickets from 2026-05-12 business meeting, originally misfiled under FU92. Moved 
 #### Data / Integration
 | Ticket | Summary | Status | Notes |
 |---|---|---|---|
-| GP-265 | Get Google Ad Spend into data | Blocked | Waiting on Windsor auth from Justin |
+| GP-265 | Get Google Ad Spend into data | In Progress | Windsor authorization expected 2026-05-29 |
 | GP-257 | UK Ads — Justin to provide info | Blocked | Waiting on Justin |
 | GP-260 | Subscribe and Save data and KPIs | Investigation | Discovery phase |
-| GP-254 | Lectric eBikes Integration — Agency Test | Blocked | Waiting for creds |
+| GP-254 | Lectric eBikes Integration — Agency Test | In Progress | Credentials received. Entity segmentation design in progress. |
 | GP-261 | Configure Navira Snowflake to ALDC for ingestion | To Do | |
 
 #### Platform / Admin
@@ -161,12 +170,11 @@ Shared infrastructure decisions that affect ALL phases. Resolved empirically dur
 
 ## Next Steps
 
-1. **Start Phase 0** — harden the Prefect framework (6 gaps) and migrate Sellercloud. This answers CC1–CC7 empirically.
-2. **In parallel:** Provision API credentials for Phase 1A sources (lead time) — see [[navira-credentials-access]]
-3. **In parallel:** Begin Amazon SP-API app registration for Phase 1C (2–4 week approval)
-4. After Phase 0 gate passes: design unified marketing schema (Snowflake) for Phase 1A
-5. Schedule discovery sessions for Priority 1 open questions
-6. Initiate legal review for agency customer DPA and unstructured data governance
+1. **GP-225 — Unified Marketing Schema Design** (active): Clone TEST_DG1_GEP → TEST_DG1_GEP_DEV, deploy mock Google Ads + Meta data, build WAREHOUSE_SOURCE views with ENTITY_CODE segmentation
+2. **GP-226 — Windsor Google Ads + Meta** (pending credentials): Eclipse templates ready, activate when client authorizes via co-user link (~2026-05-29)
+3. **GP-222 — Amazon Ads UK/CA + Sponsored Display**: Add UK profile + SD branch to MARKETING_FCT_ACTIVITY (Eclipse, not Prefect)
+4. **GP-254 — Lectric eBike entity segmentation**: Flag column (ENTITY_CODE) on unified fact tables, entity mapping via CSV supplement
+5. **In parallel:** Continue provisioning remaining Phase 1A credentials
 
 ## Workflow Pages
 
@@ -197,6 +205,7 @@ _(none yet — move workflows here when done)_
 | Date | Summary |
 |---|---|
 | 2026-05-13 | Business meeting tickets moved from FU92 to GP (GP-253 through GP-267). 15 items from 2026-05-12 business meeting, originally misfiled under Fusion92 project. Dashboard enhancements (7), data/integration (5), platform/admin (3). Added to Jira Ticket Map above. |
+| 2026-05-28 | **Direction change:** Prefect migration (Phase 0) shelved — too slow, blocking data delivery. All new connectors use existing Eclipse pipeline. Focus shifted to: GP-225 (marketing schema design), GP-226 (Windsor Google Ads/Meta), GP-222 (Amazon Ads on Eclipse), GP-254 (Lectric eBike entity segmentation). Testing strategy: clone TEST_DG1_GEP → TEST_DG1_GEP_DEV for safe mock data development. |
 
 ## See Also
 

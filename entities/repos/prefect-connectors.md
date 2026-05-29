@@ -3,10 +3,12 @@ tags: [entity, repo, prefect-connectors, aldc, prefect, data-plane]
 aliases: [prefect-connectors, prefect connectors repo]
 sources: [GP-247 session 2026-05-01, GP-218 work pool setup 2026-05-02, entities/repos/connector.md, entities/tools/prefect.md]
 created: 2026-05-01
-updated: 2026-05-27
+updated: 2026-05-29
 ---
 
 # prefect-connectors
+
+> ⚠️ **SHELVED — 2026-05-28.** The Prefect migration is on hold; this repo is **not** the live connector runtime. New connectors are built in the legacy **[[connector]]** repo on the **[[Eclipse]]** pipeline. Do not treat this as the current path. Live work + full context: [[processes/distributed-workflow/active/navira/README|Navira workstream]]. Retained as historical reference.
 
 ALDC's Prefect v3 connector runtime. Forked from the `operation-fiasco` branch of [[connector]] on 2026-05-01 (GP-247). Houses Prefect flow definitions that pull data from source APIs/DBs → Azure Blob Storage → Snowflake, replacing the legacy BaseConnector / Eclipse agent architecture.
 
@@ -201,6 +203,168 @@ Seller_cloud team_name corrected: `globalecomp` → `navira` (GEP rebranded).
 - **Retry context enrichment**: `restart_from_stage` preserves `_retry_count`, `_prior_error`, `_prior_duration_s`. Claude-p retries get enriched prompt with worktree files, prior error, and "focus on fixing" instructions.
 - **UI buttons**: "Retry (with context)" vs "Fresh restart" — distinct behavior. Retry preserves context, fresh clears it via `clear_context` flag.
 - **Horizontal pipeline overview**: Swim lane view of all active pipelines in the Pipelines tab.
+
+### Orchestrator overhaul + connector pipeline continuation (2026-05-27)
+
+Major session: 12 commits across all branches. Focus on getting all 6 connectors through the full migration pipeline.
+
+#### Infrastructure fixes shipped
+
+| Fix | Root cause |
+|-----|------------|
+| Pipeline agent idempotency guards | Agent retried failed stages even when pipeline already succeeded, overwriting completions |
+| CI monitor (`/api/ci/status`, UI tab) | GitHub Actions builds polled every 45s, auto-restarts trigger-run on new image |
+| ShopifyAPI 12.4.0 → 12.7.0 | `cgi` module removed in Python 3.13 (used for local dev) |
+| Staging table empty-fields guard | `load_staging_data` crashed with `CREATE TABLE ... ()` when connector returned empty data |
+| Merge empty response skip | `base_connector.run_workflow` now skips load+merge for empty DataFrames — prevents cascade of PK-without-columns errors |
+| ACI stale container cleanup | Completed containers consumed ACI quota silently. Auto-cleanup before each backfill and after each run. `image_pull_policy=Always` set on QA work pool |
+| Backfill trigger (canary-first) | New `trigger_backfill_and_wait` stage: 1 canary run must succeed, then 30 runs at 2 concurrent. Infra failures (DeploymentFailed) tolerated up to 3; connector failures are zero-tolerance |
+| `advance_pipeline` handles failed stages | Could not manually advance past failed stages — now handles `failed` status and detects terminal state |
+| Overlap-aware parity check | Parity now compares QA vs prod within overlapping date range only. 3-tier scoring: structural (schema match), data (row counts in overlap), coverage (informational). Empty tables = hard fail |
+| Deployment file naming collision | `shopify.py` in deployments/ shadowed the shopify library → `import shopify` found the file. Renamed to `shopify_conn.py` |
+
+#### Credential fixes (Prefect blocks)
+
+| Connector | Problem | Fix |
+|-----------|---------|-----|
+| Amazon Ads | Prefect block had SP-API creds; Ads API needs a separate OAuth app | Updated block with legacy app client_id (hardcoded in amazon_ads.py) + on-prem `AMAZON_ADS_CLIENT_SECRET` + Eclipse refresh_token |
+| Amazon Seller Central | `clients` repo JSON had stale `client_secret` (rotated in CosmosDB). Block was also wrong type | Updated block from live CosmosDB query. Always query CosmosDB — never trust local JSON files |
+| Shopify (KA) | Block saved as generic `secret` type | Re-saved as typed `ShopifyConnection` via `Block.save()` |
+| All Amazon | All blocks initially provisioned as generic `secret` type | Must use `await ConnClass.save(name, overwrite=True)` — NOT PrefectService.create_or_update_block — to get typed blocks that `aload()` can find |
+
+#### Connector catalog schema name rule
+
+The `_resolve_connector_schema()` function looks up `snowflake_schema` in the connector catalog. This must match the `topic=` in the deployment file exactly. Mismatches found and fixed:
+
+| Connector | Deployment topic= | Catalog had | Fixed to |
+|-----------|-------------------|-------------|----------|
+| windsorai | `WINDSORAI` | `WINDSOR` | `WINDSORAI` |
+| amazon_sellercentral | `AMAZON_SELLER_CENTRAL` | `SP_API` | `AMAZON_SELLER_CENTRAL` |
+
+#### Connector status as of 2026-05-28 (end of session)
+
+| Connector | Ticket | Status | Next Action |
+|-----------|--------|--------|-------------|
+| exchangeratesapi | GP-271 | **SUCCEEDED** | Done |
+| windsorai | GP-275 | **SUCCEEDED** | Done |
+| amazon_ads | GP-273 | **PARITY 79.7%** | Backfill done (29/30, 2.9M rows). Missing columns in Snowflake tables because old Docker image was used. Fix CI → rebuild image → re-backfill. |
+| seller_cloud | GP-272 | **BLOCKED — VPN** | `ConnectionError: HTTPSConnectionPool(host='gep.api.sellercloud.com')`. SellerCloud API requires VPN. ACI has no VPN access. Needs Azure VNet integration or on-prem runner. |
+| amazon_sellercentral | GP-274 | **BLOCKED — 0 rows** | Credentials updated from CosmosDB (live). Connector runs, doesn't crash, but returns empty data. SP-API may need marketplace/scope investigation. |
+| shopify_conn | KA-15 | **DEPRIORITIZED** | KA no longer a client. Shopify creds likely expired/revoked. Infrastructure ready — will work for future Shopify clients with valid creds. |
+
+#### KA infrastructure provisioning (2026-05-28)
+
+Generalized provisioning script created: `scripts/provision_prefect.py` — works for any client, replaces per-client scripts. Supports subcommands: `snowflake`, `snowflake-block`, `connector-block`, `all`.
+
+| Resource | Details |
+|----------|---------|
+| Snowflake database | `QA_DG1_KA_PREFECT` on og35375 |
+| Service account | `QA_DG1_PREFECT_SVC_4B3E9C1A` / `QA_DG1_ROLE_PREFECT_SVC_4B3E9C1A` |
+| Snowflake block | `snowflake-qa-ka` (SnowflakeCredentials) |
+| Shopify block | `shopify-ka` (ShopifyConnection, creds from Eclipse JSON) |
+| Password | Stored in `vault/infra-credentials.md` |
+
+#### verify_blocks naming bug (unfixed, low-priority)
+
+`_resolve_block_suffix("KA")` returns `"ka-prefect"` → block name `snowflake-qa-ka-prefect`. But the connector resolves `snowflake-qa-ka` (via `build_block_id("snowflake-qa")`). The suffix map doesn't match `Account.build_block_id()` for clients whose `short_code` doesn't end with `_PREFECT`. Currently harmless because `verify_blocks` skips non-catalog connectors.
+
+#### Amazon Ads report columns (schema parity)
+
+To match production tables, these columns must be added to the v3 connector report configs:
+- `spPurchasedProduct`: `sales1d`, `purchases1d`, `unitsSoldClicks1d`, `unitsSoldOtherSku1d`, `salesOtherSku1d`, `purchasesOtherSku1d`  
+- `spCampaigns`: `budget.effectiveBudget`
+- `sdCampaigns`: `addToCartRate` (was already in config but SD_CAMPAIGN_REPORT_10 still missing — investigate)
+- `SPONSORED_PRODUCTS_ADVERTISED_PRODUCT_REPORT` had 0 rows — table exists but no data for the tested partitions (investigate date range)
+
+#### Credential validation (2026-05-28)
+
+`ConnectorConnectionBase.validate_connection()` added to base connector — called at the start of every `run_workflow()`. Each Connection class overrides with a lightweight API test:
+
+| Connection class | Validation method |
+|---|---|
+| `ShopifyConnection` | `shopify.Shop.current()` — tests API access |
+| `AmazonSellerCentralConnection` | SP-API `Orders.get_orders()` with future date — auth check |
+| `AmazonAdsConnection` | LWA `auth/o2/token` refresh token exchange |
+
+Fails fast with `RuntimeError` instead of silently producing 0-row DataFrames from bad credentials.
+
+#### Canary data validation (2026-05-28)
+
+After canary flow run completes, `_check_canary_data()` queries Snowflake to verify actual rows were written. If canary produced 0 rows, backfill stops immediately with `"canary_data_check": "EMPTY"` instead of wasting 30 partitions.
+
+#### Pipeline agent disabled (2026-05-28)
+
+Agent auto-retried permanent failures (VPN-gated APIs, OOM kills, expired creds) creating ACI container churn that exhausted the 10-core quota. Disabled by default (`_enabled = False` in `pipeline_agent.py`). Re-enable via `POST /api/agent/toggle {"enabled": true}` when failure classification is added.
+
+#### ACI work pool memory (2026-05-28)
+
+QA work pool `azure-aci-qa` memory bumped 1 GB → 2 GB. Seller_cloud and shopify were being OOM-killed at 1 GB.
+
+#### Branch-sync CI workflow (2026-05-28)
+
+`.github/workflows/branch-sync.yml` — auto-merges main → development → uat on every push to main. Currently blocked by branch protection (GITHUB_TOKEN can't bypass PR + status check requirements). Needs a PAT stored as repo secret to bypass. Manual sync works with admin bypass.
+
+#### CI failure (2026-05-28, unrelated)
+
+`credential-exchange` job fails: `azure/functions-action@fd80521a...` SHA unresolvable. This blocks Docker image builds even though quality-gate passes. Needs the action reference updated.
+
+#### Remaining blockers
+
+1. **CI credential-exchange job**: Fix Azure Functions action reference → unblocks Docker image rebuild for amazon_ads
+2. **GP-272 seller_cloud VPN**: ACI containers can't reach `gep.api.sellercloud.com`. Needs Azure VNet integration or on-prem runner.
+3. **GP-274 sellercentral 0 rows**: Credentials valid (updated from CosmosDB), connector runs but SP-API returns empty data. Investigate marketplace config, date ranges, API scopes.
+4. **ACI quota**: Still 10 cores canadacentral — request increase to 30 via Azure Portal
+5. **Branch-sync PAT**: Add admin PAT as repo secret for automated branch sync
+6. **Pipeline agent**: Add failure classification (retryable vs permanent) before re-enabling
+
+### Session 2026-05-29 — CI fix, ACI cleanup, quota + branch-sync
+
+#### Corrected diagnoses from prior session
+
+| Prior belief | Corrected |
+|---|---|
+| "CI broken → Docker image stale" | Docker image builds SUCCEED. `credential-exchange` job is an Azure Functions GitHub integration, NOT a required check. Doesn't block merges or Docker pushes. |
+| "GP-274 amazon_sellercentral SP-API returns empty data" | Previous failure was ACI container crash (ResourceDeploymentFailure) before SP-API was ever called. After ACI was fixed this session, canary COMPLETED but produced 0 rows — so SP-API empty data IS the real issue now. |
+| "seller_cloud containers were Succeeded (stale)" | They were actually RUNNING (container runtime state = Running, ACI provisioning state = Succeeded). ACI `provisioningState` reflects ARM deployment, not container runtime. True stale = provisioning state not in Running/Creating/Pending. |
+
+#### Infrastructure fixes shipped (2 commits)
+
+| Fix | File | Detail |
+|-----|------|--------|
+| `verify_blocks` catalog lookup normalization | `orchestrator/stage_scripts/prefect_ops.py:495` | Strip all hyphens + underscores before comparing connector names to catalog keys. Fixes `amazon_sellercentral` → `amazon-seller-central` mismatch that caused verify-blocks to skip silently. |
+| ACI stale container cleanup on orchestrator startup | `orchestrator/server.py` + `prefect_ops.py:_cleanup_stale_aci` | Runs after `recover_stale_pipelines()` on every startup. Logs each container name and provisioning state. Updated query to JSON (was TSV) to capture state alongside name. |
+
+#### Branch-sync fully operational
+
+- Classic PAT (`prefect-branch-sync-classic`, `repo` scope) created and stored as `SYNC_TOKEN` repo secret
+- `.github/workflows/branch-sync.yml` updated: `token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}`
+- Workflow tested and passed — main auto-synced to development + uat
+- Fine-grained PAT (pending ALDC-io org admin approval) can replace the classic token later
+
+#### ACI quota increase
+
+- Support ticket submitted: StandardCores canadacentral 10 → 30
+- Ticket details: Long-running, Production, Virtual Network, Azure Container Instances, Linux, All zones, 1 vCPU/2GB/15 groups, 6 creates per 5 min, 60 per hour
+- **az quota CLI does not support Microsoft.ContainerInstance provider** — always returns BadRequest or MissingSubscription. Must use Azure Portal for ACI quota changes. Use `az rest` to READ current usage but not write.
+- **Git Bash mangles leading-slash paths** in az CLI on Windows (`/subscriptions/...` → `C:/Program Files/Git/subscriptions/...`). Always use PowerShell for az CLI calls with resource scope paths.
+
+#### Connector status as of 2026-05-29
+
+| Connector | Ticket | Status | Next Action |
+|-----------|--------|--------|-------------|
+| exchangeratesapi | GP-271 | **SUCCEEDED** | Done |
+| windsorai | GP-275 | **SUCCEEDED** | Done |
+| amazon_ads | GP-273 | **RE-BACKFILLING** | All 38 AMAZON_ADS tables dropped in QA Snowflake. Pipeline reset to trigger-run. Awaiting ACI quota approval to run backfill. |
+| seller_cloud | GP-272 | **BLOCKED — VPN** | Azure VNet integration chosen (Option A). Design work pending. |
+| amazon_sellercentral | GP-274 | **BLOCKED — SP-API 0 rows** | ACI infra fixed. Canary completes but 0 rows returned. Investigate: wrong marketplace (hardcoded 'us'), missing API scope, no orders in test date range, wrong seller account. |
+| shopify_conn | KA-15 | **DEPRIORITIZED** | KA inactive. |
+
+#### Pending next session
+
+1. **ACI quota approval** — once 10→30 cores approved, restart GP-273 backfill
+2. **GP-273 parity review** — check structural failures resolved (ADDTOCARTRATE, BUDGET_EFFECTIVEBUDGET, PURCHASES1D columns)
+3. **GP-274 SP-API debug** — check marketplace config in deployment file, test with date range known to have orders, check SP-API permission scopes on the credential block
+4. **GP-272 VNet design** — Azure VNet integration for ACI so workers can reach `gep.api.sellercloud.com`
 
 ## See Also
 
