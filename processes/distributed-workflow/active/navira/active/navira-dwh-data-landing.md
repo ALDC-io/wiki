@@ -78,14 +78,19 @@ Promotion: DEV schema in TEST_DG1_GEP (validate) → live `WAREHOUSE`/`REPORT_CO
 | 2026-05-28 (pm) | Re-scoped GP tickets (Prefect shelved). **Lectric agency SP-API onboarding (GP-254):** validated creds (US/CA/MX/BR, new public solution app), propagated secrets to all env vaults, built Eclipse conn + 4 templates + staging fact + mock, **validated segmentation on TEST_DG1_GEP_DEV clone with mock data** (ENTITY_CODE='LECTRIC', multi-currency, cancelled filter ties out). Client confirmation email sent. Jira GP-254/225/226 commented. |
 | 2026-05-29 | **Navira Windsor connected** (GP-226): authorized 6 Google + 3 Meta accounts on the call; pulled REAL data → loaded to clone → validated ENTITY_CODE='NAVIRA', 0 UNKNOWN, schema 1:1. Confirmed **spend-only** (revenue=0; ROAS needs Windsor conversion-value fields — see [[cross-channel-marketing-attribution]]). Confirmed **one ALDC Windsor key returns all clients' accounts** → Fusion92 filter required. **Decision: lift clone-only → build in isolated DEV schema in TEST_DG1_GEP; activate Eclipse after Fusion92 filter.** Full-fact deploy blocked by GP-199 extract DDL not in repo. Jira GP-226 commented. |
 
-## Next Session (pick up here)
+## Next Session (pick up here) — PLAN-FIRST implementation
 
-**Guardrail:** all DWH changes deploy to **TEST_DG1_GEP_DEV clone only** right now — NOT real TEST_DG1_GEP. Eclipse connection/templates stay code-only until a separately-approved deploy.
+Environment (2026-05-29): build in an **isolated DEV schema in TEST_DG1_GEP**; **Fusion92 filter is the hard first step** before any Eclipse activation. (Full boot prompt held by Paul.)
 
-1. **Navira Google/Meta via Windsor (GP-226)** — data expected ~2026-05-29. Before it flows: (a) generate real UUID for `windsor.json`, wire + activate `templates/windsor/{google_ads,meta_ads}.json`; (b) populate real Navira account IDs in entity CSV supplement (Google MCC `728-582-8945` — verify MCC vs child id Windsor lands; real Meta `act_…`); (c) Windsor field verification. Meta branch hardcodes USD + CONVERSIONS=0 — revisit.
-2. **Commit Lectric work** to a feature branch in clients repo (Paul approves first).
-3. **Gated:** deploy Lectric Eclipse conn+templates to real Eclipse → TEST_DG1_GEP; then full dimensional integration (Lectric product/brand/cost dims) as its own phase.
-4. **Tech debt:** migrate Eclipse connection inline creds → Key-Vault injection.
+1. **Fusion92 cross-tenant filter (FIRST)** — scope the Windsor pull/warehouse to the tenant's own account_ids; isolation test asserting zero cross-tenant rows. Hard prerequisite for #2. See [[project_windsor_fusion92_filter]].
+2. **Activate Eclipse Windsor connector → TEST** — real UUID + api_key (`0fc1eaa029746a95d27c94abff39f324c47a`) in `windsor.json`; activate `templates/windsor/{google_ads,meta_ads}.json`; confirm real data lands in `TEST_DG1_GEP.GOOGLE_ADS`/`META`, Navira-only.
+3. **Tier 1 — Windsor revenue fields (GP-225)** — add `conversions_value` (Google) + `actions_purchase`/`action_values_purchase` (Meta — verified names); update mock SQL; set Branch 6/7 SALES_AMOUNT/CONVERSIONS. ⚠️ row-split test grouped by PK before activation (Meta high-risk).
+4. **Phase 1 — `REPORT_COMMON.MARKETING_EFFICIENCY`** (in DEV schema) — all-channel blended MER (Tier 2) + Amazon product-grounded (Tier 3 via `SHARED_DIM_PRODUCT_BASE`); spend ⨝ `SALES_FCT_*`; USD consolidation; ENTITY_CODE multi-tenant + isolation test. File the new ticket. See [[cross-channel-marketing-attribution]].
+5. **Agency (Lectric)** — activate Seller-Central Eclipse into TEST (same filter discipline); derive per-entity product dim from the all-orders report; fold into the model (T2 now, Amazon T3 once product dim exists).
+6. **Adjust yesterday's implementation** — mock data + Lectric design (`sales_fct_lectric_amazon_orderline`, `mock_lectric_amazon_raw`) for the DEV-in-TEST + Tier 2/3 model.
+7. **Unblock GP-199 extract DDL into repo** — `EXTRACT_AMAZON_ADS_SB_AD_ASIN_MAP`/`_DAILY_SPEND` exist only in PROD; GET_DDL on prod account wj66376 → commit so the unified fact is reproducible in TEST/DEV.
+
+**Loose ends:** uncommitted `mock_entity_mapping.sql` real-IDs update (land on a GP-225/226 branch); Eclipse connection inline-cred → Key-Vault migration (tech debt).
 
 ## See Also
 
