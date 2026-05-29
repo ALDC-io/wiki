@@ -166,6 +166,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[environment-setup]] — 12-step new developer onboarding: core software, Python venv, Git, Snowflake, Power BI, VPN, Docker agents.
 - [[connector-docker-deployment]] — Docker agent build and deploy: SSH to workstation-agent, build.sh, push to GHCR, deploy via Portainer across test/prod/QA servers.
 - [[eclipse-azure-deployment]] — Eclipse / core_api web-app deploy via GitHub Actions → Azure staging slot → swap. Must swap frontend AND backend. Swap-back = rollback.
+- [[credential-exchange-function-deploy]] — Deploy `func-aldc-cred-qa` (Linux Consumption Python) + the GEP Data Model / Validation Report export. Two traps: `func publish` needs Python 3.11 on PATH (crashes on 3.14), and `config-zip` silently no-ops (use `func publish --build remote`). openpyxl `write_only` mandatory (OOM on Y1). Manual upload fallback via Cosmos `account_secret.storage_sas_1` → blob + Postgres `app_report` bump.
 - [[core-api-local-setup]] — Full developer runbook for running core_api locally (Python 3.11 + Azure Functions Core Tools + `local.settings.json` + Postman via `vault/postman-build.py`). Includes curl smoke-test, clean Postman workspace setup, and common-failures table with the Python-3.13-pyarrow trap and the Postman bearer_token precedence trap. Daily driver for any core_api debugging.
 
 ### Ticket Lifecycle
