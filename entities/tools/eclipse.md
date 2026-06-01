@@ -229,8 +229,24 @@ connector_project/
 3. Test with `_connector_test.py` (outputs CSV/JSON per table)
 4. Delete test CSV/JSON files before committing to GitHub
 
+## Recovery & Incident Notes
+
+When an outage (power/network/agent restart) kills templates mid-run, see the
+[[eclipse-incident-response]] runbook (triage → canary re-trigger → warehouse verify).
+
+**Zombie / queue gotcha (single-`full`-partition templates).** A `partition_scheme.method:
+full` template that is power-killed mid-run goes `zombie`, leaving its single `work_partition`
+with un-acked `queue_messages` and `in_queue: true`. It does **not** auto-recover on schedule —
+re-trigger manually, and expect a few minutes of queue-drain before the re-run lands (latency,
+not a wedge — verify the agent is healthy first: a working agent shows many `complete` runs in
+`schedule`). Data is never corrupted: these loads write a new versioned `MAIN_…_N` table and
+repoint the `CURRENT_MAIN_…` view atomically, so a killed run wrote nothing and the live table
+keeps the last-good snapshot. Note `in_queue: true` alone is **not** a blocker — partitioned
+templates (one partition/day) normally carry many. (Established 2026-06-01, ALDC-244.)
+
 ## See Also
 
+- [[eclipse-incident-response]] — outage recovery runbook (triage, canary, zombie gotcha)
 - [[clients-repo]] — where Eclipse configs live (source of truth)
 - [[data-pipeline-flow]] — Eclipse's role in the full pipeline
 - [[Snowflake]] — where Eclipse loads data

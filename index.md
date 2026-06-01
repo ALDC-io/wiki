@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-05-29
+updated: 2026-06-01
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -175,6 +175,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 ### Operations
 - [[orchestrator-production-readiness]] — 5-phase plan (A-E) to harden the Launchpad orchestrator pipeline for safe connector promotion QA → UAT → Prod. Data validation, deployment, rollback, evidence capture, gate wiring.
 - [[flight-check]] — Operational validation process: Eclipse connector health, Snowflake task chain, data freshness, Power BI refresh, data share integrity.
+- [[eclipse-incident-response]] — Outage-recovery runbook for Eclipse connectors (power/network/agent loss). Read-only triage via `observability/ops/incident_triage.py` → classify casualties vs noise → canary re-trigger → warehouse verify. Documents the zombied single-`full`-partition queue-drain gotcha. Proven on the 2026-06-01 Kamloops power outage (ALDC-244).
 - [[client-deactivation]] — Client deactivation checklist: Postgres users, Eclipse tasks, Snowflake shares, PBI licenses, invoicing stop dates, NextCloud access.
 - [[client-vm-setup]] — Setting up a Windows VM (via Parsec) for Mac clients who can't install Parallels.
 - [[client-invoicing]] — Three invoicing models: project-based gates, quarterly payment plans (GEP), monthly recurring.
@@ -236,7 +237,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-248]] — Prefect Snowflake Environment Isolation. 3 databases (`QA/TEST/PROD_DG1_GEP_PREFECT`), 3 `PREFECT_SVC` service accounts, 2 PBI workspaces. Done 2026-05-02.
 - [[GP-256]] — Add Return Rate KPIs (unit-based) to SKU Profitability Dashboard. DAX measure deployed to Prod via XMLA 2026-05-22. Navira-demo frontend update remaining.
 - [[GP-259]] — Orders/Return and COGs for SKU Profitability. Measures already exist in GEP Prod model. Navira-demo frontend update remaining.
-- [[GP-261]] — Navira Snowflake → ALDC ingestion. First Snowflake-to-Snowflake connector. Architecture decision: Prefect ETL Pipeline (2026-05-25). Awaiting Justin's response.
+- [[GP-261]] — Navira Snowflake → ALDC ingestion. First Snowflake-to-Snowflake connector. Decision revised 2026-06-01 (Prefect shelved): native Secure Data Share + local materialization, hardened with share-drop detection + stale-but-available mitigation. Snowsight setup guide drafted for Justin; ALDC identity confirmed. Awaiting Justin's view list + region.
 - [[GP-PENDING-missing-cogs-cost-history]] — Catalog-wide blank-COGS / overstated margin on SKU Profitability (Heather "Missing COGs"). Root cause = cost-history horizon (begins 2024-05-30 vs sales from 2023) + cost-field/timing lag. Fix (back-fill + field fallback) validated: ~$21M COGS recovered, zero regression. Awaiting Navira's option choice (2026-05-28).
 - [[GP-PENDING-data-share-stability]] — PENDING: research share gap detection/prevention. Tables drop from PROD outbound share silently; task chain only fails at runtime. Four options researched.
 - [[GP-PENDING-infra-connector-failures]] — PENDING: four long-running infra failures (NFS mount missing, SQL Server unreachable, Eclipse Core API DNS, Fusion92 expired credentials). Discovered 2026-05-22. 10 GEP + 7 F92 templates failing, 13–27+ days stale.
