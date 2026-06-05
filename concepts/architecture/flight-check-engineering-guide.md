@@ -657,6 +657,10 @@ Follows the [[eclipse-azure-deployment]] pattern.
 - [ ] Unpinned `requirements.txt`, no `pyproject.toml`.
 - [ ] One test file covering calculations; nothing else tested.
 - [ ] Email-send errors silently swallowed per-document in the batch loop — check App Insights when notifications go missing.
+- [ ] **Snowflake sync `only_recent` 30-day window silently drops flights** ([[FU92-419]]). `dax_api/sync/lib.py` `RECENT_DAYS_TO_PULL=30`; a flight edited just before a sync outage ages out of the window on resume and is never re-synced (stale CDC snapshot persists → "$0 / no data" in the UI, e.g. 6T901 / Job PRJ002345, fixed 2026-06-05). Fix = periodic full reconcile or last-successful-sync high-water-mark.
+- [ ] **Legacy Firebase Flight Check sync still scheduled** ([[FU92-419]]) — the pre-Nov-2024 Firebase app (`flight-check-ae37d`, ~10,444 dead flights) is still synced into `FLIGHT_CHECK.FLIGHTS_FLIGHTS` and fires false "customer-impacted" alerts. Retire it.
+
+> **Two-backend gotcha (confirmed 2026-06-05):** current flights live in **Cosmos** (authoritative since Nov 2024); the **Firebase** project is the *legacy* app. They feed **different** Snowflake tables — Cosmos → `DATA_STORE.FLIGHT_CHECK_SYNC_FLIGHT` → `SHARED_DIM_FLIGHT` (the warehouse the UI/spend-matching reads); Firebase → `FLIGHT_CHECK.FLIGHTS_FLIGHTS` (legacy). When debugging a "$0" flight, trace the **Cosmos** path. `SHARED_DIM_FLIGHT`/`FCT_PLATFORM_SPEND`/`FCT_DAILY_SPEND` are **dynamic tables** (`TARGET_LAG=DOWNSTREAM`) — force propagation with `ALTER DYNAMIC TABLE … REFRESH`.
 
 ---
 
