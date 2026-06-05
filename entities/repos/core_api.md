@@ -84,6 +84,8 @@ When an endpoint misbehaves:
 4. Check [[CosmosDB]] `schema` container for stale template documents if the failure is around Eclipse template resolution
 5. Follow [[debugging-warehouse-loads]] for the full decision tree
 
+> **⚠ Gotcha — the generic 500 masks the real exception (`v1/__init__.py:1035-1056`).** The top-level handler catches *every* unhandled exception and returns the **same** message — `"This route function is not currently implemented, no results found at route or incorrect route specified."` (500). So that text does **not** mean the route is missing — it usually means the handler raised a normal Python exception. Worse, it tries `json.loads(str(e))` and, when `e` isn't a `raise_error()`-formatted JSON string, the `traceback` it returns is the **handler's own `JSONDecodeError`** (`Expecting value: line 1 column 1`), not the real traceback. **The real error is only in the Azure Function logs** (the handler `print(str(e))`s it). To diagnose: tail the function app logs / App Insights, or reproduce locally. Example (2026-06-03, [[GP-277]] Fix C): a `TypeError` from a call-site arg-count mismatch (`warehouse_schema_match_tolerant` called with 7 of 8 positional args, missing `session_id`) surfaced as this generic "route not implemented" 500 on `/warehouse/merge`. Static-read the changed code's call sites before chasing infra.
+
 ## Migration from core_api → connector
 
 Historically, queries that pulled data from external APIs lived in core_api. 

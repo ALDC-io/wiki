@@ -3,12 +3,17 @@ tags: [workflow, navira, phase-1a, marketing, google-ads, facebook-ads, amazon-p
 aliases: [Navira Phase 1A, Marketing Ad Platforms]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html, eclipse_exp/frontend/public/navira/navira-phase1a-data-dictionary.html]
 created: 2026-04-27
-updated: 2026-05-29
+updated: 2026-06-02
 ---
 
 # Phase 1A — Marketing Data: Ad Platforms
 
 **Priority:** 1 (Immediate) · **Interfaces:** 6 (in build order) · **Status:** Tickets created — S3/S4
+
+> **2026-06-02 — deployment progress (Navira roadmap).**
+> - **[[GP-199]] (Amazon SB ASIN attribution):** Justin's 3 UAT callouts addressed; **spend-weighted per-ASIN sales LIVE in prod** `WAREHOUSE.MARKETING_FCT_ACTIVITY` (reconciles to campaign report to the penny). Phase 2 (real attribution via `sbPurchasedProduct`) connector merged + Amazon-validated; landing blocked in TEST by the core_api pick bug below.
+> - **[[GP-277]] core_api fixes (TEST stage slot, not promoted):** (A) `work_pick` connection-scoping fix — unblocks scoped-agent validation pulls in TEST (was the blocker for GP-199 phase-2 + future connector testing); (B) dtype-tolerant schema versioning — stops the 24-version forking on dtype drift. Both **validated** (pick fix server-side; Fix 2 34/34 logic+mechanics). **Gate before promote:** consumer-side validation of Fix 2's varchar-gravitation (boot prompt `gp277-fix2-consumer-validation.md`).
+> - **Next (Paul, resuming after core_api promote):** pivot back to **Facebook (Meta) + Google Ads connectors** (interfaces 1,2,5) and the **unified marketing schema** deployment. The core_api pick fix is the enabler that makes TEST-env connector validation work again.
 
 ## Objective
 
