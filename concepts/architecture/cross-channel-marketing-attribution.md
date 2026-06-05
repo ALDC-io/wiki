@@ -99,6 +99,17 @@ A reconciliation view (not a new ingest) that LEFT-JOINs aggregated spend to agg
 - **Agency ([[phase-1c-sales-agency-customers]]):** same model per `ENTITY_CODE`. Agency Amazon Ads → Tier 3 once a per-entity product dim is derived from their orders/catalog; until then Tier 2. Each new tenant inherits the model with zero per-tenant schema work beyond its product dim.
 - **GP-199** already supplies the Amazon-SB ASIN key that Tier 3 joins on — no rework.
 
+## Calibrated ROAS — capped vs uncapped (OPEN client decision, surfaced 2026-06-05)
+
+Tier 2.5 Calibrated ROAS rescales platform-attributed value by a **calibration factor** (`actual revenue ÷ Σ platform-attributed`) so channels reconcile to real revenue. Two definitions exist and **diverge hard for Navira** (factor ≈ 6.4 — platforms collectively *under*-claim, organic-heavy):
+
+- **Uncapped** (total-grain; the Sandbox measure): factor applied as-is → Amazon 32.5x / Google 18.0x / Meta 6.4x. The directional **channel-mix** signal.
+- **Capped** (`LEAST(1, factor)` per month; warehouse `MARKETING_EFFICIENCY_MONTHLY`): never over-claims → for Navira the cap is **inert** and Calibrated ROAS collapses to Platform ROAS (5.05 / 2.80 / 0.99x).
+
+Both are now built in the Sandbox model (capped DAX verified == the `_MONTHLY` view to 4 dp). **Recommendation:** default the dashboard to **uncapped** (only it adds channel-mix insight) with the directional caveat; keep capped as a conservative cross-check. Decision belongs to Navira.
+
+> **Build reference for dashboards:** `aldc-launchpad/pbi_ops/navira_marketing_data_dictionary.md` — the elite grounding doc (object dictionary, grain, caveats, measure list, dashboard recipes). Team builds on the `GP225 Test Model Preview` Sandbox model / the `WAREHOUSE_TEST_GP226_TEAM` schema snapshot.
+
 ## See Also
 
 - [[GP-225]] — unified marketing schema; delivers Tier 1 (the Windsor revenue-field fix)
