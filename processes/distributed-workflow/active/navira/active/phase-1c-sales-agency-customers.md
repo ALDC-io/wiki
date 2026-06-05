@@ -8,7 +8,7 @@ updated: 2026-04-30
 
 # Phase 1C — Sales Data: Agency Customers
 
-**Priority:** 1 · **Interfaces:** 2 · **Status:** Tickets created — S4/S5
+**Priority:** 1 · **Interfaces:** 2 · **Status:** In Development — [[GP-254]] Lectric: sales fact built + 327-order sample integrated & DAX-validated in the Sandbox marketing model (multi-tenant `ENTITY_CODE` proven). Full backfill + inventory interface pending.
 
 ## Objective
 
