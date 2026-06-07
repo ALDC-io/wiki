@@ -1,6 +1,6 @@
 ---
 tags: [index, navigation]
-updated: 2026-06-01
+updated: 2026-06-05
 last_ingest: 2026-04-27
 last_runbook_update: 2026-04-24
 ---
@@ -86,6 +86,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[dax-ai]] — DAX AI dashboard suite for Fusion92. Activation Model (client testing), Performance Summary + Financial Reporting (ON HOLD), External Dashboard (deferred).
 - [[cce]] — Claude Code Enhanced. Auto-updating wrapper with hooks, Zeus memory integration, and cross-machine messaging.
 - [[observability-platform]] — Lightweight, company-wide observability & monitoring platform (3-plane self-host: Uptime Kuma + Prom/Grafana + Python job-health + obs-api + Mailjet→Jira). Week 1 complete 2026-04-25.
+- [[triage-agent]] — Agentic support-message triage & auto-remediation (own repo). M365+Slack → classify (deterministic → grounding → Haiku→Sonnet→Opus cascade → abstain) → triage vs obs-api → propose (HITL) → Docker repro. Automates [[eclipse-incident-response]]; consumes [[observability-platform]] obs-api. Hackathon (demo 2026-06-08). **Phase 1: gold human-corrected (281 rows) + band-calibration bug fixed & validated** (decoupled `_band` from client resolution → 0/12/88 → 35/64/1 auto/review/abstain, commit `38edf27`). New finding: live-cascade intent accuracy 0.48 vs corrected gold = classifier doesn't yet apply the "automated notification → noise" policy (the recalibration target). All 5 research reports integrated (R1–R26). Token-efficiency paramount (`claude -p` ≈30K tok/call — use the API path). Next: measure noise-FPR + sweep thresholds → Monday full-body re-pull → grounding layer.
 - [[factoria]] — Autonomous data engineering platform. Docker runner-split architecture, agent operating model.
 - [[ai-driven-dev-workflow]] — AI-assisted development workflow research. Multiple versions (v2, v3, v3.1). ALDC Agentic Coding Guidelines.
 - [[zeus-memory]] — Zeus Memory (OpenTribe) product. Knowledge integrity platform: cross-source drift detection, auto-sync proposals, human approval. Streamlit prototype built against Lululemon use case.
