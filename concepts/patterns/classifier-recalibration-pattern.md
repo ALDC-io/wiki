@@ -102,6 +102,34 @@ threshold can fix. The right next investment is better model **inputs** (a groun
 not calibration of uninformative outputs. So calibration was **deferred** — sequencing the cheap,
 high-certainty wins ahead of the expensive, lower-certainty ones.
 
+### 3a. …and when you add those inputs, *measure* the lift — don't assume it (session 6)
+
+[[triage-agent]] then built the grounding layer step 3 pointed at (a deterministic retrieval planner over
+the [[LLM Wiki]] → evidence cards into the prompt). The honest result: on the **255-char preview** corpus,
+wiki-only grounding **net-regressed** (intent 0.796 → 0.775, scope 0.829 → 0.811, noise-FPR 0% → 0.55%) —
+the lone win was the target metric, ticket recall 55% → 64%. Three transferable lessons:
+
+- **Lexical/ontology grounding lifts *entity & scope*, not *intent*.** Knowing *which client* and *what
+  tool* a message is about is an entity-resolution win; deciding *is this a question, a ticket, or just
+  chatter* is a content-understanding judgment that static wiki facts don't carry. The intent lift needs
+  **live, message-specific context** (prior thread, open tickets — i.e. tenant memory) + the **full
+  message body**, not a knowledge base. Route grounding sources per-dimension accordingly.
+- **Measure on the layer the consumer actually reads.** Cards over-fired on 255-char *previews* (11/19
+  regressions were noise→status_update — a card primes the model to "read more into" a truncated reply).
+  Evaluating retrieval-augmented classification on a truncated proxy of the real input can invert the
+  result; defer the verdict to full content. (A direct application of the evidence-gating rule: validate
+  at the consumer's layer.)
+- **When a measured change regresses, gate it behind a flag — don't ship it on the hope it'll help
+  later.** Grounding went in behind `GROUNDING_ENABLED` (default OFF), so the live path keeps the proven
+  behavior; the flag flips on to re-measure once the inputs are real (full bodies + tenant memory). The
+  build is preserved and reviewed; only its *activation* waits for evidence.
+
+A clean side-benefit surfaced *by* the grounding eval: the dominant error source (8 automated
+`azure-noreply@microsoft.com` notices the cards upgraded to status_update) became a deterministic
+**exact-ADDRESS** pre-filter entry (move 2a, refined) — `microsoft.com` apex is shared with the
+`ticket_candidate`-bearing `no-reply-powerbi@…`, so the local part, not the domain, is the safe key. That
+fix is flag-independent and helps even with grounding off.
+
 ## Checklist
 
 1. Persist per-row predictions + confidences + band + gold (not just aggregate accuracy).
@@ -110,7 +138,8 @@ high-certainty wins ahead of the expensive, lower-certainty ones.
 4. Fix the dominant confusion with a deterministic pre-filter (specific, fail-open, excludes high-cost cases).
 5. Cap the band for cost-bearing contexts instead of moving global thresholds.
 6. Defer post-hoc calibration / sweeps until model inputs (grounding) are improved.
-7. Gate model-changing edits behind both self-review and an independent (Opus) review. (See [[ai-pr-workflow]].)
+7. When you add those inputs, **measure the lift on full/real input — don't assume it**; route grounding per-dimension (entity/scope ≠ intent); flag-gate any measured regression rather than shipping on hope (§3a).
+8. Gate model-changing edits behind both self-review and an independent (Opus) review. (See [[ai-pr-workflow]].)
 
 ## See Also
 

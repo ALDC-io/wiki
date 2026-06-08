@@ -20,7 +20,43 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
 
-## Status (2026-06-07, session 5)
+## Status (2026-06-07, session 6)
+
+**Grounding layer (cascade stage 2) BUILT — wiki half — but held behind a default-OFF flag because, on
+the 255-char preview corpus, wiki-only grounding *net-regressed* accuracy.** This is an honest,
+evidence-gated outcome, not a setback: the infrastructure is sound (Opus review, no blockers; 84 tests)
+and the one clean win is exactly the target metric (**ticket_candidate recall 55% → 64%**). The lesson is
+folded into [[classifier-recalibration-pattern]] §3a. Session 6 delivered (branch
+`feat/grounding-layer-wiki`, commits `65236e4` + `86cd83f`):
+
+- **`classify/grounding/` package** — a *deterministic* retrieval planner (if/then, NOT an LLM) →
+  compiled wiki lookups (`client_aliases` / `tool→scope` / `symptom→ticket`) + an **in-house BM25F** over
+  this wiki → ≤5 evidence cards (~2k-tok hard cap; wiki + Zeus **never merged**) injected into the Claude
+  prompt, plus scalar `RetrievalFeatures`. `scripts/build_wiki_index.py` compiles committed
+  `data/grounding/` artifacts, snapshot by **wiki git SHA** (`7b53e65`). [[zeus-memory|Zeus]] is **stubbed**
+  (always unavailable; `as_of` contract in place) — gated behind the availability-time/contamination
+  handling. Safety: the trusted grounding block is provably **wiki-derived only** (untrusted message text
+  reaches retrieval *solely as a query*); the cached system prefix is untouched.
+- **One live eval (frozen 281-row gold): wiki-only grounding net-regressed previews** — intent acc
+  0.796 → 0.775, scope 0.829 → 0.811, noise-FPR 0% → 0.55% — with the lone win being ticket recall
+  55% → 64%. Net intent flips +13 / −19. **Root cause: cards over-fire on truncated 255-char previews**
+  (11/19 regressions were noise→status_update). So grounding is **held behind `GROUNDING_ENABLED`
+  (default OFF)** — when off, the cascade is byte-for-byte the proven session-5 path (noise-FPR 0%). Flip
+  on for the Monday full-body re-eval, where [[zeus-memory|Zeus]] (the *primary* intent source) also comes
+  online. Confirms the §5.3 thesis: wiki grounds scope/entity; the intent lift needs live tenant memory +
+  full content.
+- **Flag-independent follow-on (`86cd83f`):** an **exact-address** pre-filter for
+  `azure-noreply@microsoft.com` (8/8 noise in gold; the dominant noise→status_update error source). It
+  can't be domain-pre-filtered — `microsoft.com` apex is shared with `no-reply-powerbi@microsoft.com`
+  (3/3 `ticket_candidate`) — so it's keyed by full address. Improves the classifier with grounding OFF
+  too (those 8 rows now short-circuit free + deterministically, same labels).
+
+**Next:** Monday full-body re-pull (still gated on Entra admin consent — no `GRAPH_*` creds in `.env`) →
+flip `GROUNDING_ENABLED=true` → re-eval on full bodies; wire the Zeus half behind availability-time
+handling; tune the symptom→ticket over-fire. Post-hoc calibration/sweep still deferred until grounding
+proves a lift.
+
+### Session 5 (prior) — AUTO proven safe + deterministic recalibration
 
 **AUTO band PROVEN safe (noise-FPR 0%); classifier recalibrated to the corrected gold — all three R8
 switch-gates met with two cheap deterministic levers, no threshold changes.** The reusable method is
@@ -75,10 +111,16 @@ case store, Anthropic **structured outputs**. Classification is a cost-efficient
      short-circuit to `noise` *before* any LLM call — a token saver and the highest-leverage accuracy
      lever (the LLM otherwise mislabels them `status_update`). Subdomain-specific allowlist; apex
      `microsoft.com` + `getgitguardian.com` excluded (they carry failure/security `ticket_candidate`s).
-2. **Grounding layer** (to build): a *deterministic* retrieval planner routes the static **LLM Wiki**
-   (this wiki — compiled lookups + lexical) and the live **[[zeus-memory|Zeus Memory]]** (tenant-scoped,
-   after client resolution) into ≤3–5 evidence cards injected into the Claude call. Wiki = stable
-   ontology/entity grounding; Zeus = live tenant state. Never merged, never full-snapshot.
+     **Session 6 added an exact-ADDRESS tier** (`_EXACT_NOISE_ADDRESSES`) for `azure-noreply@microsoft.com`
+     — automated senders on a shared apex the domain rule can't blanket (`no-reply-powerbi@microsoft.com`
+     on the same apex is `ticket_candidate`); the local part disambiguates.
+2. **Grounding layer** (session 6, BUILT — wiki half, behind `GROUNDING_ENABLED`, default OFF): a
+   *deterministic* retrieval planner routes the static **LLM Wiki** (this wiki — compiled lookups +
+   in-house BM25F) and the live **[[zeus-memory|Zeus Memory]]** (tenant-scoped, after client resolution)
+   into ≤5 evidence cards injected into the Claude call. Wiki = stable ontology/entity grounding; Zeus =
+   live tenant state. Never merged, never full-snapshot. Zeus is **stubbed** (availability-time/
+   contamination-gated). Held off the live path: wiki-only grounding net-regressed the preview corpus
+   (cards over-fire on truncated bodies) — see Status above + [[classifier-recalibration-pattern]] §3a.
 3. **Claude** schema-constrained classification — **Haiku → Sonnet → Opus** cascade: escalate on low
    confidence at any tier, and on high-impact scope (connector/orchestration/credentials) only from the
    cheapest tier; Opus only if still uncertain after Sonnet. Most messages stop at Haiku (token-efficient).
@@ -177,7 +219,7 @@ The corrected-gold policy:
 
 | Phase | Name | State |
 |---|---|---|
-| 1 | Monitor & classify | live-validated; **AUTO proven safe (noise-FPR 0%), classifier recalibrated — all R8 gates met (intent acc 0.50→0.80)**; grounding layer next |
+| 1 | Monitor & classify | live-validated; **AUTO proven safe (noise-FPR 0%), R8 gates met (intent acc 0.50→0.80)**; grounding layer BUILT (wiki half) but flagged OFF — net-regressed previews, pending full-body + Zeus re-eval |
 | 2 | Triage (read obs-api: correlate failures) | not started |
 | 3 | Propose remediation (draft → Slack HITL) | not started |
 | 4 | Reproduce & auto-fix in Docker | teaser, not a weekend deliverable (Cosmos/Queue/Blob coupling in [[core_api]] makes isolated repro hard) |
