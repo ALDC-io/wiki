@@ -20,7 +20,38 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
 
-## Status (2026-06-07, session 6)
+## Status (2026-06-07, session 7)
+
+**Robustness lane — two flag-independent fixes to the proven session-5 path, validated live with no
+regression; branch `feat/grounding-layer-wiki` MERGED to `main`.** The Monday full-body re-pull is still
+blocked (no Graph admin consent / no `GRAPH_*` in `.env`), so grounding stays parked behind
+`GROUNDING_ENABLED` (default OFF). Worked the carry-forward robustness instead — both fixes Opus-reviewed
+(APPROVE) and gated on one live grounding-OFF eval. Commits `b41f7da` (Fix 1) + `4df6e45` (Fix 2) + docs;
+patterns at [[classifier-recalibration-pattern]] §4.
+
+- **Fix 1 — cascade ValidationError repair (`llm.py`).** A tier occasionally emits a value outside a
+  field's enum (e.g. scope value `'credentials'` in `intent`) → `messages.parse` raises a
+  `pydantic.ValidationError`; a first-tier error previously crashed the row. Now: retry once with a
+  per-field value-list hint appended to the **user turn only** (system prompt / `PROMPT_VERSION` / cached
+  prefix untouched → no passing classification shifts, no eval re-run forced); second failure → conservative
+  abstain-bound NOISE, never raise; API/transport errors still propagate. **Fired & self-corrected LIVE**
+  on a Sonnet `'credentials'`-in-`intent` error during the eval. 6 unit tests.
+- **Fix 2 — internal-forward client attribution (`client_resolution.py` + `cascade.py` + `pipeline.py` +
+  `registry.py`).** `@aldc.io` forwards recover the client from the quoted original sender
+  (`From:` / "… wrote:"); internal-scoped (worst case a safer REVIEW hint, never an action). Resolution
+  reads the **raw** body via a new `cascade.classify(raw_body=)` param (pipeline passes `raw_body=msg.text`;
+  the LLM still sees the trimmed body) — because `normalize_text` strips the quoted header, without this the
+  feature was **inert on the live path** (train/serve skew, caught in review). ReDoS-hardened (8000-char
+  scan cap + bounded regex quantifiers; 200 KB body 26 s → 0.0001 s).
+- **Validated (one live grounding-OFF eval vs pre-change baseline): noise-FPR 0% → 0%, intent 0.797 →
+  0.801, scope flat 0.829, AUTO 65%, client-res 1.0 — no regression, slight lift; all R8 gates hold.**
+  Zero-spend pre-check: Fix 2 attributes 14/281 forwards with strictly-protective banding. 99 tests pass.
+- **Branch merged to `main`** (grounding flagged OFF = safe infra; sessions 4–7 integrated cleanly, pushed).
+
+**Next:** unchanged — Monday full-body re-pull (gated on Entra admin consent) → flip `GROUNDING_ENABLED=true`
+→ full-body grounding re-eval; wire the Zeus half behind availability-time handling.
+
+### Session 6 (prior) — grounding layer built (wiki half), flagged off
 
 **Grounding layer (cascade stage 2) BUILT — wiki half — but held behind a default-OFF flag because, on
 the 255-char preview corpus, wiki-only grounding *net-regressed* accuracy.** This is an honest,

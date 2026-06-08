@@ -6,6 +6,9 @@ sources: [
   C:/Users/PaulRussell/repos/triage-agent/scripts/eval_gold.py,
   C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/classify/prefilter.py,
   C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/classify/cascade.py,
+  C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/classify/llm.py,
+  C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/classify/client_resolution.py,
+  C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/pipeline.py,
 ]
 created: 2026-06-07
 updated: 2026-06-07
@@ -130,6 +133,53 @@ A clean side-benefit surfaced *by* the grounding eval: the dominant error source
 `ticket_candidate`-bearing `no-reply-powerbi@…`, so the local part, not the domain, is the safe key. That
 fix is flag-independent and helps even with grounding off.
 
+## 4. Robustness hardening for the live path — and the train/serve traps it exposes (session 7)
+
+With the full-input re-eval still blocked, [[triage-agent]] session 7 hardened the *proven* path with two
+flag-independent fixes. Each carried a transferable lesson about the gap between what the **eval** measures
+and what the **live pipeline** actually does.
+
+### 4a. Repair schema-violations in the USER turn, not the system prompt
+A schema-constrained classifier (`messages.parse(output_format=…)`) will *occasionally* emit a value
+outside a field's enum — e.g. an `operational_scope` value (`'credentials'`) in the `intent` field — which
+the SDK rejects with a `pydantic.ValidationError`. Don't let it crash the row; **retry once with a
+per-field value-list hint**. The key move: append the hint to the **user turn**, never the system prompt.
+The system prefix is *prompt-cached* and version-stamped — editing it bumps the prompt version, invalidates
+the cache, and shifts *every* currently-passing classification (forcing a full eval re-run). Putting the
+repair in the user turn means only the rare retry pays the extra tokens and **no passing verdict moves** —
+so the fix needs no re-validation of the baseline. On a second failure, degrade to a conservative
+abstain-bound result (reuse the existing refusal path); never raise on a model-output problem. Keep genuine
+API/transport errors propagating (catch the *specific* validation exception, not a broad `Exception`, so
+network errors still reach the caller's fallback). Lock it with a unit test that asserts the cached system
+block is **byte-identical across the repair retry**. (Token-efficiency link: [[token-efficiency]].)
+
+### 4b. Resolve entities from the RAW body, not the LLM-normalised body (a train/serve skew)
+The internal-forward attribution fix — recover the client from a staff `@aldc.io` forward by reading the
+quoted original sender (`From:` / "… wrote:") — looked correct and *passed its unit tests*, but an
+independent review caught that it was **inert on the live pipeline**: `normalize_text` strips the quoted
+header before classification, so the live path resolved against a body with the very signal removed. The
+eval, meanwhile, fed the *raw* gold body, so the feature fired there — a classic **train/serve skew** where
+the offline harness and the online path disagree on the input. The fix: give the deterministic resolver the
+**raw** body while the LLM keeps the trimmed/normalised body (here, a `raw_body` param threaded from the
+pipeline). General rule: **different consumers need different views of the input** — a normalisation step
+that helps the model can starve a rule-based extractor. Always confirm a new feature actually fires on the
+*live* path, not just in the eval; an offline-only firing is a skew bug, not a working feature.
+
+### 4c. Bound every regex over untrusted input (ReDoS)
+The forwarded-sender extractor ran an email regex over an *uncapped* body. An unbounded local-part run
+before `@` made it O(n²) (measured 80 KB → 26 s). Untrusted input + unbounded quantifiers = a DoS vector.
+Fix with layered bounds, any one of which suffices: a length cap on the scanned text *before* matching, plus
+bounded quantifiers (`{1,64}@{1,255}\.{2,24}`). 200 KB pathological body → 0.0001 s after. (Mirrors the
+CLAUDE.md untrusted-input posture: the message body is hostile data.)
+
+> Both 4b and 4c were caught by the **independent (Opus) reviewer**, not the author — concrete payoff for
+> step 8's review gate. The author's own tests passed; the second context found the live-path gap and the
+> DoS. (See [[ai-pr-workflow]], [[adversarial-investigation-skill]].)
+
+Result: validated by one live grounding-OFF eval — **noise-FPR 0% → 0%**, intent **0.797 → 0.801**, scope
+flat, AUTO 65% — no regression, slight lift; and the ValidationError repair **fired and self-corrected live**
+on a real Sonnet `'credentials'`-in-`intent` error during that same run.
+
 ## Checklist
 
 1. Persist per-row predictions + confidences + band + gold (not just aggregate accuracy).
@@ -140,6 +190,9 @@ fix is flag-independent and helps even with grounding off.
 6. Defer post-hoc calibration / sweeps until model inputs (grounding) are improved.
 7. When you add those inputs, **measure the lift on full/real input — don't assume it**; route grounding per-dimension (entity/scope ≠ intent); flag-gate any measured regression rather than shipping on hope (§3a).
 8. Gate model-changing edits behind both self-review and an independent (Opus) review. (See [[ai-pr-workflow]].)
+9. Repair schema-violating LLM output in the **user turn** (preserve the cached system prefix); degrade to a conservative abstain, never crash; catch the *specific* validation error so API errors still propagate (§4a).
+10. Feed deterministic extractors the **raw** input and the model the normalised input — and verify the feature fires on the **live** path, not just the eval (train/serve skew, §4b).
+11. Bound every regex over untrusted input — length cap + bounded quantifiers (ReDoS, §4c).
 
 ## See Also
 
