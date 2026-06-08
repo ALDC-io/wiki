@@ -1,7 +1,7 @@
 ---
 tags: [index, navigation]
-updated: 2026-06-05
-last_ingest: 2026-04-27
+updated: 2026-06-07
+last_ingest: 2026-06-07
 last_runbook_update: 2026-04-24
 ---
 
@@ -86,7 +86,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[dax-ai]] — DAX AI dashboard suite for Fusion92. Activation Model (client testing), Performance Summary + Financial Reporting (ON HOLD), External Dashboard (deferred).
 - [[cce]] — Claude Code Enhanced. Auto-updating wrapper with hooks, Zeus memory integration, and cross-machine messaging.
 - [[observability-platform]] — Lightweight, company-wide observability & monitoring platform (3-plane self-host: Uptime Kuma + Prom/Grafana + Python job-health + obs-api + Mailjet→Jira). Week 1 complete 2026-04-25.
-- [[triage-agent]] — Agentic support-message triage & auto-remediation (own repo). M365+Slack → classify (deterministic → grounding → Haiku→Sonnet→Opus cascade → abstain) → triage vs obs-api → propose (HITL) → Docker repro. Automates [[eclipse-incident-response]]; consumes [[observability-platform]] obs-api. Hackathon (demo 2026-06-08). **Phase 1: gold human-corrected (281 rows) + band-calibration bug fixed & validated** (decoupled `_band` from client resolution → 0/12/88 → 35/64/1 auto/review/abstain, commit `38edf27`). New finding: live-cascade intent accuracy 0.48 vs corrected gold = classifier doesn't yet apply the "automated notification → noise" policy (the recalibration target). All 5 research reports integrated (R1–R26). Token-efficiency paramount (`claude -p` ≈30K tok/call — use the API path). Next: measure noise-FPR + sweep thresholds → Monday full-body re-pull → grounding layer.
+- [[triage-agent]] — Agentic support-message triage & auto-remediation (own repo). M365+Slack → classify (deterministic → sender pre-filter → grounding → Haiku→Sonnet→Opus cascade → abstain) → triage vs obs-api → propose (HITL) → Docker repro. Automates [[eclipse-incident-response]]; consumes [[observability-platform]] obs-api. Hackathon (demo 2026-06-08). **Phase 1 live-validated: AUTO band PROVEN safe (noise-FPR 4.76% → 0%) + classifier recalibrated to corrected gold — all R8 switch-gates met (intent acc 0.50 → 0.80, scope → 0.83), no threshold changes** (deterministic sender pre-filter `classify/prefilter.py` + cost-asymmetry client-noise cap in `_band`; commits `2b356c2`/`e8b95e2`, Opus review APPROVE, 59 tests). Method generalized at [[classifier-recalibration-pattern]]. Builds on session-4 band fix (`38edf27`) + 281-row human-corrected gold. All 5 research reports integrated (R1–R26). Token-efficiency paramount. Next: Monday full-body re-pull → grounding layer (post-hoc calibration deferred until then).
 - [[factoria]] — Autonomous data engineering platform. Docker runner-split architecture, agent operating model.
 - [[ai-driven-dev-workflow]] — AI-assisted development workflow research. Multiple versions (v2, v3, v3.1). ALDC Agentic Coding Guidelines.
 - [[zeus-memory]] — Zeus Memory (OpenTribe) product. Knowledge integrity platform: cross-source drift detection, auto-sync proposals, human approval. Streamlit prototype built against Lululemon use case.
@@ -140,6 +140,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[snowflake-environment-provisioning]] — Idempotent Snowflake provisioning pattern: databases, service accounts, grants via Python. Role hierarchy, Git Bash path gotchas, utility scripts. Extracted from GP-248.
 - [[pbi-xmla-automation]] — Programmatic PBI metadata changes via XMLA + TOM + Roslyn (`pbi_model_apply.exe`) + Snowflake-schema-derived column generator. The PBI sibling of sandbox-feature-delivery; validated end-to-end on GP-208 2026-04-24.
 - [[adversarial-investigation-skill]] — `/investigate-adversarial` Claude Code skill (Vlad). 6-phase adversarial protocol: ANCHOR → OUTSIDE-IN → FORENSIC EVIDENCE → PROVE/DISPROVE/BLIND-SPOT → QUANTIFY → CONVERGE. For bugs, arch decisions, tech evals, concept validation.
+- [[classifier-recalibration-pattern]] — Getting an LLM classifier from "measured but wrong" to "safe and accurate" without retraining or threshold tuning. Three moves: (1) prove the auto-action is safe first via a persisted per-row **noise-FPR gate** (asymmetric-cost error as a hard gate, not aggregate accuracy); (2) fix the dominant confusion with **deterministic levers** — a fail-open pre-filter that excludes high-cost cases + a cost-asymmetry band cap (not a global threshold move); (3) defer post-hoc calibration until model inputs (grounding) are informative. Proven on [[triage-agent]] (acc 0.50→0.80, AUTO false-drop 4.76%→0%).
 
 ### Connectors (entities/tools/connectors/)
 - [[google-analytics]] — GA4 + Universal Analytics connector. Connection string schema, options dict, Python libraries, service account setup.
