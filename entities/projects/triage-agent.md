@@ -20,6 +20,44 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
 
+## Status (2026-06-08/09, session 8)
+
+**Phase-2 triage + Phase-3 propose thin slice BUILT** — the end-to-end demo middle: classify →
+**correlate against observability incidents → propose a remediation action + draft Jira → safety-gated
+Slack approval card → board**. Offline, read-only, outbound OFF by default. Branch
+**`feat/triage-phase2-3` (pushed, OPEN, not merged)**; commits `44f4039` + `d41c7e7` + `35aa399`; Opus
+review APPROVE; 16 new tests / 115 total; offline end-to-end smoke green.
+
+- **`integrations/obs_api.py`** — obs-api is a Week-1 stub (only `/heartbeat`), so incident state is read
+  via a degradation chain: obs-api `/incidents` (→ None on the stub) → configured `OBS_ALERT_STATE_PATH`
+  → committed `data/fixtures/alert_state.json`. Returns an `IncidentSnapshot{incidents, source, degraded}`
+  — never a bare list, so **"no signal" is never read as "healthy"**. Never raises.
+- **`data/registry/obs_account_map.json`** — the account-display → client_code join. alert_state keys
+  embed display names that do NOT match the registry (`Global Ecom Partners` ≠ registry
+  `Global E-commerce Partners`; `da8904db` = GEP's prefect account_id). A naive name/alias join matched
+  only Fusion92 → GEP (the bulk of incidents) would show unmatched — a demo-killer caught in design
+  review. Fix: an explicit committed override table (deterministic, testable) + registry/alias fallbacks.
+- **`triage/correlate.py`** — client-first then template-token overlap (≥0.34 **and** ≥2 shared tokens);
+  **abstains** on weak match or unresolved client (no cross-client incident merge — the costliest error,
+  per `cascade.py`). Severity is a DERIVED `severity_hint`, not obs-api authoritative.
+- **`triage/propose.py`** — alert_state has no error fingerprint, so the honest default is **Tier-B
+  `RECOMMEND_REVIEW`** (+ draft Jira labeled with the correlation_id); **Tier-A** infers a fingerprint
+  from explicit message cues (quota/timeout/zombie/…) and applies the runbook playbook
+  (mark_noise/escalate_canary/retrigger) — conservative, only after an incident match, read-only actions.
+- **`triage/slack_card.py`** — Block Kit builder (pure) + `post_card` routed through
+  `safety.safe_slack_channel()`: posts NOTHING unless outbound is enabled AND a control channel is set,
+  never to a client channel. **No Jira is ever created** (draft fields only). Persisted via
+  `store.attach_triage` (new `triage` JSON column, status `triaged`); board gains a Triage column.
+
+**Three engineering patterns worth reusing** (also in [[triage-agent]]'s `PROGRESS.md` + Zeus learnings):
+explicit override table beats fuzzy matching for known-messy display-name joins; carry a snapshot with a
+`degraded`/`source` flag so a fallback-to-empty is never misread as healthy; default to a human-review
+recommendation rather than guess a concrete action from incomplete data.
+
+**Next:** land the slice (PR/merge `feat/triage-phase2-3`); optional gated upgrades — live Slack card to the
+control channel, interactive approve/reject webhook, live Jira create on approval (Atlassian MCP),
+live obs-api via `OBS_ALERT_STATE_PATH`. Full-body grounding re-eval STILL gated on Entra admin consent.
+
 ## Status (2026-06-07, session 7)
 
 **Robustness lane — two flag-independent fixes to the proven session-5 path, validated live with no
