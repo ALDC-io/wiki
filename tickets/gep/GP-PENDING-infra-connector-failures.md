@@ -57,7 +57,7 @@ Four long-running infrastructure failures discovered 2026-05-22 during investiga
 - **Credentials valid:** Not an auth failure — purely IP policy. Username/password not revoked.
 - **Prior state:** Connector was working (data from Nov 2024+). Something changed on Fusion92/Viant's side ~27 days ago.
 - **Connection:** `zj81514.central-us.azure.snowflakecomputing.com`, database `VIANT`, schema `DATA`, warehouse `COMPUTE_WH`, user `ALDC_Reader`, connection ID `2ee1d143-419f-4169-8185-546ca3aadbbc`.
-- **Action:** Contact Fusion92 → whitelist agent IP `50.98.149.51` + optionally ALDC office `173.180.33.21`. Ask what changed.
+- **Action:** Contact Fusion92 → whitelist connector IP `206.116.246.42` (corrected 2026-06-11; `50.98.149.51` is stale) + optionally ALDC office `173.180.33.21`. Prefer a CIDR. Ask what changed. Now tracked on [[FU92-418]].
 
 ## Summary of Issues
 
@@ -262,19 +262,21 @@ The Azure AD app registration's client secret used to authenticate the Microsoft
 
 ### 4B — Viant DSP: Snowflake Network Policy Blocking Connector IP
 
-**Connector IP:** `50.98.149.51`
-**Snowflake account:** `zj81514`
-**Failure rate:** 271/271 (100%)
-**Duration:** 27+ days
+> **Now tracked on [[FU92-418]] (live).** Split out of this page 2026-05-25.
+> ⚠️ **Corrected connector IP (re-verified 2026-06-11): `206.116.246.42`.** The originally-recorded `50.98.149.51` is **stale** — our egress rotated. Use `206.116.246.42` for any whitelist request.
 
-A Snowflake network policy on the Viant DSP account `zj81514` is blocking the connector's egress IP `50.98.149.51`. All 271 runs have failed.
+**Connector IP:** `206.116.246.42` (current, 2026-06-11) — *was `50.98.149.51` at first report (now stale)*
+**Snowflake account:** `zj81514` (Fusion92/Viant-managed)
+**Failure rate:** 271/271 (100%)
+**Duration:** 27+ days (as of report; ongoing)
+
+A Snowflake network policy on the Viant DSP account `zj81514` is blocking the connector's egress IP. Credentials (`ALDC_Reader`) are valid — pure IP block. All runs fail.
 
 **Remediation:**
-1. Identify who owns the `zj81514` Snowflake account — this may be a Fusion92-managed or Viant-managed Snowflake instance
-2. If ALDC-managed: go to Snowflake → `zj81514` → Admin → Security → Network Policies and add `50.98.149.51` to the allowed IP list
-3. If client-managed: contact Fusion92 / Viant to request the connector IP be whitelisted
-4. Verify IP `50.98.149.51` is stable — if this is an on-prem agent IP that rotates, investigate using a static NAT/egress IP
-5. Once whitelisted, trigger a manual connector run to confirm access
+1. ~~Identify who owns the `zj81514` Snowflake account~~ — confirmed Fusion92/Viant-managed (not ALDC), so this is a client whitelist request.
+2. Contact Fusion92 / Viant → whitelist connector IP **`206.116.246.42`** (+ optionally ALDC office `173.180.33.21`) on the `zj81514` network policy.
+3. **Prefer a small CIDR range** (or an ALDC static NAT/egress) — the egress rotated once already (that's why `50.98.149.51` went stale), so single-IP whitelisting will recur.
+4. Once whitelisted, trigger a manual connector run to confirm access, then backfill the gap.
 
 **Note:** This may be related to [[FU92-394]] / [[FU92-416]] (Viant connector history). Check those pages for prior Viant connectivity work before engaging Fusion92.
 
@@ -311,7 +313,7 @@ A Snowflake network policy on the Viant DSP account `zj81514` is blocking the co
 - [x] ~~Verify Microsoft Ads connector success~~ — 3,233+ partitions completed successfully 2026-05-22
 - [x] ~~Update Dashlane entries~~ — secret + refresh token updated 2026-05-22
 - [ ] Remove backup containers (`*-backup-pre-envupdate`) on Kamloops + Coquitlam after 24h stability
-- [ ] **BLOCKED:** Whitelist request sent to Fusion92 via Lori + Support (CC Mike Stuart) 2026-05-22. Awaiting response. Agent IP `50.98.149.51` on Snowflake account `zj81514` (Issue 4B)
+- [ ] **READY FOR CUSTOMER ([[FU92-418]]):** Whitelist request re-sent to Juliann Otto (CC Mike Stuart, Lori) 2026-06-11 with corrected connector IP `206.116.246.42` (`50.98.149.51` was stale), CIDR request, and "what changed in late April" question. Awaiting client/Snowflake-admin action on `zj81514`. (Original 2026-05-22 request via Lori + Support went unanswered.)
 - [x] ~~Renew ALDC Email MCP Server secret before 2026-05-25~~ — new secret `ALDC Email MCP_26_05_24` created by JK 2026-05-23 (expires 2028-05-22). Recorded in `vault/infra-credentials.md`. ALDC-175 created for automated expiry monitoring.
 - [ ] Review 38 expired tenant secrets for cleanup or renewal
 

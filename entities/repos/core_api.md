@@ -3,7 +3,7 @@ tags: [entity, repo, core-api, aldc, eclipse, api, azure-functions]
 aliases: [core_api, core-api, core api]
 sources: [daily/2026-04-17.md, ~/.claude/CLAUDE.md, CORE/1467940876, CORE/1048248321, CORE/238387201, CORE/7929869, CORE/886603777, CORE/885620774, CORE/909737996, CORE/892796955, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-17
-updated: 2026-04-29
+updated: 2026-06-11
 ---
 
 # core_api
@@ -52,6 +52,22 @@ The most frequently-touched module when debugging bad data. Key function:
 - **`warehouse_recreate_current`** — rebuilds the data that feeds the `CURRENT_*` and combined views in [[Snowflake]]
   - Invoke via [[Postman]] (Steven's collection has the request pre-wired)
   - On failure: check [[Snowflake]] **Query History** for failed queries. Use the `ACCOUNTADMIN` role to see the **un-redacted** query text — otherwise parameters are masked
+
+### `route_work.py` — work lifecycle (pick / complete / visibility timeout)
+
+Governs how the [[Eclipse]] connector fleet dequeues and executes work items.
+
+**Key functions:**
+- **`work_pick`** (~line 706) — dequeues the next eligible partition from the connection's Azure Storage Queue. The queue message **visibility timeout** is set here via `receive_message`; hard-coded as `60*60*4` = 4 hours (introduced commit `5fb7de4`, also present in the GP-277 pick-fix `85557db`).
+- **`work_pick_agent`** (~line 966) — connection-scoped pick variant (used when the agent has `connection_authorized` set). Same visibility timeout constant.
+- **`work_complete`** — acknowledges the dequeued message (deletes it from the queue), preventing it from resurfaces.
+
+**Visibility timeout — 2026-06-11 change ([[GP-257]]):**
+Reduced from `60*60*4` (4h) → `60*60` (1h) on the TEST core_api STAGE slot (`aldctestfnapcore1c01-stage`). Rationale: max real report latency proven at ~25 min across 959 completions (p99 ~17 min), so 1h has no double-pick risk while allowing a crashed executor's message to recover 3h sooner. The 4h value was originally conservative but caused OOM-killed executors' partitions to remain locked for 4h before the zombie sweep could act. The change is deployed to the STAGE slot only; the PROD slot still carries 4h (as of 2026-06-11).
+
+**Rollback:** `git checkout 85557db -- v1/route_work.py && func publish --slot stage` restores the 4h constant on stage.
+
+> **Note:** The connector itself never sets the visibility timeout — it only relays `queue_pop_receipt`/`queue_id` between `/work/pick` and `/work/complete`. All visibility logic lives here in core_api.
 
 ### Other surface areas (from Postman collections)
 

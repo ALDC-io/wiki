@@ -86,6 +86,8 @@ Previous dataset owner was removed from Azure AD, breaking scheduled refresh. Bo
 
 ## Active Tickets
 
+- [[FU92-415]] — Meta connector token refresh + cleanup (token-refresh/cleanup Done; reopened 2026-06-11 for the Smile Doctors data gap — account back in Windsor list but data still ends 2026-05-03; **Ready for Customer**, follow-up email sent 2026-06-11 awaiting confirmation of post-May-3 Meta spend)
+- [[FU92-418]] — Viant DSP Reach & Frequency Snowflake connector blocked on IP whitelist (`zj81514`); **Ready for Customer**, corrected connector IP `206.116.246.42` re-sent to client 2026-06-11
 - [[FU92-342]] — (see ticket page)
 - [[FU92-417]] — PBI Activation Model dataset owner takeover (Done, 2026-05-22)
 
