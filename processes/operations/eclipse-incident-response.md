@@ -3,7 +3,7 @@ tags: [process, operations, eclipse, incident, outage, on-prem, runbook]
 aliases: [Eclipse Incident Response, Outage Recovery, Connector Outage Runbook]
 sources: [ALDC-244 (Kamloops power outage 2026-06-01), observability/ops/incident_triage.py, conversation 2026-06-01]
 created: 2026-06-01
-updated: 2026-06-01
+updated: 2026-06-11
 ---
 
 # Eclipse Incident Response (Outage Recovery)
@@ -118,6 +118,16 @@ cron. Three low-cadence reference templates (Calendar, FINANCIAL CURRENCY, Produ
 Amazon) failed/zombied and needed manual re-trigger. Calendar canary confirmed the SQL Server was
 back; Product Properties took a few minutes of queue-drain (not wedged — agent had 205 completions
 in 90 min). No client impact (reference dims ≤4h stale, core pipeline current throughout).
+
+## Automated by
+
+- [[triage-agent]] — encodes this runbook as its proposal playbook (`triage/propose.py`): Step 2
+  classification maps to fingerprint → action (Amazon `QuotaExceeded`/IP-block/Firebase → mark-noise;
+  `HYT00`/source-host-down/power-outage → escalate-canary; `zombie` → re-trigger; queue-drain latency →
+  wait; downstream warehouse → verify), each tagged with its **runbook step** and (for the canary path)
+  the **Step 3 canary suggestion** (Calendar / FINANCIAL CURRENCY). A confidence gate means an ambiguous
+  message cue surfaces a *suspected* fingerprint for a human rather than auto-asserting the action — every
+  output is a recommendation routed to a human, never a service mutation. Read-only.
 
 ## See Also
 

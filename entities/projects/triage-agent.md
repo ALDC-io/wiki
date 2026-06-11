@@ -20,6 +20,52 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
 
+## Status (2026-06-11, session 10) — correlation accuracy + Phase-4 reconcile + deeper proposals
+
+**Three independent real-depth increments, each self + Opus reviewed, all committed straight to `main`
+(`9750bc1` correlation, `2b97f92` reconcile, `e588dd7` proposals). 139 → 163 tests.** Two reviews hit
+CHANGES-REQUIRED and were fixed before commit (a correlation false-abstain; generic proposal cues that
+false-fired). Still offline, read-only, outbound OFF. Demo polish remains deferred to its own session.
+
+- **Phase-2 correlation hardened to an IDF distinctive-token scorer + a *measured* eval (`triage/correlate.py`,
+  `eval/correlation.py`).** The session-8 recall-overlap scorer lost on near-duplicate templates: recall
+  normalization *penalizes* the more-specific template (more tokens to cover → lower recall) and ties broke
+  arbitrarily, so "Returns Report" beat "FBA Returns Report" and generic "ASIN granularity CHILD" beat
+  "…- ONLY Amazon CA". New scorer: weight tokens by **IDF over the client's own incident-template set**, rank
+  by `Σ idf(template∩msg)` normalized by the **message's** matchable IDF mass — the incident explaining the
+  most *distinctive* message content wins; a specific template whose extra tokens are present beats its
+  generic parent; a long template matching only generic words still scores low (abstain holds). Plus a
+  **clause-level negation strip** ("the video-and-social one is fine" no longer counts as evidence for that
+  report; fails safe, never strips to empty), **scope/intent soft signals** (upstream scope → 1.12× active
+  tiebreak; billing/question intent → higher floor), and a **ranked top-5 shortlist**. Measured against a
+  **frozen snapshot of the real 78-incident `alert_state.json`** with an 18-row gold set of near-duplicate
+  traps: **top-1 0.80 → 1.00, in-top-3 1.00, abstain 1.00** (identical on the live file). Honest caveat
+  (reviewer synonym-rewrite stress-tested): 1.00 is on 18 authored rows — IDF, not memorization, is the
+  driver, but on real mail the *abstain rate will rise* (more punt-to-human), the correct failure direction.
+- **Phase-4 orphan reconcile — closes the session-9 carry-in nit (`decide.reconcile_pending_jira`,
+  `store.list_orphan_approved_jira`).** Redrives the `approved`+`jira is None` crash window (claim committed,
+  Jira create/backfill never ran) through the **idempotent** `jira.create_issue` (JQL label probe finds a
+  pre-crash issue → `idempotent_hit`, never a duplicate; dry-run when outbound off) and backfills; errored
+  rows stay orphaned for the next pass; never raises. *Key constraint:* reconcile does NOT re-claim, so its
+  only no-duplicate guard is the JQL probe — safe ONLY with no competing writer. Wired to run once on
+  startup, synchronously, **before** the intake listeners / `/slack/actions` come up (loud guard comment:
+  don't make it periodic without a `jira IS NULL` claim).
+- **Deeper proposals — confidence-gated, runbook-anchored (`triage/propose.py`, `triage/slack_card.py`).**
+  Tier-A playbook 9 → 12 fingerprints (PowerOutage→escalate_canary, QueueDrainLatency→wait,
+  PartitionWedge→recommend_review HIGH — all faithful to [[eclipse-incident-response]], reviewer-verified).
+  New **`fingerprint_confidence`** (0..1) from cue strength: a multi-word technical phrase / distinctive
+  token is strong (0.72); an ambiguous single token (e.g. "viant") is weak (0.50) and **capped below the
+  0.66 apply-floor** so extra weak hits can't stack over it. Below the floor the concrete action is NOT
+  asserted — it falls back to incident-aware Tier-B but *surfaces the suspected fingerprint*. Each action
+  maps to its **runbook step**, and ESCALATE_CANARY carries **client-parameterized canary guidance**
+  (runbook Step 3); both render in the Slack card + Jira draft.
+
+**Reusable patterns (session 10):** build the eval *before* the fix and let it find the failure class;
+distinctive-token (IDF) ranking normalized by the message, not the template, is the lever for "the right
+one wins" among near-identical client templates; confidence-gate substring-cue inference and cap the weak
+path below the apply-floor (surface a suspicion, never auto-assert); a redrive that doesn't re-claim is
+safe only before listeners start. (Folded into [[classifier-recalibration-pattern]].)
+
 ## Status (2026-06-10/11, session 9)
 
 **Phase-3 PROPER built — the human-in-the-loop loop now closes.** The session-8 triage slice was
@@ -327,9 +373,9 @@ The corrected-gold policy:
 | Phase | Name | State |
 |---|---|---|
 | 1 | Monitor & classify | live-validated; **AUTO proven safe (noise-FPR 0%), R8 gates met (intent acc 0.50→0.80)**; grounding layer BUILT (wiki half) but flagged OFF — net-regressed previews, pending full-body + Zeus re-eval |
-| 2 | Triage (read obs-api: correlate failures) | **built + enriched (s8 merged, s9): `correlate.py` + `obs_api.py`; OBS_ALERT_STATE_PATH proven live (77 real incidents)** |
-| 3 | Propose remediation (draft → Slack HITL) | **PROPER built (s9): full HITL loop — Approve/Reject (Socket Mode + HTTP) → idempotent claim-then-mutate decision → gated Jira create → board; 9-fingerprint Tier-A + incident-aware Tier-B; Opus APPROVE, 139 tests** |
-| 4 | Reproduce & auto-fix in Docker | teaser, not a weekend deliverable (Cosmos/Queue/Blob coupling in [[core_api]] makes isolated repro hard) |
+| 2 | Triage (read obs-api: correlate failures) | **hardened (s10): IDF distinctive-token scorer + negation strip + scope/intent + ranked top-5; measured vs the real 78-incident file via `eval/correlation.py` — top-1 0.80→1.00** |
+| 3 | Propose remediation (draft → Slack HITL) | **PROPER built (s9) + deepened (s10): full HITL loop → claim-then-mutate decision → gated Jira → board; proposals now 12 fingerprints + fingerprint confidence (0.66 floor) + runbook step + canary; Opus APPROVE, 163 tests** |
+| 4 | Reproduce & auto-fix in Docker | teaser; **orphan-reconcile carry-in DONE (s10)** — `reconcile_pending_jira` redrives `approved`+`jira=None` on startup; Docker isolated repro still hard (Cosmos/Queue/Blob coupling in [[core_api]]) |
 | UI/Jira | Triage board + Jira sync | injection-verified |
 
 All five Deep Research reports are integrated (decisions R1–R26). The three from session 3:
