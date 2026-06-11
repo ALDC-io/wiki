@@ -20,6 +20,68 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
 
+## Status (2026-06-11, session 11) — console UI + security fast-path + Phase-4 sandbox + standardized Jira ingest
+
+**Began as the demo-polish session; the demo was then pushed to next week, so it became a substantial
+build session. Two independent Opus reviews → APPROVE (no blockers). 163 → 184 tests, all on `main`
+(`7607c6c` demo polish + `9cb5a22` the build + `a585015` re-grounding docs).** Still offline,
+read-only, outbound OFF by default; the new action paths are gated + isolated.
+
+- **Console UI (`ui/board.html`, single-file SPA, no build/CDN).** Board / Insights / Architecture
+  tabs. A work-item **Status model** — *Classified·historical* (the seeded 281-row Phase-1 backfill,
+  classify-only — the agent never triaged these) / *Needs-review* / *Action-proposed* / *Approved* /
+  *Rejected* / *Auto-filed* — with an **Open-work default queue** (historical sits in its own queue
+  with a "classified only, not acted on" banner). Source badges (🎫 Jira ticket / ✉ Email) + "reporter"
+  labelling. A click-through **detail drawer** with a staged Classify→Correlate→Propose→Decide→Resolve
+  timeline, and a **💬 Ask-Claude** box (`/api/explain`, Haiku, read-only, untrusted-body sandboxed).
+  Insights = intent/scope distributions, an **intent×confidence heatmap**, cascade model-tier usage, and
+  an honest client-attribution split (noise·no-client-expected vs genuinely-unattributed — the 235
+  "unresolved" is really 187 noise + 48 non-noise). In-UI **Approve/Reject** drives the same
+  `record_decision` engine via `/api/decide` (dev-gated by `ALLOW_UNSIGNED_SLACK`).
+- **Security fast-path (`triage/propose.py` + `pipeline.py`, Opus APPROVE).** A credential-**exposure**
+  report (scope=credentials + a leak/response cue — committed / plaintext / git-history / rotate /
+  revoke / key-vault — deliberately distinct from an operational credential *expiry*) is triaged **even
+  with an unresolved client** (an internal security incident has no client) and gets a **HIGH-risk,
+  review-only** `RECOMMEND_REVIEW` proposal carrying the rotate→revoke→purge-history→Key-Vault runbook +
+  a `security`/`credentials`-labelled draft Jira. **Never an auto-action on credentials.** Review tightened
+  the cues (dropped bare "access key"/"secret key" so a routine credential *request* isn't hijacked).
+- **Phase-4 candidate-resolution sandbox (`triage/sandbox.py`, gated `SANDBOX_ENABLED`, Opus APPROVE).**
+  On an **approved** case the agent prepares a candidate fix in a **throwaway `tempfile.mkdtemp()` git
+  repo** — never the real tree, never a remote/push, always torn down (`finally rmtree`), subprocess
+  args-list (no shell), charset-guarded branch slug. `credential_purge` recipe = a real diff (removes
+  planted FAKE secrets + adds `.gitignore` + writes the rotation runbook); generic recipe documents the
+  runbook. Returns branch/diff/evidence; **"Apply to repo" stays a human-only 2nd gate** (the agent
+  proves a fix in isolation; a human still gates the irreversible step). In the UI, approval auto-kicks
+  the sandbox so the human watches it work.
+- **Standardized Jira ingest (`channels/jira_intake.py`, `integrations/jira.fetch_issue`, Opus APPROVE).**
+  Enter a Jira key on the board → the agent **fetches the real ticket** (live Jira REST v3 when creds
+  set, else a committed fixture of real open **ALDC** security tickets: 302/303/304/19/15/7/6) →
+  classifies + triages it through the *same pipeline as email*. **The agent works on emails OR open Jira
+  tickets.** Key charset-validated (no path-traversal/JQL injection), read-only fetch, idempotent per
+  ticket (re-ingest re-opens the existing case). ALDC-302 → `credentials`/REVIEW → CredentialExposure
+  security proposal. Hardening from review: JQL label-term charset guard at the boundary.
+- **One-command demo** (`scripts/demo.ps1`): reset DB → seed historical-classified-only → serve (sandbox
+  + dev flags on, outbound OFF) → fire 4 live email heroes → ingest ALDC-302. Talk track in
+  `docs/project/DEMO.md`. `seed_board.py` is now classify-only historical backfill.
+
+**Decision (end of session 11): demo pushed to next week → build out to full spec following the original
+roadmap.** Claude's chosen sequence: **s12 Phase-4 groundwork** (connector-error parser from the Eclipse
+schedule `comment` + Docker reproduction harness behind a mock seam + author/reviewer agent separation)
+→ **s13 agent observability & eval (R15-18)** → **s14 generalization-platform core (R19-23: typed action
+envelope + uniform `risk_class×mode` gate)**; parked lanes (grounding/ML/live-Slack-Jira-Graph/obs-api
+contract) unblock as externals land. **Deep Research handoff emitted** for the load-bearing Phase-4
+isolation question (`docs/research/prompts/phase4-connector-reproduction-isolation.md` — how to reproduce
+one connector run given [[core_api]]'s Cosmos/Queue/Blob coupling). Boot prompt:
+`docs/project/next-session-boot.md` (session 12).
+
+**Reusable patterns (session 11):** gate a new in-UI write/action path behind the *same* dev flag as the
+existing seam and route it through the *same* idempotent engine (no new mutation primitive); a security
+fast-path must be triggered by leak-*event* cues, not credential-*type* nouns, or it hijacks routine
+requests; a candidate-fix "sandbox" is only safe if it's a throwaway repo with no remote + always-cleanup
++ a human-gated apply; degrade every external fetch (Jira, obs-api) to a committed fixture so the whole
+system runs offline; separate "historical/classified-only" from "agent-worked" on the board so volume
+isn't mistaken for open work.
+
 ## Status (2026-06-11, session 10) — correlation accuracy + Phase-4 reconcile + deeper proposals
 
 **Three independent real-depth increments, each self + Opus reviewed, all committed straight to `main`
@@ -374,8 +436,9 @@ The corrected-gold policy:
 |---|---|---|
 | 1 | Monitor & classify | live-validated; **AUTO proven safe (noise-FPR 0%), R8 gates met (intent acc 0.50→0.80)**; grounding layer BUILT (wiki half) but flagged OFF — net-regressed previews, pending full-body + Zeus re-eval |
 | 2 | Triage (read obs-api: correlate failures) | **hardened (s10): IDF distinctive-token scorer + negation strip + scope/intent + ranked top-5; measured vs the real 78-incident file via `eval/correlation.py` — top-1 0.80→1.00** |
-| 3 | Propose remediation (draft → Slack HITL) | **PROPER built (s9) + deepened (s10): full HITL loop → claim-then-mutate decision → gated Jira → board; proposals now 12 fingerprints + fingerprint confidence (0.66 floor) + runbook step + canary; Opus APPROVE, 163 tests** |
-| 4 | Reproduce & auto-fix in Docker | teaser; **orphan-reconcile carry-in DONE (s10)** — `reconcile_pending_jira` redrives `approved`+`jira=None` on startup; Docker isolated repro still hard (Cosmos/Queue/Blob coupling in [[core_api]]) |
+| 3 | Propose remediation (draft → Slack HITL) | **PROPER built (s9) + deepened (s10) + security fast-path (s11): full HITL loop → claim-then-mutate decision → gated Jira → board; 12 fingerprints + confidence floor + runbook/canary + a credential-exposure security path (HIGH-risk review-only, never auto-acts on creds); Opus APPROVE, 184 tests** |
+| 4 | Reproduce & auto-fix in Docker | **sandbox-resolution slice built (s11)**: on approval the agent prepares a candidate fix in an isolated throwaway git branch (real diff for credential-purge), apply-to-repo is a human-only 2nd gate; orphan-reconcile (s10). **Docker isolated repro of a connector run still the hard endgame** (Cosmos/Queue/Blob coupling in [[core_api]]) — Deep Research handoff out for the isolation design |
+| Ingest | Email + open Jira tickets | **s11: standardized Jira ingest** — fetch a ticket (live REST or fixture) → classify + triage like email; the agent works on emails OR open Jira tickets |
 | UI/Jira | Triage board + Jira sync | injection-verified |
 
 All five Deep Research reports are integrated (decisions R1–R26). The three from session 3:
