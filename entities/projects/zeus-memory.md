@@ -3,7 +3,7 @@ tags: [entity, project, zeus-memory, opentribe, enterprise-knowledge, documentat
 aliases: [Zeus Memory, OpenTribe, opentribe]
 sources: [sources/obsidian-import/research/OpenTribe/Zeus Memory - Wedge, MVP, and Enterprise Adoption Strategy.md, sources/obsidian-import/research/OpenTribe/Research and Planning/Lululemon Demand Forecasting Knowledge Integrity Use Case.md, sources/obsidian-import/research/OpenTribe/Research and Planning/Zeus Memory Prototype Brief - Lululemon Demand Forecasting Documentation Auto-Sync.md, sources/obsidian-import/research/OpenTribe/Research and Planning/PAULS MOONSHOTS.md, sources/obsidian-import/research/OpenTribe/Research and Planning/Action Items.md, sources/obsidian-import/research/OpenTribe/Research and Planning/Zeus Memory FAQ - CEO, Product, and AI Engineering.md, sources/obsidian-import/research/OpenTribe/Research and Planning/Zeus Memory Prototype Architecture - Trigger, Drift Detection, and Writeback.md, sources/obsidian-import/research/OpenTribe/Research and Planning/Zeus Memory Demo Script - 5-Minute Lululemon Walkthrough.md]
 created: 2026-04-16
-updated: 2026-05-02
+updated: 2026-06-11
 ---
 
 # Zeus Memory (OpenTribe)
@@ -106,6 +106,30 @@ Broader ideas from Paul's notes for leveraging Zeus:
 - Autonomous production writeback with configurable guardrails
 - Confidence scoring calibration
 - Policy/governance engine for update approval workflows
+
+## CCE Learning Storage — Paul's tenant (operational)
+
+CCE auto-learn (`/learn`, `cce learn`) and any direct Zeus `/api/store` writes for Paul **must post to
+his DEVELOPMENT tenant, NOT the ALDC Management tenant.**
+
+> **Correction (2026-06-11):** the `cce-learn` skill hardcodes ALDC Management
+> (`11111111-1111-1111-1111-111111111111`) as "CRITICAL — always use." That is **wrong for Paul** — his
+> learnings (and leaderboard attribution) belong in the **Developers-team development tenant**. The tenant
+> is inferred from the API key, so using Paul's key routes correctly. Don't swap back to ALDC Management.
+
+| Field | Value |
+|-------|-------|
+| Tenant ID (Development) | `c1234567-0000-0000-000a-000000000001` |
+| User ID | `e1234567-0000-0000-0003-000000000001` |
+| Username / Slug | `paul` / `paul-russell` |
+| Email | `paul.russell@aldc.io` |
+| Parent Tenant | Developers team (`dddddddd-dddd-dddd-dddd-dddddddddddd`) |
+| Role / Tier | member (ALDC Org + Developers team) / standard |
+| **API Key** | in `vault/credentials.md` → "Zeus Memory — Paul's user/tenant" (DB-seeded, migration 034; not in `.env` yet) |
+
+Write: `POST https://zeus.aldc.io/api/store`, `X-API-Key: <Paul's key>`,
+`{"content": "...", "source": "cce_success_log|cce_failed_approach|cce_decision_log", "metadata": {"user": "paul"}}`.
+Do not pass `tenant_id` (inferred from key); `metadata.user="paul"` is required for leaderboard attribution.
 
 ## See Also
 
