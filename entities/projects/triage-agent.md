@@ -7,7 +7,7 @@ sources: [
   C:/Users/PaulRussell/repos/triage-agent/docs/research/digests/,
 ]
 created: 2026-06-05
-updated: 2026-06-07
+updated: 2026-06-11
 ---
 
 # triage-agent
@@ -20,7 +20,45 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
 
-## Status (2026-06-08/09, session 8)
+## Status (2026-06-10/11, session 9)
+
+**Phase-3 PROPER built — the human-in-the-loop loop now closes.** The session-8 triage slice was
+**merged to `main` (PR #1, `c6596c0`)**; session 9 built the real inbound write path + first external
+mutation on top of it, plus richer (incident-aware) proposals. Committed straight to `main`
+(`78b13d3` HITL + `d5867a2` proposals). Self + Opus reviewed; **139 tests** (was 115). Still offline,
+read-only by default, outbound OFF by default; demoable end-to-end with no Slack tokens (HTTP endpoint).
+
+- **The loop:** classify → correlate → propose → Slack card → **human Approve/Reject → idempotent
+  decision → gated Jira create → board reflects it.**
+- **`triage/decide.py` — claim-then-mutate decision engine.** `record_decision` builds the decision,
+  **atomically claims** the transition (`store.claim_decision`: a single conditional
+  `UPDATE … WHERE status NOT IN (terminal)` — the one serialization point under SQLite's write lock),
+  and **only the winner** calls `jira.create_issue`. Fail-closed: unknown corr_id / missing proposal /
+  non-terminal status / malformed corr_id (charset-validated) → typed outcome, never raises.
+- **`integrations/jira.py` — gated Jira Cloud REST v3 create.** **Dry-run by default**
+  (`safety.jira_create_allowed()` requires `OUTBOUND_ENABLED` + all 3 creds); idempotent via a JQL
+  probe on the correlation_id label. Mirrors [[aldc-launchpad]]'s `jira_ops.py` (ADF, basic auth).
+- **`triage/slack_actions.py` + `api/app.py`.** `parse_action` (pure) + `handle_block_actions`
+  (control-channel-gated) wired into **Socket Mode** (`@app.action`) AND a new **`POST /slack/actions`**
+  HTTP endpoint that HMAC-verifies (`safety.verify_slack_signature`) and **fails closed (401)** with no
+  signing secret unless the explicit dev flag `ALLOW_UNSIGNED_SLACK` is set.
+- **Richer proposals (Task E).** Tier-A playbook 5 → 9 fingerprints (FirebaseDoubleInit, SourceHostDown,
+  InitSelfHeal, DownstreamWarehouse + broader cues), all grounded in [[eclipse-incident-response]].
+  **Tier-B is now incident-aware:** a RESOLVED incident → `VERIFY_DOWNSTREAM` (runbook Step 4), an
+  ACTIVE `P2_hint` → `RECOMMEND_REVIEW` at MEDIUM risk, else the prior LOW default.
+- **`OBS_ALERT_STATE_PATH` proven LIVE** against the real observability `alert_state.json` (read-only):
+  77 incidents, `source=alert_state_file`, `degraded=False`, client codes resolved — the degradation
+  chain promotes a live file over the committed fixture.
+
+**Reusable pattern — claim-then-mutate for "decide once → one external action":** never perform the
+irreversible external action before the local decision is durably + exclusively claimed; the claim is a
+single state-guarded conditional UPDATE, so N concurrent approvals with *different* idempotency keys
+collapse to one winner (a same-key check alone does NOT stop differing-key double-clicks). Don't fold the
+network call into the write txn (it would stall every other writer). Independent Opus review caught the
+differing-key concurrency hole; an 8-thread test now guards it. **Carry-in (Phase 4):** a reconcile for
+the `approved` + `jira is None` + outbound-on orphan (the crash window between claim and Jira backfill).
+
+## Status (2026-06-08/09, session 8) — triage slice (since MERGED to main, PR #1)
 
 **Phase-2 triage + Phase-3 propose thin slice BUILT** — the end-to-end demo middle: classify →
 **correlate against observability incidents → propose a remediation action + draft Jira → safety-gated
@@ -289,8 +327,8 @@ The corrected-gold policy:
 | Phase | Name | State |
 |---|---|---|
 | 1 | Monitor & classify | live-validated; **AUTO proven safe (noise-FPR 0%), R8 gates met (intent acc 0.50→0.80)**; grounding layer BUILT (wiki half) but flagged OFF — net-regressed previews, pending full-body + Zeus re-eval |
-| 2 | Triage (read obs-api: correlate failures) | not started |
-| 3 | Propose remediation (draft → Slack HITL) | not started |
+| 2 | Triage (read obs-api: correlate failures) | **built + enriched (s8 merged, s9): `correlate.py` + `obs_api.py`; OBS_ALERT_STATE_PATH proven live (77 real incidents)** |
+| 3 | Propose remediation (draft → Slack HITL) | **PROPER built (s9): full HITL loop — Approve/Reject (Socket Mode + HTTP) → idempotent claim-then-mutate decision → gated Jira create → board; 9-fingerprint Tier-A + incident-aware Tier-B; Opus APPROVE, 139 tests** |
 | 4 | Reproduce & auto-fix in Docker | teaser, not a weekend deliverable (Cosmos/Queue/Blob coupling in [[core_api]] makes isolated repro hard) |
 | UI/Jira | Triage board + Jira sync | injection-verified |
 

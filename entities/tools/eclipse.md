@@ -3,7 +3,7 @@ tags: [entity, tool, eclipse, connector, etl]
 aliases: [Eclipse, Eclipse Connector, ALDC Connector]
 sources: [clients repo eclipse/ directories, connector repo, daily/2026-04-17.md, Confluence TECH/1191575556 (Eclipse 2.0)]
 created: 2026-04-16
-updated: 2026-04-17
+updated: 2026-06-11
 ---
 
 # Eclipse
@@ -243,6 +243,18 @@ not a wedge — verify the agent is healthy first: a working agent shows many `c
 repoint the `CURRENT_MAIN_…` view atomically, so a killed run wrote nothing and the live table
 keeps the last-good snapshot. Note `in_queue: true` alone is **not** a blocker — partitioned
 templates (one partition/day) normally carry many. (Established 2026-06-01, ALDC-244.)
+
+## Scoped-Agent Dispatch & Report-Throughput (TEST) — established 2026-06-11 ([[GP-257]])
+
+Running a **single template in isolation** through real Eclipse (e.g. validating a new connector pull) without draining the whole account backlog:
+
+- **Target the core_api stage slot.** Point the executor's `targethost` at `aldctestfnapcore1c01-stage` — it carries the [[GP-277]] pick-fix (`85557db`), so connection-scoped agents dispatch correctly. (The prod slot's fix state is unconfirmed — Linux run-from-package, SCM locked; `func publish` from a dev machine can deploy it if needed, no workstation required.) This is why the pick-bug was *not* the GP-257 blocker.
+- **Scoped agent** = an `agent` doc whose `connection_authorized` lists only the target connection (e.g. `gep-amazonads-pp-test` → conn `66627ed9`). `/work/pick` scopes to that, so the executor can only pull that connection's work.
+- **Isolate the queue**: guard the account (`account.scan=false`) to stop new enqueues, purge the connection's queue + reset its partitions' `in_queue=false`, lift the schedule block, then manually scan **only** the target template.
+- **Trigger `/work/scan` over HTTPS with `MASTER_CLIENT_ID`/`MASTER_CLIENT_SECRET`** (core_api app settings) — no SSH/CosmosDB needed. Useful when the workstation SSH is fail2ban-blocked. `work_activate` is trickle-limited (creates 1, then 2,4,8…cap 10 per call), so loop the scan to grow the partition set.
+- Tooling: `aldc-launchpad/warehouse_ops/_gp257_{isolate_queue,uk_scan,babysitter,validate}.py`.
+
+**Zombie clog gotcha — async reports slower than the queue visibility timeout.** Distinct from the `full`-partition zombie below. When a report-type pull (e.g. Amazon `advertised_product`) generates on the vendor side **longer than the queue message's visibility timeout**, the message resurfaces and the **same partition is picked again** → duplicate in-flight `init` schedules pile up → the connection's `max_connection` slots clog → `/work/pick` correctly returns "no eligible work" and the fleet stalls. Symptom: executor idle ("NO WORK") with N stuck `init` schedules on the connection (age ≫ report time). The connection's own `comment` documents this ("picked up a second time / zombies clogging the queue" → why `max_connection=5`). **Mitigation** (manual): delete the stuck `init` schedules to free the slots; the partitions re-pick from their still-queued messages. **Fix** (connector): apply `zombie_timeout_override` (7200s) as the queue message **visibility timeout** on pick so a message can't resurface mid-report. Data is never corrupted — the primary-hash merge dedups duplicate landings.
 
 ## See Also
 

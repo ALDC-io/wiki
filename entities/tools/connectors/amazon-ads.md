@@ -3,7 +3,7 @@ tags: [entity, tool, connector, amazon-ads, amazon-dsp, oauth]
 aliases: [Amazon Ads Connector, Amazon DSP Connector]
 sources: [Confluence CONN/1298792450]
 created: 2026-04-18
-updated: 2026-05-08
+updated: 2026-06-11
 ---
 
 # Amazon Ads and Amazon DSP Connector
@@ -78,7 +78,15 @@ Using the wrong endpoint for code exchange will silently fail or return US-only 
 |---|---|---|---|---|---|
 | UK | `1236242149887729` | GBP | Global Ecom UK | `AC8RG0YC8GJ0U` | `A1F83G8C2ARO7P` |
 
-12 EU profiles total (UK, DE, FR, IT, ES, NL, SE, PL, IE, BE, AE, SA) under "Global Ecom UK" / "Global Ecom Trading Networks". Token exchanged 2026-05-08.
+12 EU profiles total (UK, DE, FR, IT, ES, NL, SE, PL, IE, BE, AE, SA) under "Global Ecom UK" / "Global Ecom Trading Networks". Token exchanged 2026-05-08. **This 2026-05-08 refresh token is a superset** — it covers the 12 EU marketplaces **plus** the existing US/CA/BR/MX, so one connection (`66627ed9`) can serve both NA and UK/EU templates.
+
+### Connector EU support ([[GP-257]], PR #125 `d00fc39`)
+
+`connector/amazon_ads.py` was NA-only until GP-257. Added two options:
+- **`region`** (`NA` default = no-op; `EU` re-points LWA host → `api.amazon.co.uk` and Ads host → `advertising-api-eu.amazon.com`; `FE` → `.co.jp`/`-fe`). Region map: `REGION_ENDPOINTS`.
+- **`profile_ids`** — list filter to scope a pull to specific profiles (e.g. `["1236242149887729"]` for UK-only).
+
+`refresh_token` comes from the connection; `client_secret` from env `AMAZON_ADS_CLIENT_SECRET`. Merged to `development` (`:development` image = `40430ed`); connector prod branch = **`master`** (deferred). **Proven end-to-end through real [[Eclipse]] dispatch 2026-06-11** — UK GBP data landed to `TEST_DG1_GEP.AMAZON_ADS`, exact-match to the sandbox, 0 regression. See [[GP-257]] for the dispatch pattern + the backfill visibility-timeout gotcha.
 
 ## Known Limitations
 

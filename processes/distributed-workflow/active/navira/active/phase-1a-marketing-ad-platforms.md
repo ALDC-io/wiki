@@ -3,7 +3,7 @@ tags: [workflow, navira, phase-1a, marketing, google-ads, facebook-ads, amazon-p
 aliases: [Navira Phase 1A, Marketing Ad Platforms]
 sources: [eclipse_exp/frontend/public/navira/navira-project-plan.html, eclipse_exp/frontend/public/navira/navira-phase1a-data-dictionary.html]
 created: 2026-04-27
-updated: 2026-06-02
+updated: 2026-06-10
 ---
 
 # Phase 1A — Marketing Data: Ad Platforms
@@ -14,6 +14,14 @@ updated: 2026-06-02
 > - **[[GP-199]] (Amazon SB ASIN attribution):** Justin's 3 UAT callouts addressed; **spend-weighted per-ASIN sales LIVE in prod** `WAREHOUSE.MARKETING_FCT_ACTIVITY` (reconciles to campaign report to the penny). Phase 2 (real attribution via `sbPurchasedProduct`) connector merged + Amazon-validated; landing blocked in TEST by the core_api pick bug below.
 > - **[[GP-277]] core_api fixes (TEST stage slot, not promoted):** (A) `work_pick` connection-scoping fix — unblocks scoped-agent validation pulls in TEST (was the blocker for GP-199 phase-2 + future connector testing); (B) dtype-tolerant schema versioning — stops the 24-version forking on dtype drift. Both **validated** (pick fix server-side; Fix 2 34/34 logic+mechanics). **Gate before promote:** consumer-side validation of Fix 2's varchar-gravitation (boot prompt `gp277-fix2-consumer-validation.md`).
 > - **Next (Paul, resuming after core_api promote):** pivot back to **Facebook (Meta) + Google Ads connectors** (interfaces 1,2,5) and the **unified marketing schema** deployment. The core_api pick fix is the enabler that makes TEST-env connector validation work again.
+
+> **2026-06-10 — [[GP-257]] Amazon UK PPC (interface #3) + TEST Eclipse rehab.**
+> - **Root cause UK never flowed:** the legacy `amazon_ads` connector was **NA-only** (`advertising-api.amazon.com`); Amazon partitions ad profiles by region endpoint, so UK/EU is only reachable via the **EU host** (`advertising-api-eu.amazon.com` / token `api.amazon.co.uk`). A working UK token has existed since 2026-05-08 (returns UK GBP profile `1236242149887729`).
+> - **Connector EU support** added + merged to `development` (PR #125, `d00fc39`): `region` option (NA default = no-op) + `profile_ids` filter. EU-only, **decoupled from GP-199**. `:development` image built. Connector prod branch = **`master`** (not `main`).
+> - **UK template registered** in TEST Eclipse `work_template` (`advertised_product_report`, `region:EU` + UK profile, `min_date 2026-03-08` = Amazon SP-report retention floor; rolling ~94d, earlier permanently 400-rejected). Repo: `clients/GEP/eclipse/templates/amazon_ads/sponsored_products_advertised_product_report_uk.json`.
+> - **UK confirmed flowing in the TEST warehouse** — `WAREHOUSE_TEST_NAVIRA_ROADMAP` (clone of GP226, the roadmap integration copy) unified fact: **Amazon UK 682 rows, GBP, £2,982 cost / £4,328 sales / 84 conv / 88 units**. `MARKETING_EFFICIENCY` GBP→USD is UK-aware; UK USD lights up when UK reaches the prod share (at roadmap promotion).
+> - **Prod DEFERRED:** UK ads promote **bundled with the full navira-roadmap**, not standalone.
+> - **TEST Eclipse rehab (next workstream):** promoting [[GP-277]]'s `work_pick` connection-scoping fix (Fix A) is the enabler. Then dispatch the registered UK template as the first real test → UK raw into `TEST_DG1_GEP.AMAZON_ADS`. Target = two-schema TEST env (prod-share read `DATA_SHARE.*` + test-connector raw `AMAZON_ADS`/`GOOGLE_ADS`/`META`). Boot: `boot-prompts/test-eclipse-rehab.md`.
 
 ## Objective
 

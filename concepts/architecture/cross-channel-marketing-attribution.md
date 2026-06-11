@@ -62,10 +62,28 @@ How far up the tiers each channel can go depends on whether ad rows carry a prod
 | **Amazon SB** | ASIN (via GP-199 ASIN map) | **Tier 3** | ASIN → `SHARED_DIM_PRODUCT_BASE` → SKU → `SALES_FCT_*`. See [[GP-199]]. |
 | **Amazon SP** | `ADVERTISEDSKU` | **Tier 3** | SKU joins directly to sales. |
 | **Amazon SD** | ASIN | **Tier 3** | As SB. |
-| **Google** | none (`PRODUCT_ID='-1'`) | **Tier 2 only** | No SKU linkage until UTM/landing-page → order tracking is built. |
-| **Meta** | none (`PRODUCT_ID='-1'`) | **Tier 2 only** | No SKU linkage until catalog/CAPI order-id mapping is built. |
+| **Google** | none in landed fact (`PRODUCT_ID='-1'`); Windsor *can* expose `product_item_id`/`offer_id` for PMax+Shopping (~61% of spend) | **Tier ~2.7 (brand-grounded) today; Tier 3 blocked** | See "Google grounding — evidence" below. offer_ids are **Shopify Merchant-Center ids** (`shopify_us_<pid>_<vid>`) that do **not** join to `SHARED_DIM_PRODUCT_BASE` (direct SKU bridge = **6%**). Brand-grounded ROAS vs Websites-channel sales is built + validated; per-SKU needs a Shopify variant-id→SKU crosswalk. |
+| **Meta** | **`product_id` DOES return per-product rows** (`<variant_id>, <name>`), like Google; $8,158 total spend | **Tier ~2.7 / Tier 3 feasible — but ROI-gated** | Same shape as Google (Shopify variant ids; model in the name). Both brand- and per-SKU grounding repeat via the **same channel-agnostic crosswalk**. NOT pursued as its own effort — folds in nearly free once Google is built. Spend is the gate, not data. *(corrected 2026-06-09 — earlier "no per-product id" was a field-catalog scan miss; the live pull shows `product_id` populates.)* |
 
-=> **Amazon is fully groundable today** (revenue + product bridge both exist). **Google/Meta are blended-only** until product-level click→order linkage is built (UTM for Google, catalog/CAPI for Meta) — a later, substantial extension.
+=> **Amazon is fully groundable today** (revenue + product bridge both exist). **Google is now BRAND-grounded** (Phase 2a, 2026-06-09 — validated penny-exact at the DAX layer) for the Websites/DTC destination; **per-SKU Google grounding (Tier 3) is blocked on a Shopify-id→SKU crosswalk** (Phase 2b — title-model derivation reaches ~80% in a spike). **Meta supports BOTH approaches via the same channel-agnostic crosswalk** but is ROI-gated ($8,158 spend) — it rides along with the Google build rather than being its own effort.
+
+### Google grounding — evidence (2026-06-09, sandbox `WAREHOUSE_TEST_GP226`)
+Read-only probes established (scripts in `aldc-launchpad/warehouse_ops/_windsor_product_grounding_probe.py`, `_google_bridge_matchrate.py`, `_google_brand_crosswalk_build.py`):
+- **Coverage:** PMax $114K + Shopping $8.6K ≈ 61% of Google spend is product-capable; the rest (Search/Display/Demand-Gen) carries no product.
+- **Adding the product breakdown changes the spend total** ($349→$261/day) — a product pull is **not** a clean superset of the campaign pull, so grounding must be a *separate reconciled branch*, never a replacement for the campaign fact.
+- **Bridge blocker:** PMax/Shopping `offer_id`s are Shopify feed ids (`shopify_us_8981760409788_45208025530556`, brand in `product_title` only). Direct `offer_id → SHARED_DIM_PRODUCT_BASE` join = **5.8–6.2%** of product spend (only Bridgford `bfw_ka_*` ≈ Websites `PRODUCT_ID`). The other ~94% (Brinno, Slobproof — the biggest spenders) have **no warehouse SKU** → a **data-acquisition gap**, not a SQL gap.
+- **What works today — brand × destination:** campaign names cleanly carry brand + destination (`Shopify - PMax - Brinno BCC300` → Websites; `Amazon - Brinno_B0…` → Amazon). Brand bridges to `SHARED_DIM_PRODUCT_BASE.BRAND` and to Websites-channel sales. **Amazon-destination Google spend is NOT grounded** (Google is a rounding-error driver of Amazon sales — grounding it against total Amazon brand sales gave absurd 1500–6800x ROAS); it's kept spend-only. ~44% of Google spend is brand-grounded; the remainder is honestly bucketed (multi-brand / amazon-dest / no-brand).
+- **Validated grounded ROAS (Websites):** Brinno 13.2x · Bridgford 11.1x · Bigso 8.4x · Cibu 22.7x · Slobproof 1.3x. Spend reconciles to the fact ($179,086.92) to the penny; grounded sales reconcile to `SALES_FCT_ORDERLINE` Websites cells to the penny; DAX == warehouse to 2dp.
+
+#### Why only ~44% grounds at brand level (full spend breakdown, 2026-06-09)
+| Reason | Spend | % | Recoverable? |
+|---|---|---|---|
+| **Grounded** (brand-scoped + has Websites sales) | $79,523 | 44% | ✅ done |
+| **Multi-brand catch-all campaigns** (`Remaining Products`, `Top 8`, `All Products`, `Generic`) | $73,968 | 41% | only via **per-SKU** — these advertise the whole catalog, not one brand |
+| **Amazon-destination** (branded search → Amazon) | $14,361 | 8% | ✗ excluded by design (Google ≠ Amazon driver; gave 1500–6800x) |
+| **No brand signal** in campaign name | $11,235 | 6% | partially (more seed tokens / land `product_brand`) |
+
+Key: **$50,708 (28% of all Google spend) sits in multi-brand campaigns that ARE PMax/Shopping** — i.e. they carry `product_item_id`. Brand-level can't split them, but **per-SKU grounding (Phase 2b) can** — that's the real unlock, not better parsing. Conversely, $23,803 of the *grounded* total is branded **Search** (no product feed, clear brand in name) — which per-SKU never catches. The two methods are complementary.
 
 ## Proposed Build — `REPORT_COMMON.MARKETING_EFFICIENCY`
 
@@ -79,7 +97,7 @@ A reconciliation view (not a new ingest) that LEFT-JOINs aggregated spend to agg
 ## Decisions
 
 1. **Headline truth metric** — ✅ **DECIDED 2026-05-29 (Paul): adopt blended MER** as the board-level "marketing efficiency" number, surfaced with the over-credit caveat (denominator includes organic; it's a trend/ceiling, not channel attribution).
-2. **Google/Meta product linkage** — ✅ **DECIDED 2026-05-29 (Paul): defer, but PLAN to integrate.** Google/Meta stay **blended-only (Tier 2)** in the initial build. Lifting them to Tier 3 (UTM click→order for Google; catalog/CAPI order-id for Meta) is a **planned follow-on phase**, sequenced *after* the initial design (Phase 1 below) is implemented and proven — not abandoned. See Phased Rollout.
+2. **Google/Meta product linkage** — ✅ **DECIDED 2026-05-29 (Paul): defer, but PLAN to integrate.** Google/Meta stay blended-only initially; lift after Phase 1 proven. **UPDATE 2026-06-09 (Paul): build brand-grounded Google now (Phase 2a, DONE), sandbox-first.** Evidence (above) showed per-SKU Google grounding covers only 6% by direct join (Shopify offer_ids carry no warehouse SKU) → the achievable deliverable is **brand × destination-channel** grounding, validated penny-exact. Per-SKU (Phase 2b) is filed but **gated on a Shopify variant-id→SKU crosswalk**. Meta dropped (no product id + negligible spend). The original "UTM click→order" framing was heavier than needed — the brand path reuses the existing `SHARED_DIM_PRODUCT_BASE.BRAND` bridge with no new tracking infra.
 3. **Reporting currency** — ✅ **DECIDED 2026-05-29 (Paul): USD** as the consolidation target (matches `SALES_GROSS_CONSOLIDATED`). All spend converted to USD via `CONSOLIDATED_RATE` before computing ratios; original-currency columns preserved.
 4. **Amazon headline attribution window** — ✅ **DECIDED 2026-05-29 (Paul): keep 30-day**, matching the current Snowflake warehouse design (prod `MARKETING_FCT_ACTIVITY` already surfaces the `*30D` window columns). Revisit only if Navira requests a different window. *(Carried from [[GP-225]] Q3.)*
 
@@ -88,14 +106,17 @@ A reconciliation view (not a new ingest) that LEFT-JOINs aggregated spend to agg
 | Phase | Scope | Tiers delivered | Gate |
 |---|---|---|---|
 | **1 — Initial (prove it)** | `REPORT_COMMON.MARKETING_EFFICIENCY`: all-channel **blended MER** (Tier 2) + **Amazon product-grounded** (Tier 3, via the existing `SHARED_DIM_PRODUCT_BASE` bridge). Google/Meta contribute spend + Tier-1 value + blended only. | T1 (via [[GP-225]]) · **T2 all-channel** · **T3 Amazon** | — |
-| **2 — Google/Meta product linkage** | UTM landing→order mapping (Google) + catalog/CAPI order-id mapping (Meta) to lift those channels to product-grounded. | **T3 Google/Meta** | **Only after Phase 1 implemented & proven** (decision 2). |
+| **2a — Google brand-grounded** ✅ DONE 2026-06-09 | `MARKETING_EFFICIENCY_GOOGLE_BRAND` (sandbox): Google PMax/Shopping spend × **brand** grounded to actual Websites-channel sales. Seed (`navira_google_brand_seed.sql`) + live resolution view + grounding view; wired into PBI sandbox + DAX-validated. | **Tier ~2.7 Google (brand)** | Phase 1 proven ✓ |
+| **2b — Google per-SKU** ✅ BUILT in sandbox 2026-06-09 | True product (SKU) grounding via a **`product_title`→SKU title-model crosswalk** (the Shopify-feed connector turned out unnecessary): `MARKETING_GOOGLE_PRODUCT_SPEND` (materialized) + `MARKETING_GOOGLE_OFFER_SKU` (resolution view, locked logic in SQL) + `MARKETING_EFFICIENCY_GOOGLE_PRODUCT` (SKU-grain); PBI-wired + DAX-validated. **81% of product-grain spend resolves** (validated 100% brand-consistent, 227/227); remaining 19% (Bigso `V####`, Slobproof) is a surfaced `(UNRESOLVED)` bucket needing a curated map or Shopify feed. | **Tier 3 Google (81%)** | Phase 1 + 2a proven ✓ |
+| **2c — Meta** | Deferred — connector exposes no per-product id and Meta spend is negligible ($6,667). | — | Not pursued. |
 | **3 — Causal (optional, later)** | MMM / geo-holdout incrementality. Separate data-science initiative, not a warehouse view. | T4 | Business demand. |
 
 ## Implications for Tickets
 
 - **[[GP-225]]** delivers **Tier 1 only** (per-channel ROAS via the Windsor field fix). It does *not* close the cross-channel-truth gap — that's this design.
 - **New ticket (Phase 1):** build `REPORT_COMMON.MARKETING_EFFICIENCY` — all-channel blended MER (Tier 2) + Amazon product-grounding (Tier 3) via the existing bridge, spend⨝actual-sales reconciliation + currency consolidation. This is the real "true ROAS" deliverable and the design to **prove first**.
-- **Follow-on ticket (Phase 2, gated):** Google/Meta product linkage (UTM + catalog/CAPI) — filed but **not started until Phase 1 is proven** (decision 2).
+- **Phase 2a (DONE 2026-06-09):** Google **brand × destination-channel** grounding — `MARKETING_EFFICIENCY_GOOGLE_BRAND` + seed + resolution view in sandbox; PBI-wired + DAX-validated. Rides the next sandbox→live-TEST cutover (not folded into the current GP-199 cutover).
+- **Follow-on ticket (Phase 2b, gated):** Google **per-SKU** grounding — needs a **Shopify variant-id→internal-SKU crosswalk** (the ~94% of PMax/Shopping spend whose `offer_id` is an opaque Shopify composite). Build a Shopify/Merchant-Center product-feed source (deterministic) or a curated `product_title`→SKU map (fuzzy). Not started until the crosswalk source exists. *(navira-roadmap)*
 - **Agency ([[phase-1c-sales-agency-customers]]):** same model per `ENTITY_CODE`. Agency Amazon Ads → Tier 3 once a per-entity product dim is derived from their orders/catalog; until then Tier 2. Each new tenant inherits the model with zero per-tenant schema work beyond its product dim.
 - **GP-199** already supplies the Amazon-SB ASIN key that Tier 3 joins on — no rework.
 

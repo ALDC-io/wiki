@@ -140,7 +140,7 @@ Tickets from 2026-05-12 business meeting, originally misfiled under FU92. Moved 
 | Ticket | Summary | Status | Notes |
 |---|---|---|---|
 | GP-265 | Get Google Ad Spend into data | In Progress | Windsor authorization expected 2026-05-29 |
-| GP-257 | UK Ads — Justin to provide info | Blocked | Waiting on Justin |
+| GP-257 | UK Ads (Amazon SP) | In TEST | Connector EU support merged to dev (PR #125); UK confirmed in TEST warehouse (`WAREHOUSE_TEST_NAVIRA_ROADMAP`, 682 rows GBP). Token in hand (no Justin action needed). **Prod deferred** to full roadmap promotion. See [[phase-1a-marketing-ad-platforms]] |
 | GP-260 | Subscribe and Save data and KPIs | Investigation | Discovery phase |
 | GP-254 | Lectric eBikes Integration — Agency Test | In Progress | Credentials received. Entity segmentation design in progress. |
 | GP-261 | Configure Navira Snowflake to ALDC for ingestion | To Do | |
