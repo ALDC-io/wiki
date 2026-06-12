@@ -3,7 +3,7 @@ tags: [entity, tool, azure, cloud, infrastructure, hosting]
 aliases: [Azure, Microsoft Azure]
 sources: [daily/2026-04-17.md]
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-06-12
 ---
 
 # Azure
@@ -101,6 +101,7 @@ Paul's current state (as of 2026-04-17):
 - [[CosmosDB]] — Azure-hosted database for Eclipse templates/schema
 - [[core_api]] — Azure-hosted web app
 - [[connector]] — writes to Azure storage accounts as transport layer
+- [[gpv1-to-gpv2-storage-migration]] — GPv1→GPv2 retirement (2026-10-13, XTKT-BW8); inventory of which accounts are still `Kind: Storage`
 - [[Cloudflare]] — CNAMEs that front the Azure web apps
 - [[connector-timeout-outage]] — post-mortem involving an Azure Function App
 - [[GitHub Actions]] — CI/CD layer that pushes into Azure staging slots

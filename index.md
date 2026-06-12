@@ -1,8 +1,8 @@
 ---
 tags: [index, navigation]
-updated: 2026-06-07
+updated: 2026-06-12
 last_ingest: 2026-06-11 (triage-agent session 13 — agent observability & eval BUILT offline (R15-18): new telemetry/ package — stable AgentDecision audit row (UUID4 corr_id + separate trace_id; content by sha256 hash; evidence by ID+score) + offline invoke_workflow envelope span + Exporter seam (SQLite AGENT_DECISIONS/AGENT_EVALS + JSONL; Langfuse/Prometheus/Snowflake later); online-eval layer-1 (6 deterministic checks on all traffic); shadow mode (suppress-by-construction). All observational/instrument-don't-alter, 3 self+Opus-reviewed commits, 289 tests. New page agent-observability-telemetry; R18 AGENT_* Snowflake-table contract still to negotiate with observability platform)
-last_runbook_update: 2026-04-24
+last_runbook_update: 2026-06-12
 ---
 
 # Wiki Index
@@ -180,6 +180,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[flight-check]] — Operational validation process: Eclipse connector health, Snowflake task chain, data freshness, Power BI refresh, data share integrity.
 - [[eclipse-incident-response]] — Outage-recovery runbook for Eclipse connectors (power/network/agent loss). Read-only triage via `observability/ops/incident_triage.py` → classify casualties vs noise → canary re-trigger → warehouse verify. Documents the zombied single-`full`-partition queue-drain gotcha. Proven on the 2026-06-01 Kamloops power outage (ALDC-244).
 - [[eclipse-2.1-editor-performance]] — Root-cause runbook for slow visual creation in the Eclipse 2.1 Explorer. Read-only triage clears the web tier (App Service healthy) → traces visual→dataView→"Sales Model"→Power BI → measures the DAX (≈3–4 s/query, ~16 s to build a 5-edit table, import model, hourly 4–7 min refresh). Root cause: the editor re-fires a heavy `executeQueries` on every un-debounced field/measure/sort change. Fix = debounce the preview query (shadow branch `perf/editor-debounce-query-storm`) + backend timeout. Includes the credential-store map + the `service_power_bi`=Snowflake gotcha. From Lori Beck's 2026-06-11 report.
+- [[gpv1-to-gpv2-storage-migration]] — Migrate Azure GPv1 (`Kind: Storage`) accounts → GPv2 before the 2026-10-13 retirement (XTKT-BW8). 20 GPv1 accounts inventoried across 4 subs (2026-06-11) with orphan triage (Tier A live / B idle-with-data / C auto-provisioned), in-place `--upgrade-to-v2` procedure, prod-last execution order, and the org-admin permission gap. Tracked as ALDC-346 (due 2026-09-30).
 - [[client-deactivation]] — Client deactivation checklist: Postgres users, Eclipse tasks, Snowflake shares, PBI licenses, invoicing stop dates, NextCloud access.
 - [[client-vm-setup]] — Setting up a Windows VM (via Parsec) for Mac clients who can't install Parallels.
 - [[client-invoicing]] — Three invoicing models: project-based gates, quarterly payment plans (GEP), monthly recurring.
