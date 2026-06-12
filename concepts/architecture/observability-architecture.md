@@ -357,6 +357,13 @@ CLUSTER BY (environment, started_at_utc);
 
 Retention ≥365 days via Time Travel + monthly partition.
 
+> **Agent telemetry does NOT land here.** Per-decision telemetry from the v2 agent ([[triage-agent]]) is
+> high-volume request telemetry, not scheduled-job health — it gets its own sibling tables
+> **`AGENT_DECISIONS` / `AGENT_EVALS` / `AGENT_DRIFT_WINDOWS`** (R18), keeping `JOB_RUNS` clean for
+> scheduled/bounded jobs (eval batches / drift jobs / prompt-regression runs stay here *as jobs*). The
+> table DDL/ownership + write path are an **open contract** between this platform and the agent — see
+> [[agent-observability-telemetry]] (built locally in SQLite first, behind an export seam).
+
 ### Label vocabulary
 
 Pulled from [[aldc-naming-convention]]:
@@ -432,6 +439,7 @@ What v1 commits to so v2 is cheap:
 ## See Also
 
 - [[observability-platform]] — project page (scope, owners, phasing).
+- [[agent-observability-telemetry]] — the v2 agent's per-decision telemetry (`AGENT_*` sibling tables, online-eval pyramid, shadow mode) that lands beside this platform's `JOB_RUNS`.
 - `processes/distributed-workflow/active/observability-platform.md` — workstream tracker.
 - [[eclipse_exp]] — reference implementation for app-level health (dashboard JSON imported here).
 - [[flight-check]] — manual operational runbook automated by Plane 3.

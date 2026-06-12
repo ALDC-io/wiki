@@ -5,6 +5,8 @@ sources: [
   C:/Users/PaulRussell/repos/triage-agent/docs/project/decisions.md,
   C:/Users/PaulRussell/repos/triage-agent/docs/architecture/overview.md,
   C:/Users/PaulRussell/repos/triage-agent/docs/research/digests/,
+  C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/telemetry/,
+  C:/Users/PaulRussell/repos/triage-agent/src/triage_agent/shadow.py,
 ]
 created: 2026-06-05
 updated: 2026-06-11
@@ -19,6 +21,113 @@ Docker. It automates the proven human runbook in [[eclipse-incident-response]] a
 [[observability-platform]]'s `obs-api`. Own repo at `C:\Users\PaulRussell\repos\triage-agent` (a
 *consumer* of observability, not part of it). Hackathon project (started 2026-06-05; demo Mon
 2026-06-08); bar = near-production-grade.
+
+## Status (2026-06-11, session 13) — agent observability & eval (R15-R18) BUILT, offline
+
+**Built the observability foundation BEFORE deepening autonomous apply — "you can't safely widen autonomy
+on decisions you can't measure." Three increments, each self + independent-Opus reviewed (all APPROVE),
+committed to `main` (`879462f`, `44201ad`, `3e1dba6`; + `2d76f6e` docs). 255 → 289 tests. Everything is
+OBSERVATIONAL: nothing changes a classify/triage/propose behaviour or opens a new write path to case
+state.** The reusable design is written up at [[agent-observability-telemetry]]. Constraint shaping it: no
+Langfuse / OTLP / Snowflake / Prometheus creds (`.env` has only `ANTHROPIC_API_KEY`), so the *stable
+internal schema* + always-on deterministic eval + shadow mode land to **SQLite (+ optional JSONL) behind an
+`Exporter` seam**; the production exporters slot in there later (R16).
+
+- **Stable decision record + envelope span (R15/R18, `telemetry/` package).** A lean, immutable,
+  join-friendly **`AgentDecision`** audit row — the local stand-in for R18's Snowflake `AGENT_DECISIONS`:
+  UUID4 `correlation_id` (business key) + a **separate** 32-hex `trace_id` (telemetry handle) kept distinct
+  (R15 §7.2); version stamps (model + `prompt_version`); calibrated confidences + bands; abstain/escalation
+  reason; evidence as **IDs + scores**; action + payload **hash**; injection flag; operator-override +
+  trace-URL slots. **Raw (untrusted) content is stored by sha256 hash only**, never inlined (§7.3 +
+  untrusted-input posture). `tracing.py` is a *pure, offline* `invoke_workflow triage_classification`
+  **envelope span** with nested classify/correlate/propose steps — **no `opentelemetry` dep** (no collector
+  in the weekend env; the GenAI semconv is still "Development" → map *into* the stable `triage.*`/`agent.*`
+  layer, don't couple). `exporters.py` is the seam: `SqliteExporter` (sibling `AGENT_DECISIONS`/`AGENT_EVALS`
+  tables, **never** [[observability-architecture|`JOB_RUNS`]], R18) + `JsonlExporter` + `MultiExporter` +
+  `NullExporter`. Wired additively into `pipeline.process_message` (**instrument-don't-alter** — classify/
+  triage lines byte-equivalent; noise/abstain cases now also get an audit row); the emit is **fail-safe**
+  (a telemetry error never touches the case).
+- **Online eval pyramid — layer 1 (R17, `telemetry/online_eval.py`).** Six deterministic checks on ALL
+  traffic, run against the **observable decision record** (judges what was emitted, not classifier
+  internals) → `AGENT_EVALS` rows attached by corr_id+trace: `schema_valid` (confidences in [0,1]),
+  `label_in_registry` (intent/scope/band/action ∈ the servable ontology), `action_within_policy` (the
+  apply-floor invariant — a concrete Tier-A action from message-text below `fingerprint_confidence` 0.66 is
+  a FAIL; INCIDENT-sourced actions exempt; RECOMMEND_REVIEW/VERIFY_DOWNSTREAM route-to-human defaults
+  exempt — verified faithful to `propose.py`), `evidence_present` (a defensive invariant against a future
+  propose regression), `retrieval_count_bounds` ([0,5], matches the grounding card cap), and
+  `injection_flag_present` (present on every decision; WARNs only on an actionable, non-noise, non-abstain
+  reading of injection-flagged content). Layers 2 (LLM-judge, stratified tail-heavy sample) + 3 (human
+  calibration) are documented **seams**; the drift rule (fire only when drift co-occurs with a degraded
+  KPI) is noted, not built.
+- **Shadow mode (R17, `shadow.py`).** Mirror a message through the SAME read-only reasoning (classify →
+  correlate → propose) — the skip-triage logic is byte-identical to `process_message` so the trace is a
+  faithful mirror — **suppress every side effect**, and emit a paired `AgentDecision` marked `shadow=True`
+  under the same correlation_id. **Suppression is BY CONSTRUCTION, not by flag**: the module imports NONE of
+  the mutation/outbound seams (no upsert/attach_*, no `post_card`, no `record_decision`/`create_issue`), so
+  a shadow run is safe even with `OUTBOUND_ENABLED` on — the only write is the observability sink (the
+  paired trace, not case state). A test locks the no-mutation-import property. The safe **cut-over
+  primitive**: point cascade/config at a candidate model/prompt, shadow-run real traffic, diff shadow vs
+  live decisions. Dev-gated `POST /api/shadow` (refuses 403 in production posture; costs one LLM call).
+
+**R18 obs-api contract gap still OPEN:** the sibling Snowflake `AGENT_DECISIONS` / `AGENT_EVALS` /
+`AGENT_DRIFT_WINDOWS` tables are a contract to negotiate with the [[observability-platform]] workstream —
+the table DDL/ownership, the write path (agent-owned Snowflake exporter vs an obs-api ingest endpoint), and
+whether `AGENT_DRIFT_WINDOWS` is materialised by a scheduled `JOB_RUNS` job. Built locally in SQLite; the
+negotiation is flagged, not resolved.
+
+**Next (per the full-spec sequence):** s14 generalization-platform core (R19-23) — microkernel intake +
+route compiler → typed **action envelope** → uniform **`risk_class × mode`** safety gate, generalising over
+≥2 concrete action types (propose, resolve/apply) now that observability can measure them.
+
+## Status (2026-06-11, session 12) — Phase-4 groundwork BUILT: connector-error parser, repro harness, author/reviewer
+
+**The Phase-4 isolation Deep Research report landed and was integrated FIRST (decisions R27-R30,
+`overview.md §10`), then the three buildable-offline endgame pieces were built — each self + Opus
+reviewed, committed to `main` (`f4229fc`, `90dbcb2`, `1717a01`). 184 → 255 tests. All read-only, gated,
+isolated; nothing executes or mutates.**
+
+- **Isolation question RESOLVED (R27-R30).** Verdict: **record/replay** a frozen, immutable bundle
+  captured in prod after the work descriptor resolves, replayed through a thin **`WorkProvider`** seam at
+  the connector bootstrap (`CoreApiWorkProvider` prod / `FixtureWorkProvider` replay) — the
+  [[core_api]] Cosmos/Queue/Blob coupling stays *behind* the seam. **Reject** a live `/work/next` clone
+  (re-couples replay to current state) and **reject** container snapshotting (experimental; blind to
+  external state). Isolation is **machine-checkable evidence** (`docker inspect`/`stats` NET-I/O-zero),
+  not trust; credentials default to absence + IMDS blocked. Verification = baseline-vs-patched
+  differential replay + golden sink artefacts + a regression corpus. `/repro/export/{run_id}` is
+  backfill-only.
+- **Connector-error parser (`triage/connector_error.py`).** Parses the Eclipse schedule `comment`
+  (structured `Extraction\Connector error: [{'code','message'}]` via `ast.literal_eval` — never `eval`;
+  or plain text) → a fingerprint from the **same vocabulary as `propose._PLAYBOOK`** (and the
+  [[observability-platform]] `_group_key`/`_FIX_PATTERNS`). This gives propose a genuine **authoritative
+  `INCIDENT` fingerprint source** — far stronger than email-body cue inference: `_resolve_fingerprint`
+  resolves incident `error_comment` (INCIDENT) > a *structured* connector-error block pasted in the
+  message (MESSAGE_TEXT) > the existing loose cues (unchanged for prose). Per **R28** this is enough for
+  triage/correlation, NOT for deterministic replay (which needs capture-at-run-start). Now **automates
+  the Step-2 comment→fingerprint classification** of [[eclipse-incident-response]].
+- **Repro harness scaffolding (`repro/` package, gated `REPRO_ENABLED`).** Immutable `ReplayBundle`
+  (R27/R28 shape; secrets **presence-only** by construction — no value field; image pinned by **digest**;
+  tamper-proof load) + the `WorkProvider` seam + `sandbox_runner` (the R29 hardened `docker run` argv —
+  `--network none --read-only` cap-drop non-root no-new-privileges seccomp, refuses a non-offline network
+  until the IMDS-blocking egress profile exists — and `verify_isolation_evidence`, a **fail-closed**
+  machine-checkable parser of inspect+stats). Real capture hook + live run are future (need a connector
+  image + the prod capture point).
+- **Author/reviewer separation (`triage/review.py`, R25/R30).** The existing `triage/sandbox.py` is the
+  **author**; the new reviewer is an independent **fresh-context arbiter** given a `ReviewPacket` of
+  **observable artefacts only** (no author chain-of-thought, no prod handle) that **independently
+  re-verifies** the candidate (a no-leak scan over ADDED lines only; recipe acceptance-criteria mapping;
+  an author residual-secret warning is a blocker) → bounded findings + a verdict whose ceiling is
+  `approve_for_human` — **it never merges; a human still gates the apply**. Wired into `/api/resolve`.
+
+**Reviews earned their keep:** the author/reviewer review went **CHANGES-REQUIRED → fixed** — the no-leak
+scanner (the load-bearing R30 security check) initially matched only JSON-quoted secret fields and used an
+over-broad substring placeholder allowlist; it now covers `=`/YAML/unquoted assignments + known token
+shapes (AKIA/ghp_/Slack/Azure/JWT) + anchored placeholder/env-ref handling. *Lesson: a security check must
+bias toward FLAGGING — a false negative is the dangerous direction.* Two earlier reviews caught a policy
+field (`block_imds`) that claimed a guarantee nothing enforced, and a `seccomp=unconfined` that passed
+unverified — both fixed by *re-verifying every flag the plan emits*.
+
+**Next (per the full-spec sequence):** s13 agent observability & eval (R15-18: OTel → `AGENT_DECISIONS/
+EVALS/DRIFT_WINDOWS`, online eval pyramid + shadow mode), then s14 generalization-platform core (R19-23).
 
 ## Status (2026-06-11, session 11) — console UI + security fast-path + Phase-4 sandbox + standardized Jira ingest
 
@@ -437,8 +546,9 @@ The corrected-gold policy:
 | 1 | Monitor & classify | live-validated; **AUTO proven safe (noise-FPR 0%), R8 gates met (intent acc 0.50→0.80)**; grounding layer BUILT (wiki half) but flagged OFF — net-regressed previews, pending full-body + Zeus re-eval |
 | 2 | Triage (read obs-api: correlate failures) | **hardened (s10): IDF distinctive-token scorer + negation strip + scope/intent + ranked top-5; measured vs the real 78-incident file via `eval/correlation.py` — top-1 0.80→1.00** |
 | 3 | Propose remediation (draft → Slack HITL) | **PROPER built (s9) + deepened (s10) + security fast-path (s11): full HITL loop → claim-then-mutate decision → gated Jira → board; 12 fingerprints + confidence floor + runbook/canary + a credential-exposure security path (HIGH-risk review-only, never auto-acts on creds); Opus APPROVE, 184 tests** |
-| 4 | Reproduce & auto-fix in Docker | **sandbox-resolution slice built (s11)**: on approval the agent prepares a candidate fix in an isolated throwaway git branch (real diff for credential-purge), apply-to-repo is a human-only 2nd gate; orphan-reconcile (s10). **Docker isolated repro of a connector run still the hard endgame** (Cosmos/Queue/Blob coupling in [[core_api]]) — Deep Research handoff out for the isolation design |
+| 4 | Reproduce & auto-fix in Docker | **groundwork BUILT (s10-12), all gated/isolated/read-only.** s10 orphan-reconcile; s11 candidate-resolution sandbox (throwaway git branch, human-only apply); **s12: isolation design RESOLVED (R27-R30 record/replay + `WorkProvider` seam) + connector-error parser (`comment`→fingerprint, feeds propose `INCIDENT`) + repro harness (immutable `ReplayBundle` + seam + R29 hardened `docker run` plan + fail-closed isolation evidence, `REPRO_ENABLED`) + author/reviewer separation (`triage/review.py`: fresh-context arbiter re-verifies, never merges).** Real capture hook + live connector run still future |
 | Ingest | Email + open Jira tickets | **s11: standardized Jira ingest** — fetch a ticket (live REST or fixture) → classify + triage like email; the agent works on emails OR open Jira tickets |
+| Observability | Measure + audit every decision | **s13: BUILT offline (R15-18)** — stable `AgentDecision` audit row + offline envelope span + `Exporter` seam (SQLite `AGENT_DECISIONS`/`AGENT_EVALS` + JSONL; Langfuse/Prometheus/Snowflake later) + online-eval layer-1 (6 deterministic checks) + shadow mode (suppress-by-construction). Instrument-don't-alter. See [[agent-observability-telemetry]] |
 | UI/Jira | Triage board + Jira sync | injection-verified |
 
 All five Deep Research reports are integrated (decisions R1–R26). The three from session 3:
@@ -451,6 +561,9 @@ Phase 4). Digests in `docs/research/digests/`.
 
 ## See Also
 
+- [[agent-observability-telemetry]] — the reusable instrument-once/export-many telemetry design this
+  session built: the `AgentDecision` audit schema, the online-eval pyramid, shadow mode, and the
+  `AGENT_DECISIONS/EVALS/DRIFT_WINDOWS` contract with the observability platform
 - [[classifier-recalibration-pattern]] — the reusable method this session proved: noise-FPR safety gate
   + deterministic pre-filter & cost-asymmetry band cap before any model retraining/threshold sweep
 - [[observability-platform]] — the signal source; triage-agent consumes its `obs-api`
