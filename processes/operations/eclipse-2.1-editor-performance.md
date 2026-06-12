@@ -148,11 +148,37 @@ az monitor log-analytics query -w <customerId> --analytics-query \
    building a table (one-per-edit → one-per-pause). Deploy via slot-swap (see [[eclipse-azure-deployment]]).
 2. **F2 — backend (resilience).** Add `timeout=` + bounded retry/backoff to the `executeQueries` POST
    in `core_api/v1/route_dataset.py`.
-3. **Quick win.** The hourly **model refresh (4–7 min)** overlaps editing at the top of each hour;
+3. **F3 — dashboard-load N+1.** Real traffic shows `GET /visuals/{id}/permissions/me/` fired **once per
+   visual** (16 calls / 8.2 s in one dashboard load) plus repeated ~1.15 s `dataViews/{id}` + `/dataset/`
+   metadata. Batch the permission checks (one `permissions/me?ids=…` call) and cache/co-fetch the
+   dataView + dataset metadata. Backend: `core_api` v2 `api/visuals` + `api/data_views` routers.
+4. **Quick win.** The hourly **model refresh (4–7 min)** overlaps editing at the top of each hour;
    consider shifting its schedule off peak working hours.
-4. **Observability (durable).** Bake the OpenTelemetry Azure Monitor SDK into the `core-api` image to
+5. **F4 — per-user query telemetry (turns "owner proxy" into the live actor).** The diagnostics can only
+   attribute to the *object owner* because the backend logs no acting user per request. Fix: emit one
+   structured telemetry line per data request from the v2 handler, where the signed-in user IS available
+   (`Depends(maybe_get_signed_in_user)`). Shadow branch **`perf/dataset-query-telemetry`** (core_api,
+   off `eclipse-2.1`): new `api/lib/query_telemetry.py` + instrumented `api/data_views/router.py`
+   `get_data_view_data` — logs `{user_id, user_email, account_id, data_view_id, dataset_id, request_type,
+   fields, measures, duration_ms, status}` (prefix `QUERY_TELEMETRY`, fire-and-forget) → `AppServiceConsoleLogs`
+   → Log Analytics. Replicate the one-liner to `api/visuals/router.py` + `api/dashboards/router.py`.
+   Durable upgrade: write to the (empty) Cosmos `portal_query` container via `func_common.container_*`.
+   Deploy: rebuild the `core-api` image, ensure app log level INFO. Once live, `diagnose_by_user.py`
+   reads true acting-user + exact query + duration.
+6. **Observability (durable).** Bake the OpenTelemetry Azure Monitor SDK into the `core-api` image to
    capture PBI dependency durations permanently; add a synthetic "editor data request" probe + p95
    alert to the [[observability-platform]].
+
+## Monitoring / diagnostic tooling
+
+- **On-demand charts:** `aldc-launchpad/eclipse_ops/diagnose_editor_perf.py` (endpoint latency / N+1 / burst
+  PNG) and `diagnose_by_user.py` (resolves request IDs → client / owner / object / dataset / fields+measures
+  via CosmosDB; `--push` to feed Grafana). `_push_perf_metrics_local.py` pushes window metrics for local preview.
+- **Standing job + dashboard:** `observability/jobs/check_eclipse_perf.py` (Ofelia 15-min; Prometheus metrics +
+  P3 Slack on N+1 / sustained-slow) and Grafana dashboard `eclipse-editor-perf` (`stack/grafana/dashboards/`),
+  incl. a "By user / object" section. Needs an SP with **Log Analytics Reader** + `LA_WORKSPACE_ID` +
+  `AZURE_*` env on the obs host. NB the obs platform is **local-only today** (Azure VM cutover not done);
+  a temporary Cloudflare-tunnel share is the current access path.
 
 ## See Also
 
