@@ -28,6 +28,7 @@ Adding the [[Windsor]] revenue fields (`conversions_value`, `action_values_purch
 | **1 — Platform ROAS** | per-channel ROAS = platform conversion value ÷ spend | platform-attributed (Windsor) | ❌ platform-reported; **never sum across channels** | In-channel optimisation — *what GP-225's field fix delivers* |
 | **2 — Blended MER** | total spend ÷ **actual revenue** (all channels combined) | `SALES_FCT_*` (real orders) | ✅ top-line truth | Overall marketing efficiency, board-level trend |
 | **3 — Product-grounded** | spend on an ASIN/SKU vs **actual sales** of that SKU | `SALES_FCT_*` (real orders) | ✅ grounded, directional | Which products marketing is efficient on |
+| **3.5 — Contribution Margin** | gross contribution (net sales − COGS) and margin-after-ad-spend; margin-MER / margin-ROAS | `SALES_FCT_ORDERLINE` COGS | ✅ profit truth (coverage-gated) | Profit, not just revenue — efficiency on margin rather than top-line |
 | **4 — Causal / incrementality** | true lift from MMM or geo/holdout tests | experiment / model | ✅ causal (only tier that is) | Budget reallocation between channels — **future, out of schema scope** |
 
 **The source of truth is Tier 2 + Tier 3** — both put **actual orders in the denominator**. Tier 1 stays, clearly labelled "platform-reported," for tactical use.
@@ -107,9 +108,29 @@ A reconciliation view (not a new ingest) that LEFT-JOINs aggregated spend to agg
 |---|---|---|---|
 | **1 — Initial (prove it)** | `REPORT_COMMON.MARKETING_EFFICIENCY`: all-channel **blended MER** (Tier 2) + **Amazon product-grounded** (Tier 3, via the existing `SHARED_DIM_PRODUCT_BASE` bridge). Google/Meta contribute spend + Tier-1 value + blended only. | T1 (via [[GP-225]]) · **T2 all-channel** · **T3 Amazon** | — |
 | **2a — Google brand-grounded** ✅ DONE 2026-06-09 | `MARKETING_EFFICIENCY_GOOGLE_BRAND` (sandbox): Google PMax/Shopping spend × **brand** grounded to actual Websites-channel sales. Seed (`navira_google_brand_seed.sql`) + live resolution view + grounding view; wired into PBI sandbox + DAX-validated. | **Tier ~2.7 Google (brand)** | Phase 1 proven ✓ |
+| **1.5 — Contribution Margin** ✅ BUILT/live TEST 2026-06-12 | `REPORT_COMMON.MARKETING_EFFICIENCY_MARGIN` (additive column-superset of `MARKETING_EFFICIENCY` adding COGS/margin) + PBI measures `Contribution Margin (USD)`, `Margin After Ad Spend (USD)`, `Margin ROAS`, `Contribution Margin %`, `COGS Coverage %`. Headline = gross contribution (net − COGS); margin-after-ad-spend = gross contribution − Windsor spend (double-count-safe, since fully-loaded `MARGIN_NET_CONSOLIDATED` already nets ad fees — exposed only as a labelled reference). COGS from `SALES_FCT_ORDERLINE` (no new connector). DAX==SQL validated, zero regression. **Coverage ~83%** of recent NAVIRA lines (0% pre-May-2024; agency=0) — surfaced via `COGS Coverage %`; lifts when the GP-259 Option-A backfill lands. | **Tier 3.5** | Phase 1 proven ✓ |
 | **2b — Google per-SKU** ✅ BUILT in sandbox 2026-06-09 | True product (SKU) grounding via a **`product_title`→SKU title-model crosswalk** (the Shopify-feed connector turned out unnecessary): `MARKETING_GOOGLE_PRODUCT_SPEND` (materialized) + `MARKETING_GOOGLE_OFFER_SKU` (resolution view, locked logic in SQL) + `MARKETING_EFFICIENCY_GOOGLE_PRODUCT` (SKU-grain); PBI-wired + DAX-validated. **81% of product-grain spend resolves** (validated 100% brand-consistent, 227/227); remaining 19% (Bigso `V####`, Slobproof) is a surfaced `(UNRESOLVED)` bucket needing a curated map or Shopify feed. | **Tier 3 Google (81%)** | Phase 1 + 2a proven ✓ |
 | **2c — Meta** | Deferred — connector exposes no per-product id and Meta spend is negligible ($6,667). | — | Not pursued. |
-| **3 — Causal (optional, later)** | MMM / geo-holdout incrementality. Separate data-science initiative, not a warehouse view. | T4 | Business demand. |
+| **3 — Causal (optional, later)** | MMM / geo-holdout incrementality. Separate data-science initiative (Python job → `REPORT_COMMON.MARKETING_INCREMENTALITY`), not a warehouse view. **Method DECIDED 2026-06-12 (deep-research): PyMC-Marketing** (Bayesian; Meridian fallback) on `MARKETING_MMM_INPUT`; minimum-defensible spec only (Amazon+Google already have ~105 wks each; Meta excluded). ~105 wks × 2 channels is "small-sample" (Jin 2017) → prior-dominated, report with credible intervals, **observational not causal** until a geo-holdout lift test calibrates it. See `aldc-launchpad/warehouse_ops/tier4-methodology.md`. | T4 | Business demand. |
+
+## PROD promotion gate (efficiency + Contribution-Margin stack)
+
+The full marketing-efficiency + Contribution-Margin (Tier 3.5) stack is live in **TEST only**
+(`TEST_DG1_GEP.REPORT_COMMON.*`, GEP Test Models "Data Model" `66151728`). The PROD repoint
+(onto `PROD_DG1_GEP` / `GEP Prod Models`) is **deliberately deferred** and gated on BOTH of the
+following — the trigger is the conditions, not a date:
+
+1. **Client (GEP/Navira) review + sign-off of the design in TEST** — the new measures, the
+   gross-contribution definition, and the coverage caveat. Any requested change to the margin
+   basis (gross vs. fully-loaded, headline metric) is made + re-validated in TEST first; PROD
+   inherits only an *accepted* design. (GP-277 sits in QA / client-review for exactly this.)
+2. **COGS coverage is trustworthy** — the GP-259 **Option-A catalog backfill has landed** (or
+   PROD launches with `COGS Coverage %` extremely prominent). At ~83% coverage, PROD margin
+   would show execs *overstated* margin on the ~17% of no-COGS lines — the precise
+   "numbers don't match my spreadsheet" failure mode. See
+   `aldc-launchpad/boot-prompts/navira-gp259-cogs-backfill-optionA.md`.
+
+Until both hold, TEST is the correct home.
 
 ## Implications for Tickets
 
