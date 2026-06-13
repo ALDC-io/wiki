@@ -3,7 +3,7 @@ tags: [ticket, gep, navira, sku-profitability, cogs, cost-history, snowflake, se
 aliases: [Missing COGs, COGS cost-history fix, Heather Missing COGs]
 sources: []
 created: 2026-05-28
-updated: 2026-05-28
+updated: 2026-06-12
 ---
 
 # Missing COGs / Cost-History Fix (GEP / Navira)
@@ -11,6 +11,8 @@ updated: 2026-05-28
 Catalog-wide blank-COGS / overstated-margin issue on the [[GEP]]/Navira SKU Profitability dashboard. Surfaced by Heather Tabor (Navira COO) via [[Lori Beck]] as a "Missing COGs" request for 5 CIBU CBD SKUs — investigation showed it is a **much broader, catalog-wide** cost-attribution issue. Distinct from [[GP-259]] (which is about adding dashboard *measures*); this is about the COGS *data* being blank.
 
 > **Status (2026-05-28): root cause confirmed + fix validated. Awaiting Navira's choice of option (sent to Lori). No production change made yet. May warrant its own Jira ticket.**
+>
+> **UPDATE (2026-06-12): Option A built + validated in TEST as a non-destructive evidence pack — the artifact that unblocks Navira's sign-off. $20.5M recovered / 1,024,475 lines, zero regression (0 per-item mismatches / 2.77M lines), CIBU 5 SKUs auto-recover EXACTLY $12.82/12.25/11.84/26.91/26.91 with NO override table. Live TEST deploy DEFERRED (Paul, 2026-06-12) pending resolution of an intermittent UK-share dependency. PROD stays gated on Navira sign-off. See § 2026-06-12 below.**
 
 ## The request (entry point)
 
@@ -46,6 +48,38 @@ Preserve the existing `LANDED_COST` priority in the COGS CASE.
 
 ### Edge-case residual (irreducible) — 272 lines / 42 products / ~$14.1K gross
 Products with no cost in any SellerCloud field, ever. Categories: replacement parts (`P-…`), used-condition variants (`…-Used-VG`), open-box (`…_OB`), unmatched Amazon placeholders (`…missing`/`FBA…`), RMA/automation/parent placeholders (`TLC5000`, `…_Automation_UnexpectedItem`, `INGRED3`). Handling options offered: (1) leave as-is, (2) inherit base-product cost for variants (7 have a costed base), (3) exclude/flag non-sales placeholders.
+
+## 2026-06-12 — Option A built + validated in TEST (evidence pack)
+
+Validated in `TEST_DG1_GEP` (prod-share-fed), read-only, **nothing live mutated**. Full pack: `aldc-launchpad/warehouse_ops/_gp259_optionA_EVIDENCE_PACK.md`.
+
+**Implementation chosen (refinement of the earlier plan):** instead of rewriting the cost-history view's `VALID_FROM`, Option A is added as **additive branches in the per-item cost CASE** of `WAREHOUSE_SOURCE.SALES_FCT_SELLER_CLOUD_ORDERLINE` — fires ONLY when the existing point-in-time cost is NULL/0, so already-costed lines are byte-identical (zero regression *by construction*):
+1. `COST_EARLIEST` CTE = product's earliest known real cost (landed→site) → backfills orders predating the cost record (Cause A).
+2. current `AVERAGECOST`→`SITECOST` from the order line → new-product timing gap (Cause B, incl. CIBU).
+3. `COGS_SOURCE_GP259A` classifier column = transparency (point-in-time vs which backfill).
+
+**Validated at the CONSUMER layer** (final fact, via the proven identity `SALES_COGS_CONSOLIDATED = ROUND(per_item × SALES_COGS_QUANTITY, 2)`):
+- **Control fidelity:** 0 per-item mismatches across 2,771,445 lines (a control column reproduces the live table exactly — proves the validation view is faithful even with the absent UK arm neutralized).
+- **Regression:** 1,742,623 covered lines; 2 lines differ by $0.02 (a penny round-half artifact of the recompute, not Option A) → zero true regression, proven per-line.
+- **Recovery:** **$20,503,906 across 1,024,475 lines** (277 stay blank — no cost anywhere). Matches the ~$21M estimate.
+- **Coverage:** 54.5% → 86.0% whole-fact; **99.97% of sales-bearing SC lines** (the 86% is dragged by the 452K-line zero-sales "UNK / No-Match" branch which correctly stays blank).
+- **Transparency split:** ~$16.3M earliest-site + ~$4.2M earliest-landed (pre-2024 backfill) + small current-cost tail (CIBU).
+- **CIBU 5 SKUs:** Option A independently recovers $12.82/12.25/11.84/26.91/26.91 (= Heather's column F) via current-avg fallback — **no manual override table needed**.
+
+**Lineage confirmed (TEST):** fact `WAREHOUSE.SALES_FCT_ORDERLINE` is a BASE TABLE rebuilt by `TASK_WAREHOUSE_ORDERLINE_0..9` (CTAS chain) from the source view. Blank COGS is 97.5% pre-2024 SellerCloud lines; the Amazon-report branch is negligible (26,861 lines, 102 blank) → the single SC-view edit is the catalog-wide fix.
+
+**CORRECTION to earlier note:** TEST *does* now contain the CIBU products (Q5 returned them with 54/31/28/41/38 lines) — the prod→test share has them. CIBU validation no longer requires PROD.
+
+**Live TEST deploy — what remains (gated):** the live SC view references the SHARED `PROD_DG1_GEP.AMAZON.CURRENT_REPORT_ALL_ORDERS_UK`, which is intermittently absent (present at the 06:01 `TASK_2` build, gone midday — GP-257 UK never promoted to the prod→test share). Fact rebuild fails when UK is absent. Resolve that first; deploy as owner role `TEST_DG1_ROLE_CORE_SVC_DA8904DB` + `COPY GRANTS`; then validate at PBI/DAX model `66151728` (GEP Test Models). Deploy artifact: `_gp259_optionA_SHADOW_scview.sql`; rollback `_gp259_optionA_ROLLBACK_TEST_*.sql`.
+
+## Cost-VALUE feed stall (2026-03-03) — separate upstream issue → **Jira [[GP-281]]** (NEXT workstream)
+
+Discovered while validating Option A; **does not block it** (Option A backfills blanks; this is staleness on *covered* lines). Diagnosed read-only (`_gp259_costfreeze_rootcause.py`):
+- **Product cost VALUES (`SITECOST`/`LANDEDCOST`) stopped changing ~2026-03-03.** SITECOST-changes/month: healthy 875–4,643 through Feb-2026 → 279 in early Mar → zero after.
+- **NOT a warehouse/history bug:** CURRENT_MAIN_PRODUCT.SITECOST == latest cost-history value for 38,239 / 39,387 products (97%) → current agrees with frozen history ⇒ costs genuinely aren't changing.
+- **NOT a general sync outage:** products modified May/Jun-2026 (22,861 / 18,670); `LASTTIMEUPDATEDFORPANDL` active through Jun. Only the cost *values* froze.
+- **Root cause (hypothesis):** the upstream **ALDC Library cost integration** that writes SellerCloud product costs died 2026-03-03 — same date as exchange rates ([[exchange-rate-pipeline]] / `project_exchange_rate_pipeline`). Compare [[GP-PENDING-sales-data-outage-2026-05-22]] (also an ALDC Library grant/feed failure). **Fix is upstream (ALDC Library / connector), cross-repo — not the warehouse.**
+- **Harm:** silent staleness on covered lines (true cost moved post-Mar, COGS keeps the Mar-03 value). Option A cannot correct these.
 
 ## Options presented to Navira (via Lori, 2026-05-28)
 - **A. Back-fill + field fallback** (recommended — recovers ~$21M, self-healing, zero regression)
