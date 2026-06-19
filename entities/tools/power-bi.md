@@ -229,6 +229,16 @@ Tooling: `aldc-launchpad/scripts/_upload_reports_to_portal.py`, `_add_portal_rep
 ### PROD vs TEST model parity (verified 2026-06-18; closed 2026-06-19)
 Structural diff (TOM dump of both models): **TEST is a clean structural superset of PROD** — all 30 prod tables exist in test; **all 245 prod measures and all prod relationships now present** (`_compare_models.py` reports PROD-only measures: 0, PROD-only relationships: 0). TEST adds 5 tables (`Agency`, `Marketing Efficiency`, `Marketing Efficiency Product`, `Google Brand/Product Grounding`) + ~49 measures (the in-flight roadmap features incl. Flag A/B guards, prod-promotion pending). Every difference maps to a roadmap ticket, and **GP-199 + GP-200 are present in both**. The two items where TEST trailed PROD were both closed 2026-06-19: **GP-256 `Actual - Sales - Return Rate %`** (added to TEST, validates 4.20%) and **`Traffic Activity[MARKETPLACE_KEY]`** + its Marketplace relationship — the latter was *not* warehouse-side: `WAREHOUSE.TRAFFIC_FCT_ACTIVITY` already exposed the column and the TEST/PROD refresh-policy M were byte-identical, so the fix was a pure model add (TOM column + relationship, then a single-table `type=full` enhanced-refresh to populate it + `type=calculate` recalc; validated measures byte-identical, 1 distinct MK / 0 blank, full source-row parity). Conclusion: anything Navira validates against prod today behaves identically in test. See [[navira-roadmap-status]] § TEST↔PROD parity for the full diff + the 2026-06-19 relationship-health/island fixes (Google Grounding→Agency, Marketing Activity→Campaign) and the redundant-dataset cleanup.
 
+### Agency-aware sales model (GP-254 Option C, TEST 2026-06-19)
+The `Order Line` sales fact is now multi-entity: it carries `ENTITY_CODE` (NAVIRA/LECTRIC) with an active
+many:1 relationship to the `Agency` dim, so **every Sales Measure responds to the Agency slicer** (before,
+only Marketing Efficiency did). The `Agency` dim gained `ENTITY_ROLE` (HOUSE=Navira / AGENCY=Lectric+future).
+Rollup measures in `Sales Measures` → "Agency Rollups": `[base] (All Agencies)` =
+`CALCULATE([base], REMOVEFILTERS('Agency'), 'Agency'[ENTITY_ROLE]="AGENCY")` (agencies only, excl Navira);
+`[base] (Company Total)` = `CALCULATE([base], REMOVEFILTERS('Agency'))`. **Default unfiltered sales now =
+Company Total (incl Lectric).** Pattern is the warehouse conformed-component work (see [[navira-roadmap-status]]
+§ GP-254). Same incremental-column recipe below was used to populate `Order Line[ENTITY_CODE]`.
+
 **Gotcha — adding a column to an incremental-refresh table:** new column metadata alone won't populate; a `type=calculate` recalc only builds calc/relationship indexes. You must run a **`type=full` enhanced-refresh scoped to that table** (`objects:[{table}]`, `applyRefreshPolicy:false`) to reprocess existing partitions and pull the new column from the source view, *then* `type=calculate`. If the table's refresh-policy `SourceExpression` selects all columns (no explicit column list), no M edit is needed — the new view column flows in automatically on reprocess.
 
 ## See Also
