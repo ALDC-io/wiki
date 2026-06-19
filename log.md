@@ -315,3 +315,11 @@ Append-only chronological record of all wiki operations (ingest, query, lint).
 - **Gotcha captured:** EXECUTE TASK on a DAG root cascades full graph (rebuilds components from PROD share = a real data refresh, ~0.0006% Navira shift — not the GP-254 change); poll task history filtered by SCHEDULED_TIME>=run_start (else reads the morning cron run = false positive).
 - **Guide:** `aldc-launchpad/pbi_ops/navira_metrics_guide.md` extended — §A full schema map (every table → capability → where calculations live) + §5 agency split rewrite.
 - TEST only. Remaining: CEO-report scoping, Phase 5 docs/Jira, repo↔live reconciliation (fold Lectric into hand-maintained warehouse/*.sql), PROD promotion (gated). Wiki touched: navira-roadmap-status.md, power-bi.md, log.md.
+
+## 2026-06-19 (later 3) — Navira CEO report reviewed + upgraded (post-GP-254)
+- Reviewed the Executive Overview (888d72c2) after GP-254 made sales agency-aware (default total now includes Lectric). Upgraded the builder (`aldc-launchpad/pbi_ops/_build_navira_ceo_report.py`, committed a32c20a):
+  - **Navira-scoped** exec/business headline visuals (16 Agency=Navira filters across Pages 1/2/4/5) → honest single-brand headline: Navira MER 30.99x (not blended 32.0x), Gross $121.2M (not $123.7M Company Total), CM $35.8M. Removed Page-1 Agency slicer (filter-override confusion).
+  - **Showcased new agency-aware sales**: Page 1 "What's new" leads with it; Page 3 side-by-side switched to Sales Measures (Gross/Orders/COGS by agency, proving Order Line splits by brand) + Company-Total ($123.7M) callout; Page 3 intro + Page 6 roadmap updated (GP-254 under Complete-in-UAT). Added `filters` param to xtable() helper.
+  - Deployed via Fabric updateDefinition (202), verified live (Navira cards, Sales-by-agency table, Company-Total callout, GP-254 roadmap entry, 7 pages). Rollback: `pbi_ops/_ceo_report_LIVE_rollback.json` (pre-upgrade def) + git.
+- Open: COGS-coverage card denominator (77.8% efficiency-window vs 83.9% whole-fact); return-rate text card still hardcoded 4.2%. Visual eyeball pending (Paul, in PBI service).
+- Wiki touched: navira-roadmap-status.md (CEO report section), log.md.
