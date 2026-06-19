@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
-sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21]
+sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21, Navira live-data-model + ME/Agency integration 2026-06-18]
 created: 2026-04-16
-updated: 2026-05-22
+updated: 2026-06-18
 ---
 
 # Power BI
@@ -198,6 +198,36 @@ PBI Excel models require a separate ALDC-tenant login per user (not the user's o
 **Licensing notes (as of 2022):**
 - Fusion92: not paying per-user (< 10 users)
 - GEP: paying per user — update the Service Item when users change
+
+## Live Data Model — "Analyze in Excel" live pivots (client validation)
+
+*Source: Navira live-data-model investigation 2026-06-18.*
+
+**What clients (Navira/GEP) call "the data model" download.** The file downloaded from the legacy [[Eclipse]] reports page is a tiny (~31–37 KB) Excel workbook with **no data** — just an OLAP `MSOLAP.8` **live connection** to the published PBI semantic model (PBI's "Analyze in Excel" artifact). Opened in Excel **desktop** (not web), every PivotTable field drag is a live query against the model over the **XMLA endpoint**.
+
+The only environment-specific value is the dataset GUID in `xl/connections.xml`:
+```
+name="pbiazure://api.powerbi.com <DATASET_GUID> Model"
+Provider=MSOLAP.8; Integrated Security=ClaimsToken;
+Initial Catalog=sobe_wowvirtualserver-<DATASET_GUID>; Data Source=pbiazure://api.powerbi.com; ...
+```
+PROD GUID = `74a529b3-…` (GEP Prod Models); TEST = `66151728-…` (GEP Test Models). **To make a TEST live workbook from the PROD one: swap the GUID in `connections.xml` (two occurrences) — that's the entire change.** Pivot caches reference the connection by id with `refreshOnLoad=1`, so they repopulate from the target model; if the field list still looks like prod after the swap, **Data → Refresh All**.
+
+### Prerequisites for the live connection (why TEST historically "didn't work")
+The live MSOLAP connection authenticates the **end user** against the dataset. It needs ALL of:
+1. Dataset on a Premium/PPU capacity with **XMLA endpoint = Read** (or R/W). GEP Test Models already satisfies this (models are deployed there via XMLA).
+2. An **ALDC-tenant account** (`firstname.lastname@gep.aldc.io`) with a **PBI Premium Per User** license.
+3. **Build** permission on the dataset — workspace **Contributor** grants it; **Viewer is NOT enough** for Analyze-in-Excel.
+
+Historical TEST gap (2026-06): **GEP Test Models had zero client users** while GEP Prod Models had `@gep.aldc.io` Contributors → the prod download worked but the test one auth-failed. Fixed 2026-06-18 by mirroring prod — added `asad.amin`/`shah.muttal`/`sarwar.osama` (@gep.aldc.io) + `lori.beck`/`mike.stuart` as **Contributor** on GEP Test Models (PBI REST `groups/{id}/users`).
+
+### Serving it from legacy Eclipse
+The download is an `app_report` row (`type=REPORT_TYPE_FILE`) in the Eclipse portal Postgres (`aldctestpgdbportal1c01`, db `eclipse`) pointing at a blob in `aldcteststac1cda8904db/files/`, plus an `app_group_reports` row for visibility (group 15 "All Reports", GEP `account_id=19`). Consumer download route = **`/file/<pk>/`** (e.g. `eclipse-test.aldc.io/file/56/`); consumer landing `/` redirects to the first report; `/account/reports/` is the **staff** management view and `/aldc_admin/` is Django admin (staff accounts get bounced there). The `file` view pulls the blob with the **active account's** storage creds, so the user must be in the **GEP** account context. **Gotcha:** the static `Data Model.xlsx` (`app_report` id 50) is regenerated daily by the `func-aldc-cred` timer — the live workbook must use a **distinct name** ("Data Model (Live)", id 56) or the timer overwrites it.
+
+Tooling: `aldc-launchpad/scripts/_upload_reports_to_portal.py`, `_add_portal_report_row.py`; model structural diff `aldc-launchpad/pbi_ops/_compare_models.py`.
+
+### PROD vs TEST model parity (verified 2026-06-18)
+Structural diff (TOM dump of both models): **TEST is a superset of PROD** — all 30 prod tables exist in test; 244/245 prod measures present. TEST adds 5 tables (`Agency`, `Marketing Efficiency`, `Marketing Efficiency Product`, `Google Brand/Product Grounding`) + ~49 measures (the in-flight roadmap features incl. Flag A/B guards, prod-promotion pending). Every difference maps to a roadmap ticket, and **GP-199 + GP-200 are present in both**. TEST trailed PROD on two shipped items: **GP-256 `Actual - Sales - Return Rate %`** (now **added to TEST 2026-06-19** for parity — validates 4.20%) and **`Traffic Activity[MARKETPLACE_KEY]`** + its Marketplace relationship (still PROD-only; warehouse-side, deferred). Conclusion: anything Navira validates against prod today behaves identically in test. See [[navira-roadmap-status]] § TEST↔PROD parity for the full diff + the 2026-06-19 relationship-health/island fixes (Google Grounding→Agency, Marketing Activity→Campaign).
 
 ## See Also
 
