@@ -72,14 +72,14 @@ Validated in `TEST_DG1_GEP` (prod-share-fed), read-only, **nothing live mutated*
 
 **Live TEST deploy — what remains (gated):** the live SC view references the SHARED `PROD_DG1_GEP.AMAZON.CURRENT_REPORT_ALL_ORDERS_UK`, which is intermittently absent (present at the 06:01 `TASK_2` build, gone midday — GP-257 UK never promoted to the prod→test share). Fact rebuild fails when UK is absent. Resolve that first; deploy as owner role `TEST_DG1_ROLE_CORE_SVC_DA8904DB` + `COPY GRANTS`; then validate at PBI/DAX model `66151728` (GEP Test Models). Deploy artifact: `_gp259_optionA_SHADOW_scview.sql`; rollback `_gp259_optionA_ROLLBACK_TEST_*.sql`.
 
-## Cost-VALUE feed stall (2026-03-03) — separate upstream issue → **Jira [[GP-281]]** (NEXT workstream)
+## Cost-VALUE feed stall (2026-03-03) → **Jira [[GP-281]]** — ROOT CAUSE CORRECTED 2026-06-15
 
-Discovered while validating Option A; **does not block it** (Option A backfills blanks; this is staleness on *covered* lines). Diagnosed read-only (`_gp259_costfreeze_rootcause.py`):
-- **Product cost VALUES (`SITECOST`/`LANDEDCOST`) stopped changing ~2026-03-03.** SITECOST-changes/month: healthy 875–4,643 through Feb-2026 → 279 in early Mar → zero after.
-- **NOT a warehouse/history bug:** CURRENT_MAIN_PRODUCT.SITECOST == latest cost-history value for 38,239 / 39,387 products (97%) → current agrees with frozen history ⇒ costs genuinely aren't changing.
-- **NOT a general sync outage:** products modified May/Jun-2026 (22,861 / 18,670); `LASTTIMEUPDATEDFORPANDL` active through Jun. Only the cost *values* froze.
-- **Root cause (hypothesis):** the upstream **ALDC Library cost integration** that writes SellerCloud product costs died 2026-03-03 — same date as exchange rates ([[exchange-rate-pipeline]] / `project_exchange_rate_pipeline`). Compare [[GP-PENDING-sales-data-outage-2026-05-22]] (also an ALDC Library grant/feed failure). **Fix is upstream (ALDC Library / connector), cross-repo — not the warehouse.**
-- **Harm:** silent staleness on covered lines (true cost moved post-Mar, COGS keeps the Mar-03 value). Option A cannot correct these.
+> **Contradiction (resolved 2026-06-15):** the earlier hypothesis below — "upstream ALDC Library cost integration died 2026-03-03, cross-repo fix, not the warehouse" — is **WRONG**. Direct querying of the live PROD share proved SITECOST/LANDEDCOST are *still changing* (Apr/May/Jun-2026) and the legacy Eclipse SellerCloud-SQL connector is healthy. The freeze is **TEST-environment clone staleness**, and the fix **is** a warehouse change (in reach, not cross-repo). The earlier diagnostic measured through TEST's frozen clone, not the live source. See [[GP-281]] for the full corrected analysis.
+
+**Corrected root cause:** `TEST_DG1_GEP.SELLERCLOUD_SQL` (and AMAZON/SUPPLEMENT) raw tables are **March-2026 clones never repointed to the live PROD share** when clone-only TEST was lifted. TEST's warehouse views (`SALES_FCT_COST_HISTORY` etc.) read these frozen clones, so TEST COGS carries stale March costs. The **canonical clients-repo warehouse SQL already reads `PROD_DG1_GEP.SELLERCLOUD_SQL.*` (the share) + handles '$'-money** — TEST has stale, clone-reading, pre-fix versions.
+- Consumer impact of fixing: net COGS only **+0.065%** ($24k / $36.7M), corrects ~2,063 products at SKU level.
+- **Fix = broader sweep:** align 12 stale clone-reading TEST warehouse views to canonical (share-reading) versions, deploy as `TEST_DG1_ROLE_CORE_SVC_DA8904DB` + `COPY GRANTS`, rebuild, validate at PBI/DAX. Staged + rollback-ready (2026-06-15); deploy batch is the next focused session. Boot prompt: `aldc-launchpad/boot-prompts/navira-gp281-sweep-deploy.md`. Full state: `project_gp281_test_clone_staleness` memory + [[GP-281]].
+- **Note:** the share itself is stale for `CURRENT_MAIN_PURCHASE`/`CURRENT_ORDERS_HEADER` (a *separate* prod-side feed gap) — those views deferred, not repointed.
 
 ## Options presented to Navira (via Lori, 2026-05-28)
 - **A. Back-fill + field fallback** (recommended — recovers ~$21M, self-healing, zero regression)

@@ -3,8 +3,8 @@ tags: [ticket, gep, data-share, snowflake, operations, pending]
 aliases: [GP-PENDING-data-share-stability, Data Share Stability, Share Gap Detection]
 sources: []
 created: 2026-04-21
-updated: 2026-04-21
-last_incident: 2026-04-22
+updated: 2026-06-15
+last_incident: 2026-06-15
 ---
 
 # GP-PENDING — Prod-to-Test Data Share Stability
@@ -14,7 +14,9 @@ gaps before they cause task chain failures at deploy time.
 
 ## Status
 
-`pending` — not yet filed in Jira. Raised after the `CURRENT_REPORT_ALL_ORDERS_UK` gap
+**INTERIM PERMANENT FIX DEPLOYED + TESTED 2026-06-15** for the Amazon `REPORT_ALL_ORDERS` family (the most frequent offender): a prod **self-healing re-grant** — proc `AMAZON.SP_REGRANT_REPORT_ALL_ORDERS_SHARE()` + task `AMAZON.TASK_REGRANT_REPORT_ALL_ORDERS_SHARE` (every 30 min) on `wj66376`, so any connector recreation self-heals within ≤30 min. Heal-tested (revoke → proc/task run → grants restored, verified via `SHOW GRANTS TO SHARE`). DDL + rollback: `aldc-launchpad/warehouse_ops/_gp281_PROD_share_selfheal_task.sql`. **Confirmed running healthy + REAL-recreation heal PROVEN 2026-06-16:** the connector recreated `CURRENT_REPORT_ALL_ORDERS_UK` at 06-16 01:11 PT (a real `CREATE OR REPLACE`), and its share grant is present afterward → the self-heal task restored it. 16/16 SUCCEEDED runs (8h). So the interim permanent fix works against real connector recreations, not just simulated strips. (Note: the self-heal covers the 2 `CURRENT_REPORT_ALL_ORDERS` secure views — the ones the orderline source views read; `COMBINED_*` are granted by the connector separately.) This is Option D realized **Snowflake-side** (the connector itself isn't a prod Snowflake object). **Tidiest end-state remains a re-grant step inside the Eclipse Amazon All-Orders connector** (or `CREATE OR ALTER` instead of `CREATE OR REPLACE`) — would remove the 30-min heal window entirely. The other flapping families (SELLERCLOUD/SUPPLEMENT objects below) are not yet covered by a self-heal and remain `pending`.
+
+`pending` (broader/original) — not yet filed in Jira. Raised after the `CURRENT_REPORT_ALL_ORDERS_UK` gap
 caused a sandbox task chain failure during GP-197 development (2026-04-21).
 
 ## Problem
@@ -39,6 +41,7 @@ expand a view that references the missing shared object.
 | 2026-04-21 | `AMAZON.CURRENT_REPORT_ALL_ORDERS_UK` | Flapping — dropped mid-day post-deploy; re-added manually. See timeline below. |
 | 2026-04-22 | `AMAZON.CURRENT_REPORT_ALL_ORDERS_UK` | Dropped again (second recurrence in 2 days). Detected via `deploy.py --check-share` during [[GP-208]] sandbox pre-flight. Re-added manually by Paul. |
 | 2026-04-22 | `SUPPLEMENT.CURRENT_FORECAST_CSV` | First observed failure for this object. Detected via `deploy.py --check-share` during [[GP-208]] sandbox pre-flight. Re-added manually by Paul. |
+| 2026-06-15 | `AMAZON.CURRENT_REPORT_ALL_ORDERS` + `_UK` (whole `REPORT_ALL_ORDERS` family — base + ~33 partitions + both `CURRENT_` views) | Recurrence during [[GP-281]] sweep: present at 06:00 (chain rebuilt), absent mid-afternoon. **Prod-side diagnosis (read-only, `_gp281_PROD_share_diagnose.py`): the secure views `CURRENT_REPORT_ALL_ORDERS`/`_UK` are `CREATE OR REPLACE`d ~daily at 06:08 by the Eclipse Amazon All-Orders connector (created==last_altered=06:08); no prod Snowflake task/proc does it → the recreation strips the share grant. One-time re-grant applied to unblock the GP-281 rebuild (holds until next ~06:08 recreation).** Permanent fix = connector-side re-grant after recreation (Option D) or stop `CREATE OR REPLACE` (INSERT OVERWRITE). NOTE: FUTURE-grants-to-shares (Option A) is not viable here — the recreated objects are secure *views*, and the grant must follow each recreation. |
 
 Pattern: every few tickets, a table drops out of the share and is only discovered when a
 sandbox or TEST deploy fails. Manual fix takes 5–15 minutes but is a recurring interrupt.
@@ -60,6 +63,10 @@ between 06:00 and 13:26, which drops object-level share grants. This is strong e
 that **Option D** (Eclipse post-load re-grant) or **Option A** (future grants that survive
 object replacement) is the right fix — a detection-only option (B/C) would have caught this
 later but not prevented the task-chain failure and the subsequent interrupt.
+
+### 2026-06-15 recurrence — confirms the diagnosis (whole Amazon report family, not just `_UK`)
+
+During the [[GP-281]] cost-history sweep, the **entire `AMAZON.REPORT_ALL_ORDERS` family** (base table + ~33 partition tables + `CURRENT_REPORT_ALL_ORDERS` and `_UK` views) was again present at the 06:00 task window (chain rebuilt all tables) but **absent from the consumer share by mid-afternoon** — `INFORMATION_SCHEMA` showed none of the family. Sibling order families maintained by MERGE (`CURRENT_ORDERS_ORDERS`, `COMBINED_ORDERS_ORDERS`) stayed present throughout, isolating the cause to the **full-refresh (`CREATE OR REPLACE`) Amazon All-Orders ingest stripping the share grant** — exactly the Option-A/D root cause below. Consequence: the GP-281 fix (and the GP-259 Option-A deploy) can't propagate to the PBI fact via an ad-hoc rebuild while the family is absent; only the 06:00 CRON reliably catches the window. **Paul is driving the prod-side fix.** Diagnostic: `aldc-launchpad/warehouse_ops/_gp281_share_drop_diagnose.py`. Note also a consumer-side fallback is NOT viable for GEP orders — TEST-local Amazon order tables are stale March-2026 clones, so the share is the only fresh source.
 
 ## Goal
 

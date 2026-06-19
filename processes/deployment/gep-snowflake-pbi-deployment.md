@@ -259,6 +259,22 @@ For production deployment of the [[Power BI]] model (from Steven's deployment gu
 3. Ensure task-tracking scratch files are not committed (gitignored/unstaged)
 4. File any follow-up tickets identified during deploy
 
+## Excluding an order from all numbers (pattern — GP-283)
+
+To drop a specific order from every report/PBI number (sales, COGS, returns, margin, order counts), use the dedicated exclusion view — **do not** hand-edit literals into the big order-base view.
+
+1. Add a row to `WAREHOUSE_SOURCE.SALES_DIM_ORDER_EXCLUSIONS` (`clients/GEP/snowflake/warehouse/sales_dim_order_exclusions.sql`): warehouse-form `ORDER_ID` (`SC_<sellercloud_id>` or `AMZ_<amazon_id>`) + reason + requester + date.
+2. `sales_dim_order_base.sql` already references it via a NULL-safe `NOT EXISTS` (use `NOT EXISTS`, never `NOT IN` — a NULL in the list would silently drop *all* orders). Because `SALES_FCT_ORDERLINE` INNER JOINs `SALES_DIM_ORDER` (← `SALES_DIM_ORDER_BASE`), removing an order at the base view drops all its lines everywhere downstream — retroactive and forward.
+3. **Confirm the identifier first** (don't infer): query the raw source + built `SALES_DIM_ORDER` to prove which exact object the number maps to and that it resolves to one order. See [[confirm-consumer-source]].
+4. Deploy the exclusion view + rebuild order_base → dim_order → fct_orderline (Phase 6), refresh PBI (Phase 9), validate (below).
+5. Future self-service version (client maintains a CSV) is [[GP-284]].
+
+### Drift-immune validation (use this, not grand-total before/after)
+The warehouse reads a live, moving source ([[accumulating-source-tables]]), so a plain before/after grand-total comparison **conflates your change with source drift** and will look wrong. Instead: stand up a **shadow** of the *original* (pre-change) view from the captured rollback DDL and diff the order-ID sets against the deployed view in a **single statement** (consistent snapshot). The symmetric difference must be exactly your intended order(s). This caught a real scope problem on GP-283 (below).
+
+### Gotcha: `GEP/development` is an integration branch — do NOT promote it wholesale
+`development` accumulates in-flight work (e.g. GP-225 marketing schema). A `development → user-testing → main` PR carries **all** of it (GP-283 saw 124 files / ~8K lines). For a narrow fix, **cherry-pick the single commit** onto `user-testing` and `main` instead. Likewise, the repo `sales_dim_order_base.sql` can be **ahead of prod** (prod ran an older UK branch — see [[GP-282]]); deploying the repo file wholesale to prod silently promotes that delta. Scope prod deploys to *prod's own baseline + your change* and prove it with the drift-immune diff.
+
 ## Post-Deploy Verification Checklist
 
 Run these after any warehouse view deployment on `wj66376` (production). Added 2026-05-22 following GP-PENDING-sales-data-outage-2026-05-22 (task chain suspended 14 hours due to cross-database grant loss).

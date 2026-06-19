@@ -131,10 +131,10 @@ Tickets from 2026-05-12 business meeting, originally misfiled under FU92. Moved 
 | GP-263 | Add YTD to SKU Profitability Dashboard | To Do | May 15 |
 | GP-256 | Add Return Rate to SKU Profitability Dashboard | To Do | May 18 |
 | GP-259 | Orders/Return and COGs for SKU Profitability | To Do | May 18 |
-| GP-258 | Incorporate Forecast in SKU Profitability Report | To Do | TBD |
+| GP-258 | Incorporate Forecast in SKU Profitability Report | To Do (scoped 6/18) | brand×date pipeline exists; grain-mismatch + client call. Spec twin = GP-156. See [[GP-258]] |
 | GP-255 | Phase 2 Dashboards — Add BSR to data | To Do | May 18 |
 | GP-264 | Marketing Dashboard — All connections | In Progress | Framework submitted 5/12 |
-| GP-266 | Ad Item from Airtable | QA | QA 5/13 |
+| GP-266 | Ad Item from Airtable → Previous Period/LY on widget | In Progress (6/18) | DECISION: surface app's computed YoY inline, NOT from Airtable. [[concept-gep-data]] PR #43, merge gated on staging screenshot. See [[GP-266]] |
 
 #### Data / Integration
 | Ticket | Summary | Status | Notes |

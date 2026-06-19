@@ -143,6 +143,7 @@ prompt-cache hit accounting (`cache_creation` vs `cache_read`), and the safety f
 
 ## See Also
 
+- [[agent-action-safety-gate]] — the generalization-platform core (R19-22) this telemetry measures; shadow mode + the decision record are what let that safety-critical refactor be proven byte-equivalent
 - [[triage-agent]] — first implementation (session 13); the `telemetry/` package + `shadow.py`
 - [[observability-platform]] — the platform whose Snowflake the `AGENT_*` tables land beside; obs-api is
   the agent's signal source

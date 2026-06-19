@@ -4,6 +4,7 @@ aliases: [Eclipse Incident Response, Outage Recovery, Connector Outage Runbook]
 sources: [ALDC-244 (Kamloops power outage 2026-06-01), observability/ops/incident_triage.py, conversation 2026-06-01]
 created: 2026-06-01
 updated: 2026-06-11
+automated_by: [[triage-agent]]
 ---
 
 # Eclipse Incident Response (Outage Recovery)
@@ -128,6 +129,18 @@ in 90 min). No client impact (reference dims ≤4h stale, core pipeline current 
   the **Step 3 canary suggestion** (Calendar / FINANCIAL CURRENCY). A confidence gate means an ambiguous
   message cue surfaces a *suspected* fingerprint for a human rather than auto-asserting the action — every
   output is a recommendation routed to a human, never a service mutation. Read-only.
+  - **Step 2 comment→fingerprint now automated (session 12, `triage/connector_error.py`).** The parser
+    reads the Eclipse schedule `comment` field directly — both the structured
+    `Extraction\Connector error: [{'code','message'}]` form (via `ast.literal_eval`, mirroring
+    `check_eclipse_templates.py::_clean_error`/`_group_key`) and plain text — and emits the fingerprint
+    as the **authoritative `INCIDENT` source** for the proposal (stronger than inferring from a human's
+    email phrasing). This is the agent doing the Step-2 "classify the output" pattern-table lookup itself.
+  - **Phase-4 isolated reproduction design resolved (session 12, decisions R27-R30).** The hard endgame —
+    actually reproducing a failing connector run in Docker — uses **record/replay**: capture a frozen,
+    immutable bundle in prod (resolved work descriptor + inputs + the parsed failure) and replay it through
+    a thin `WorkProvider` seam in an isolated, network-less, credential-less container, with
+    machine-checkable isolation evidence. The comment + alert_state are enough for *triage* (this runbook)
+    but not for deterministic *replay*. Still gated; real capture hook is future.
 
 ## See Also
 

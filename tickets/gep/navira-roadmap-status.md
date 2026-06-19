@@ -35,7 +35,9 @@ TEST only (per scope); same two changes (Date relationships + report pages) are 
 
 **TEST↔PROD model diff (TOM, `pbi_ops/_compare_models.py`) — every difference maps to a roadmap ticket.** TEST is a superset of PROD; **GP-199 + GP-200 are present in both** (data-level within shared tables, no structural delta). TEST-ahead = in-flight roadmap (not yet promoted): 5 tables (`Agency`/`Marketing Efficiency`/`Marketing Efficiency Product`/`Google Brand Grounding`/`Google Product Grounding`) + ~49 measures (GP-277 efficiency + Flag A/B), `Marketing Activity[ENTITY_CODE]` + Agency rels (GP-225), `Order Line` return cols (GP-259). Two items where TEST trailed PROD were the only anomalies:
 - **GP-256 `Actual - Sales - Return Rate %`** (a *Done/PROD* deliverable) was missing from TEST → **fixed 2026-06-19**: added to TEST `Sales Measures` identical to PROD (`DIVIDE([Actual - Sales - Returns (Quantity)],[Actual - Sales - Gross (Quantity)],0)`, fmt `0.00%`), validates **4.20%** (131,683/3,132,563). Builder `pbi_ops/_integrate_marketing_efficiency.py`-style via XmlaClient; rollback = delete the measure.
-- **`Traffic Activity[MARKETPLACE_KEY]` + its Marketplace relationship** (PROD-only) — still missing in TEST (test's Traffic source view lacks the column). **Open** — warehouse-side, deferred (low client priority). See boot prompt.
+- **`Traffic Activity[MARKETPLACE_KEY]` + its Marketplace relationship** (PROD-only) → **DONE 2026-06-19 (later).** ⚠️ *Not* warehouse-side as first assumed: `WAREHOUSE.TRAFFIC_FCT_ACTIVITY` (the view the model imports) **already exposes `MARKETPLACE_KEY`** in TEST, and the TEST/PROD refresh-policy source M are **byte-identical** (select-all from the view, date-windowed) → no M edit, no warehouse change. Gap was purely model-side. Fix = TOM add column (`String`/hidden/`summarizeBy=None`, mirrors PROD) + relationship `Traffic Activity[MARKETPLACE_KEY]→Marketplace[MARKETPLACE_KEY]` (Many:1, OneDir), then enhanced-refresh **type=full on the single table** (`applyRefreshPolicy=false`, ~3 min / 97 incremental partitions) to populate the column, then `type=calculate` recalc. Evidence ALL PASS: measures byte-identical to baseline; `MARKETPLACE_KEY` 1 distinct / 0 blank (Navira traffic = Amazon US only, 6.71M rows → low client value today but clean parity + future-proof); by-marketplace breakdown = grand total under single 'Amazon US' with zero blank bucket; row count 6,609,059→6,714,600 = full source-view parity (reprocess healed a pre-existing 105K zero-value-row partition-window gap). Builders `pbi_ops/_traffic_marketplace_{apply,refresh,validate}.py`; rollback = drop column + remove relationship `Relationship 5`.
+
+**Result: TEST is now a clean structural superset of PROD** — `_compare_models.py` reports **PROD-only relationships: 0, PROD-only measures: 0**. Every PROD column/measure/relationship is present in TEST; the only diffs are TEST's intended roadmap additions.
 
 **Relationship health check (`pbi_ops/_wire_islands.py`, TOM):** all relationships are clean Many:One single-direction — **no inactive, many-to-many, bidirectional, or ambiguous (duplicate-path)** relationships. Fixed 3 visible **island** tables (no relationships → ignored every slicer):
 - `Google Brand Grounding[ENTITY_CODE]→Agency` and `Google Product Grounding[ENTITY_CODE]→Agency` — now agency-aware (validated: Brand Grounding = Navira $89,400, Lectric absent). Date NOT joined (monthly `ACTIVITY_MONTH` grain, no daily key).
@@ -43,8 +45,8 @@ TEST only (per scope); same two changes (Date relationships + report pages) are 
 
 **Remaining client-readiness items (→ boot prompt / next session):**
 1. **Sales Measures not agency-aware** (the big one) — agency-sliced Sales/Orders show the full company total; only Marketing Efficiency respects Agency. Fix = GP-254 Option C native agency sales fact (`warehouse_ops/_lectric_native_sales_fact_PLAN.md`), not started.
-2. **`Traffic Activity[MARKETPLACE_KEY]`** parity (warehouse-side).
-3. **Redundant dataset** `Data Model (Unified TEST Preview)` (`19cf5ef9`) still in GEP Test Models — client sees TWO "Data Model" datasets; hide/remove (confirm no dependency first).
+2. ~~**`Traffic Activity[MARKETPLACE_KEY]`** parity~~ — **DONE 2026-06-19 (see parity bullet above).**
+3. ~~**Redundant dataset** `Data Model (Unified TEST Preview)` (`19cf5ef9`)~~ — **DONE 2026-06-19 (later 2): deleted.** Probe confirmed 0 of 3 workspace reports bound it (all bind the real `66151728`), stale since 06-12. Deleted via REST (HTTP 200); GEP Test Models now shows a single `Data Model`. Builders `pbi_ops/_cleanup_redundant_dataset_{probe,delete}.py`; rollback = `python -m pbi_ops._build_test_model_unified`.
 4. **Google Grounding date integration** deferred (monthly grain).
 
 ## Headline live numbers (UAT `Data Model`, all agencies, 2026-06-16)
@@ -117,7 +119,7 @@ TEST only (per scope); same two changes (Date relationships + report pages) are 
 2. **GP-282 ($137K dedup) genuinely unbuilt** and interacts with the COGS backfill (inflates COGS on UK SC copies) — sequence soon.
 3. **DAX Flags A/B not applied** — without them a user can wrongly cross-platform `SUM(SALES_AMOUNT)` / omit Google+Meta spend from profit. Correctness risk on the exact model the CEO report reads.
 4. **Everything beyond the 6 "Done" tickets is TEST-only.** Entire unified-marketing + COGS stack awaits a single gated PROD promotion (Navira sign-off + archive-partition reprocess for GP-259/281).
-5. **Redundant model** — `Data Model (Unified TEST Preview)` (`19cf5ef9`, refresh 06-12) is superseded by the in-place repoint of the live `Data Model`. Cleanup candidate (left in place for now).
+5. ~~**Redundant model** — `Data Model (Unified TEST Preview)` (`19cf5ef9`)~~ **RESOLVED 2026-06-19: deleted** (no report bound it; rollback = rebuild via `_build_test_model_unified`). GEP Test Models now has a single `Data Model`.
 
 ## Environment quick-ref
 - **TEST:** `og35375.canada-central.azure` / `PAULRUSSELLADMIN`; DB `TEST_DG1_GEP`; share `PROD_DG1_GEP`. PBI model `66151728` (GEP Test Models).

@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, eclipse, connector, etl]
 aliases: [Eclipse, Eclipse Connector, ALDC Connector]
-sources: [clients repo eclipse/ directories, connector repo, daily/2026-04-17.md, Confluence TECH/1191575556 (Eclipse 2.0)]
+sources: [clients repo eclipse/ directories, connector repo, daily/2026-04-17.md, Confluence TECH/1191575556 (Eclipse 2.0), conversation 2026-06-12 (Navira Step 3.3)]
 created: 2026-04-16
-updated: 2026-06-11
+updated: 2026-06-12
 ---
 
 # Eclipse
@@ -243,6 +243,14 @@ not a wedge — verify the agent is healthy first: a working agent shows many `c
 repoint the `CURRENT_MAIN_…` view atomically, so a killed run wrote nothing and the live table
 keeps the last-good snapshot. Note `in_queue: true` alone is **not** a blocker — partitioned
 templates (one partition/day) normally carry many. (Established 2026-06-01, ALDC-244.)
+
+**Stuck `status:active` partition with a lost queue message → revive by DELETE + scan.** (Established 2026-06-12, Navira Step 3.3.) When an executor dies mid-cycle, a `work_partition` can be left `status:active`, `in_queue:true` but with **no live Azure queue message** (the message was consumed/expired). Such a partition is silently stuck — the executor polls `/work/pick` and gets "NO WORK", and the daily/scheduled activate skips it (it sees `in_queue:true` and assumes it's already queued). It does **not** self-heal. Two dead ends to know:
+- **Hand-crafting a replacement queue message does NOT work** — core_api `/work/pick` validates message provenance, so a manually-enqueued message is consumed without serving work (queue drains back to 0, nothing picked).
+- **`/work/scan` and `/work/activate` skip it** — both only act on `inactive` (or never-generated) partition docs, never on an existing `active` one. (Confirmed: scan returns `success` with no enqueue; activate returns `payload:[]`.)
+
+  **The fix: delete the `work_partition` doc, then `/work/scan` the template.** Scan regenerates it as a fresh doc (`status:active`, `in_queue:true`, `run_count:null`) **and** enqueues a message with valid provenance → the executor picks it normally. This is the same reason a brand-new backfill works (fresh docs) but a re-pull of existing dates doesn't. Watermark caveat: scan won't backfill a *hole* below the max-landed date for an incremental (`limit_current`) template via the normal forward path — deleting the specific doc(s) is what forces regeneration. Rollback: capture the full doc(s) before delete; merge dedup keeps re-landed data clean (no dup primary-hashes).
+
+> **Base-functionality executor only PICKS.** The `agent-dcgeneral:development` image launched with no `SCRIPT_OPTION` logs "agent will contain base functionality only" and runs `/work/pick` in a loop — it does **not** scan or activate. Scan/activate must be triggered separately (HTTPS `/work/scan` with `MASTER_CLIENT_*`, or the server-side daily scheduler). So a persistent scoped picker keeps data fresh only as long as something else enqueues (the daily server-side scan does, for day-windowed templates; month-windowed templates like Meta-via-Windsor can get stuck per above and need the delete+scan unstick).
 
 ## Scoped-Agent Dispatch & Report-Throughput (TEST) — established 2026-06-11 ([[GP-257]])
 

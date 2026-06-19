@@ -1,14 +1,30 @@
 ---
-tags: [process, deployment, eclipse, azure, github-actions]
+tags: [process, deployment, eclipse, azure, github-actions, docker, containers]
 aliases: [Eclipse Azure deployment, Eclipse deploy process, Azure staging swap]
-sources: [daily/2026-04-17.md, session/2026-04-28, session/2026-04-29]
+sources: [daily/2026-04-17.md, session/2026-04-28, session/2026-04-29, session/2026-06-17]
 created: 2026-04-17
-updated: 2026-04-29
+updated: 2026-06-17
 ---
 
 # Eclipse → Azure Deployment (GitHub Actions + Slot Swap)
 
 Runbook for deploying [[Eclipse]] (and similar [[Azure]] web apps like [[core_api]]) from the Eclipse repo's [[GitHub Actions]] workflow to production via a staging-slot + **swap** pattern.
+
+> **⚠ CORRECTION (2026-06-17) — Eclipse is now CONTAINER-deployed. This supersedes the code-deploy guidance below.**
+>
+> The App Service runs a **Docker image** from GHCR (`linuxFxVersion = DOCKER|ghcr.io/aldc-io/eclipse:<tag>` on **both** slots — verified on `aldcprodwbapeclipse1c01`). Because of that:
+> - **`deploy_az_webapp.yaml` ("Deploy to Azure App Service") is a NO-OP.** It builds Next.js and pushes to `wwwroot`, which a container App Service **ignores entirely**. Every run "succeeds" but changes nothing the running app serves. Do **not** use it.
+> - **The real deploy is the container pipeline:** **`deploy_az_webapp_container.yaml` ("Deploy to Azure (Staging)")** — build + push image, deploy to the `stage` slot. Run it **manually (`workflow_dispatch`)**, not on push.
+>
+> **Correct procedure (proven 2026-06-17):**
+> 1. `gh workflow run 194355199 --repo ALDC-io/eclipse --ref eclipse-2.1 -f force_deploy=true`
+>    (Workflow id `194355199` = "Deploy to Azure (Staging)". Use `force_deploy=true` whenever the **stage image ≠ prod image** — its `rollback-check` blocks otherwise. That mismatch is the normal steady state, so you almost always need `force_deploy=true`.)
+> 2. Wait for `rollback-check → build → deploy`. The image is tagged by GitVersion (currently `2.0.0-eclipse-2-1.1`) and deployed to the **`stage` slot**.
+> 3. **Verify on the stage slot** (`https://aldcprodwbapeclipse1c01-stage.azurewebsites.net`) that the new behaviour is actually served — see § Verifying a container deploy. Allow ~1–2 min for the container to fully roll (mixed old/new instances appear briefly).
+> 4. **Swap `stage` → `production`** (`az webapp deployment slot swap -g aldcprodrsgp1c -n aldcprodwbapeclipse1c01 --slot stage --target-slot production`) and re-verify on `eclipse.analyticlabs.io`.
+> 5. Rollback = swap back.
+>
+> **Known gotchas:** GitVersion reuses the same tag across builds (**mutable tag** → both slots can share a tag and the rollback net is degraded; push unique tags ideally). The **push-triggered** auto-staging deploy fails every merge by design (can't pass `force_deploy`) — ignore that failure, use manual dispatch. Production URL is `eclipse.analyticlabs.io` (NOT the stale `eclipse.aldc.io`, which is the legacy Pages-Router app).
 
 ## App Service Names (Production 2 / `aldcprodrsgp1c`)
 
@@ -21,9 +37,11 @@ Both are in **Production 2** subscription, resource group `aldcprodrsgp1c`.
 
 ## TL;DR
 
-1. Trigger **"Deploy to Azure App Service"** workflow manually for **`eclipse-2.1` branch + "Production (Eclipse 2.1)" environment** → deploys to `stage` slot
+> **Contradiction (2026-06-17):** the original TL;DR below used the **code-deploy** workflow ("Deploy to Azure App Service"). That is a **no-op** for the now-containerized app — see the ⚠ CORRECTION callout above for the current, correct container procedure. The **swap** and **verify-before-swap** principles below still hold; only the build/deploy-to-stage mechanism changed.
+
+1. ~~Trigger **"Deploy to Azure App Service"**~~ → **superseded.** Trigger **"Deploy to Azure (Staging)"** manually (`workflow_dispatch`) on `eclipse-2.1` with `force_deploy=true` → builds the Docker image + deploys to `stage` slot
 2. Do the same for `core_api` if backend changes are included (note: `core_api` has no real deploy workflow yet — deployed via another mechanism)
-3. Verify changes on the staging URL before swapping
+3. **Verify changes on the staging slot before swapping** (this step is non-negotiable — skipping it caused the 2026-06-17 incident)
 4. **Swap backend first**, then swap frontend — wait for backend swap to complete before starting frontend
 5. If something's wrong, swap back (swap is bidirectional)
 
@@ -38,17 +56,22 @@ Both are in **Production 2** subscription, resource group `aldcprodrsgp1c`.
 - Branch: `eclipse-2.1` (this is the default branch — it should already be selected)
 - Environment: `Production (Eclipse 2.1)`
 - **Manually triggered** — merging to `eclipse-2.1` does NOT auto-deploy; it only runs the CI quality gate
-- **CRITICAL: Do NOT use "Deploy a container to an Azure Web App"** — that is a dummy/stub workflow that does nothing. The only real deploy workflow is **"Deploy to Azure App Service"** (`deploy_az_webapp.yaml`)
 
-This workflow builds the Next.js app (`npm install && npm run build`) and deploys to the **`stage` slot** of `aldcprodwbapeclipse1c01`.
+> **Contradiction (2026-06-17):** the line that said *"CRITICAL: Do NOT use the container workflow — it's a dummy stub; the only real one is Deploy to Azure App Service"* is now **INVERTED**. The App Service was switched to run a Docker container, so:
+> - `deploy_az_webapp.yaml` ("Deploy to Azure App Service") = **no-op** (pushes code to `wwwroot`, which the container ignores).
+> - `deploy_az_webapp_container.yaml` ("**Deploy to Azure (Staging)**") = **the real deploy** (builds + pushes the image, deploys to `stage`). Use this, via manual `workflow_dispatch` with `force_deploy=true`.
+>
+> Use the container procedure in the ⚠ CORRECTION callout at the top. The step below describes the obsolete code-deploy and is kept only for historical context.
 
-### 2. Verify the container push succeeded
+This (obsolete) workflow built the Next.js app (`npm install && npm run build`) and deployed to `wwwroot` of the **`stage` slot** — which a containerized App Service does not serve.
 
-Before swapping, confirm the deploy succeeded:
+### 2. Verify the deploy actually changed what's SERVED (not just that the run was green)
 
-- Open the GitHub Actions run for the workflow
-- Inspect the **deploy step** output — it should show a successful push to the container registry
-- If that step failed, do **not** swap. Fix the root cause and re-run the workflow
+Before swapping, confirm the new behaviour is genuinely being served by the **stage slot** — a green workflow run is **not** sufficient (see § Incident: 2026-06-17):
+
+- Open the GitHub Actions run for **"Deploy to Azure (Staging)"** — `rollback-check`, `build`, and `deploy` jobs must all be green
+- Confirm the stage slot's image updated: `az webapp config show -n aldcprodwbapeclipse1c01 -g aldcprodrsgp1c --slot stage --query linuxFxVersion -o tsv`
+- **Functionally verify on the stage URL** that the changed feature is present (§ Verifying a container deploy). If it isn't there, do **not** swap
 
 ### 3. Swap the staging slot into production — backend first
 
@@ -113,6 +136,34 @@ Root cause: the code running in production was the old `main` branch code, which
 - **Always deploy from `eclipse-2.1`** — this is the active development branch for both repos
 - **Use "Deploy to Azure App Service"** — the only real deploy workflow. All other deploy-named workflows are dummies
 - The default branch change to `eclipse-2.1` is the primary guardrail going forward
+
+## Verifying a container deploy
+
+A green workflow + healthy `HTTP 200` proves the app boots — **not** that your change is live. Verify the changed behaviour is actually served:
+
+- **Image check:** `az webapp config show ... --slot stage --query linuxFxVersion` shows the expected `DOCKER|ghcr.io/...:<tag>`.
+- **Bundle check (no UI needed):** log in (a Playwright script works) and grep the loaded JS chunks for a string unique to your change. If absent, the running container is stale.
+- **UI check:** exercise the actual feature. Allow ~1–2 min after deploy/restart — during rollout you can hit **mixed old/new instances** (one request shows the new bundle, another shows the old menu). Re-check until results are consistent before swapping.
+- **Mutable-tag caveat:** GitVersion currently reuses the same tag (`2.0.0-eclipse-2-1.1`) across builds, so a restart may not re-pull. If a deploy doesn't take, restart the slot and re-verify; ideally push **unique per-build tags**.
+- A reusable lite smoke for the Visuals "Duplicate" feature lives (uncommitted) at `repos/eclipse/e2e/duplicate-visual.smoke.mjs`; credentials in `vault/eclipse-smoke-login.env`.
+
+## Incident: 2026-06-17 — code-deploy no-op + swap regression
+
+### What happened
+Deploying eclipse PR #80 (Duplicate-visual button) using the **documented** runbook — "Deploy to Azure App Service" (`deploy_az_webapp.yaml`) + slot swap — the feature never appeared in production despite the workflow succeeding.
+
+### Why it broke
+1. **The App Service runs a Docker container** (`DOCKER|ghcr.io/aldc-io/eclipse:<tag>`). `deploy_az_webapp.yaml` pushes Next.js to `wwwroot`, which the container **ignores** — a silent no-op. (Confirmed: deployed `wwwroot/.next` files were fresh and *did* contain the feature, but the running container never reads them.)
+2. **The runbook was stale** — it named the code-deploy as "the only real workflow" and the container workflow as a "dummy stub." That was true once; the app was later switched to containers, inverting it.
+3. **Swapping before verifying served content** then **regressed production** for ~1 hour from `2.0.0-eclipse-2-1.1` to the older April `2.0.0-DV-364-simple-external-apps.1` image (a slot swap exchanges the container image between slots). Detected via `az monitor activity-log` and restored by swapping back.
+
+### Resolution
+Deployed correctly via the **container** pipeline: `gh workflow run 194355199 --ref eclipse-2.1 -f force_deploy=true` → verified the feature on the **stage** slot → swapped to production → re-verified on `eclipse.analyticlabs.io` (Edit/Duplicate/Delete present, modal pre-fills "<name> (copy)").
+
+### Prevention
+- **Use the container workflow** ("Deploy to Azure (Staging)", manual dispatch, `force_deploy=true`). The code-deploy workflow is a no-op for this app.
+- **Always verify served content on the stage slot before swapping** (§ Verifying a container deploy). A green run is not verification.
+- **Never swap before that verification** — a swap mutates production (and exchanges container images between slots).
 
 ## Related flows
 
