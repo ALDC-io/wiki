@@ -1,9 +1,9 @@
 ---
-tags: [process, operations, connector, oauth, token-refresh, bing-ads, meta, facebook]
+tags: [process, operations, connector, oauth, token-refresh, bing-ads, meta, facebook, amazon-spapi]
 aliases: [Connector Token Refresh, Bing Ads OAuth Token Regeneration]
 sources: [Confluence CONN/1575747585, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-18
-updated: 2026-05-21
+updated: 2026-07-06
 ---
 
 # Connector Token Refresh
@@ -17,7 +17,7 @@ Operational runbook for refreshing OAuth tokens across connectors. Full audit co
 | `microsoft_bing_ads_v1` | Fusion92 | OAuth refresh_token | 90 days | Daily workflow (07:00 UTC) | Covered |
 | `facebook_business_v1` | Fusion92 | Long-lived access_token | ~60 days | Daily workflow (08:00 UTC) | Covered ([[FU92-415]]) |
 | `amazon_ads_v1` | Fusion92, GEP | OAuth refresh_token | Long-lived | Connector auto-exchanges | Low risk |
-| `amazon_sellercentral_v1` | GEP | OAuth refresh_token | Long-lived | Connector auto-exchanges | Low risk |
+| `amazon_sellercentral_v1` | GEP | LWA refresh_token + **client_secret** | Long-lived | Connector auto-exchanges | US client secret rotated 2026-07-06 (see below) |
 | `windsorai_v1` | Fusion92 | Static API key | Never | Windsor manages OAuth | No risk |
 | `trade_desk_my_reports_v1` | Fusion92 | Static auth_token | **Unknown** | None | [[FU92-416]] |
 | `viant_dsp_reporting_v1` | Fusion92 | Basic auth | **Unknown** | None | [[FU92-416]] |
@@ -168,6 +168,38 @@ POST {{core_api_url}}work/connectionupdate
 #### Step 4: Validate
 
 Wait for the next scheduled connector run, or trigger manually. Check that data appears in `PROD_DG1_FUSION_92.META.*` tables.
+
+## Amazon Seller Central (SP-API) — Client Secret Rotation
+
+The Seller Central (SP-API) connector authenticates with an **LWA app client secret** (`client_secret`) plus a per-app `refresh_token`. Unlike Ads, the secret is stored **inline in the connection document** (both prod Cosmos and the repo JSON). When Amazon issues a new client secret for the app, it must be pushed to the live Cosmos connection doc — editing the repo JSON alone does **not** rotate the runtime credential (Eclipse reads the connection from Cosmos).
+
+> **GEP/Navira has two separate Seller Central apps** (confirmed 2026-07-06). Each has its own `client_identifier`, `client_secret`, and `refresh_token` — a secret only authenticates its own app (Amazon enforces the `client_id`↔`client_secret` pairing), so rotate the correct one:
+>
+> | Connection | Cosmos ID | App (`client_identifier`) | Data scope |
+> |---|---|---|---|
+> | **US / NA** "Amazon Seller Central" | `b21192a3-2a6d-4ab0-9516-ac94572660b0` | `amzn1.application-oa2-client.4bd6969a…` | US/CA/MX/BR orders |
+> | **UK / EU** "Amazon Seller Central - UK" | `22669b98-b61e-4278-a8fd-b7e5a2bd5023` | `amzn1.application-oa2-client.e0b20985…` | UK/EU orders (Cosmos-only; not in repo) |
+>
+> Both are account `da8904db`, partner `A3VJEVLAWT2I1E`. Ad data is separate again — the single `Amazon Ads API` connection (`66627ed9`), whose secret lives in env `AMAZON_ADS_CLIENT_SECRET`, not the connection doc.
+
+### Evidence-gated rotation runbook
+
+1. **Validate the new secret (auth layer).** Exchange the *live* refresh token for an access token with the new secret against the correct region endpoint (US/NA: `https://api.amazon.com/auth/o2/token`). A returned `access_token` = the secret is valid **and** provably belongs to that app (wrong-app secret → `invalid_client`).
+2. **Read the live Cosmos doc first** (`work/connectiondescribe`) — capture the current secret as the rollback value, and the *live* refresh token (the repo copy may be drifted). Confirm the live secret is the one you expect to replace.
+3. **Prove data reach (consumer layer), not just auth.** Mint a token with the *old/live* secret and with the *new* secret, call `getMarketplaceParticipations` on each regional endpoint (`sellingpartnerapi-na/eu/fe`), and diff the reachable marketplace set. Identical set = the swap cannot drop data (the secret only authenticates the app; the refresh-token grant fixes the seller/marketplace scope).
+4. **Write to Cosmos** via `work/connectionupdate`, sending the **complete** `connection` object (the update replaces that key wholesale — partial sends drop fields like the refresh token).
+5. **Re-read + smoke test.** Re-describe the doc, then mint a token from the *stored* runtime credential and call `getMarketplaceParticipations` — proves the deployed credential works end-to-end.
+6. **Reconcile the repo** (`clients/GEP/eclipse/connections/amazon_seller_central.json`) + vault to match live. **Retire the old secret in the Amazon Developer console** only after the smoke test passes (it's the live rollback until then).
+
+`work/connectionupdate` semantics: top-level key merge, per-key wholesale replace, type must match (dict→dict). See `core_api/v1/route_work.py:work_connection_update`.
+
+### Rotation log
+
+| Date | App | Connection | New secret | Prior (rollback) | Evidence |
+|---|---|---|---|---|---|
+| 2026-07-06 | US Seller Central `…4bd6969a` | `b21192a3…` (prod Cosmos) | `…4832878c…fa57f9` | `…268754ac…005c42` | Auth ✓ (HTTP 200); data-reach diff ✓ (identical 8 US/NA marketplaces old vs new); post-write smoke test ✓. Repo had drifted on secret **and** refresh token — both reconciled to live. Full record in `vault/infra-credentials.md`. |
+
+> **Security debt — secret is still committed to the `clients` repo.** This rotation is like-for-like; it does not remove the secret from git. The proper fix (KV holds values → repo holds only references → runtime resolves from Key Vault → purge git history) is tracked under **ALDC-302** (parent incident, In Progress): **ALDC-318** (rotate ad-platform/Amazon tokens), **ALDC-319** (migrate active secrets to Key Vault + sanitize files at HEAD), **ALDC-320** (git-history purge), plus the GEP-scoped design ticket **GP-280**. Confirmed 2026-07-06: **neither `core_api` nor the `connector` repo has any Key Vault integration** — secrets are read inline from CosmosDB, so KV runtime-resolution is net-new code, and it must land *before* the repo files are sanitized (ALDC-319 coupling constraint). Precedent for the KV layout: Lectric SP-API creds live in `aldc-vault-prod` as `lectric--amazon-spapi--*` (naming `{client_code}--{provider}--{credential_type}`).
 
 ## Trade Desk + Viant — Unknown Lifespan ([[FU92-416]])
 

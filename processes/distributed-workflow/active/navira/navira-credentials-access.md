@@ -3,7 +3,7 @@ tags: [workflow, navira, credentials, auth, questionnaire]
 aliases: [Navira Credentials, Navira Auth Questionnaire]
 sources: [eclipse_exp/frontend/public/navira/navira-auth-questionnaire.html]
 created: 2026-04-27
-updated: 2026-05-25
+updated: 2026-07-06
 audited: 2026-04-28
 ---
 
@@ -19,6 +19,7 @@ Credential-related communications from Navira. Newest first.
 
 | Date | From | To | Subject | Key Details |
 |---|---|---|---|---|
+| 2026-07-06 | Paul Russell (paul.russell@aldc.io) | — (system) | US Amazon Seller Central (SP-API) client secret rotated | Client provided a new LWA `client_secret` for the **US** Amazon SP-API app (`amzn1.application-oa2-client.4bd6969a…`, conn `b21192a3…`). Deployed to prod CosmosDB via `work/connectionupdate` + `clients`-repo parity (repo had drifted on secret **and** refresh token). Evidence-gated: token mint + `getMarketplaceParticipations` diff = identical 8 US/NA marketplaces old vs new; post-deploy smoke test ✓. Prior secret kept as rollback until retired on Amazon side. **UK is a separate app** (`…e0b20985…`, conn `22669b98…`) — untouched. Secret still committed to repo; KV migration open (GP-280 / ALDC-318 / ALDC-319 / ALDC-320). See [[connector-token-refresh]] § Amazon Seller Central. |
 | 2026-05-28 | Paul Russell (paul.russell@aldc.io) | Lectric eBikes (via Justin/Nick) | Lectric Amazon data access confirmed (GP-254) | **First agency SP-API customer onboarded.** Validated Lectric Amazon SP-API creds (US/CA/MX/BR, no suspended listings) under a NEW public solution app (`amzn1.sp.solution.…`) — resolves I-1 (private→public). Secrets in all env vaults as `lectric--amazon-spapi--*`. Confirmation email sent to client. Segmentation validated on TEST_DG1_GEP_DEV clone. |
 | 2026-05-25 | Paul Russell (paul.russell@aldc.io) | — (system) | Windsor auto-link-generation deployed | Windsor API integrated into `func-aldc-cred`. `GET /api/windsor/check-status` and `POST /api/windsor/generate-link` endpoints live. Client credential dashboard now generates fresh Windsor OAuth links at click time — eliminates expired-link problem. Google Ads + Meta/Facebook supported. `WINDSOR_API_KEY` set on Function App. |
 | 2026-05-08 | Paul Russell (paul.russell@aldc.io) | Lori Beck (lori.beck@aldc.io) | GP-221 UK PPC OAuth complete | UK token exchange completed. Profile ID **1236242149887729** (GBP, Europe/London). 12 EU profiles returned (UK, DE, FR, IT, ES, NL, SE, PL, IE, BE, AE, SA). No further Navira action needed. ALDC to update pipeline config + validate data flow. |

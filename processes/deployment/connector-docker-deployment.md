@@ -128,6 +128,14 @@ If auth fails (`NT_STATUS_LOGON_FAILURE` from smbclient), reset the Samba passwo
 
 Verify Samba is running: `pgrep -la smbd` (should show 2 `smbd -D` processes).
 
+### CSV supplement files must be UTF-8 (or the whole file is silently dropped)
+
+The legacy `BaseConnectorFlat` CSV reader (`connector/base/base_connector_flat.py`) historically opened files as UTF-8 only. **Client-exported CSVs are frequently Windows-1252** (Excel / Google Sheets on Windows) — a single accented character (`é`, `ñ`, smart quotes) raised `UnicodeDecodeError` and aborted the entire file before any row parsed → no stage, no merge, and the exception was swallowed (schedule marked complete, no alert). The downstream `SUPPLEMENT.*_CSV` table simply stays stale while sibling CSV templates keep refreshing.
+
+Symptom to recognize: one CSV supplement table frozen (`last_altered` behind its siblings) with the agent logs showing `OPENING FILE …` but **no** `FIELDS`/`SCHEMA`/`SESSION INIT` for its category.
+
+Fixed in [[GP-286]] — the reader now falls back `utf-8-sig → cp1252 → latin-1` and raises on a zero-row parse. If you see this on an agent running an image built before 2026-07-07, rebuild + recreate the container (this page), or re-encode the offending file to UTF-8 as an immediate unblock.
+
 ### Docker Login Issues
 If the build fails to push to the container registry:
 ```bash

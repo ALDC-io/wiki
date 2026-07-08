@@ -10,6 +10,8 @@ updated: 2026-06-12
 
 Catalog-wide blank-COGS / overstated-margin issue on the [[GEP]]/Navira SKU Profitability dashboard. Surfaced by Heather Tabor (Navira COO) via [[Lori Beck]] as a "Missing COGs" request for 5 CIBU CBD SKUs — investigation showed it is a **much broader, catalog-wide** cost-attribution issue. Distinct from [[GP-259]] (which is about adding dashboard *measures*); this is about the COGS *data* being blank.
 
+> **✅ RESOLVED (2026-07-07): Option A DEPLOYED + validated end-to-end in PRODUCTION.** Navira sign-off received; tracked under [[GP-259]] (now Done). Prod Snowflake COGS $38.25M→$59.51M (+$21.25M), whole-fact coverage 54.61%→84.01%, zero true regression; prod PBI "Data Model" reprocessed, DAX==Snowflake byte-exact. Also live in TEST (2026-06-16). Full deploy detail in the [[GP-259#Session Log|GP-259 session log (2026-07-07)]]. Rollback clones retained pending dashboard sign-off. (This was never split into its own Jira ticket — it rode GP-259 Option A.)
+>
 > **Status (2026-05-28): root cause confirmed + fix validated. Awaiting Navira's choice of option (sent to Lori). No production change made yet. May warrant its own Jira ticket.**
 >
 > **UPDATE (2026-06-12): Option A built + validated in TEST as a non-destructive evidence pack — the artifact that unblocks Navira's sign-off. $20.5M recovered / 1,024,475 lines, zero regression (0 per-item mismatches / 2.77M lines), CIBU 5 SKUs auto-recover EXACTLY $12.82/12.25/11.84/26.91/26.91 with NO override table. Live TEST deploy DEFERRED (Paul, 2026-06-12) pending resolution of an intermittent UK-share dependency. PROD stays gated on Navira sign-off. See § 2026-06-12 below.**
