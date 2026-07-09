@@ -3,7 +3,7 @@ tags: [architecture, marketing, attribution, roas, mer, snowflake, navira, gep, 
 aliases: [Cross-Channel Attribution, Marketing Measurement Model, Blended ROAS, MER, True ROAS]
 sources: [clients/GEP/snowflake/warehouse/marketing_fct_activity.sql, clients/GEP/snowflake/warehouse/sales_fct_orderline.sql, clients/GEP/snowflake/warehouse/shared_dim_product_base.sql, clients/GEP/snowflake/warehouse/sales_fct_lectric_amazon_orderline.sql]
 created: 2026-05-29
-updated: 2026-05-29
+updated: 2026-07-09
 ---
 
 # Cross-Channel Marketing Attribution — Tiered Measurement Model
@@ -131,6 +131,88 @@ following — the trigger is the conditions, not a date:
    `aldc-launchpad/boot-prompts/navira-gp259-cogs-backfill-optionA.md`.
 
 Until both hold, TEST is the correct home.
+
+## Two-Model Architecture + Channel-Attributed Margin (2026-07-08, Navira)
+
+Driven by a Lori↔Heather review: Heather's hard constraint is **"do not change the daily Data Model my
+team uses"** (new fields/relationships in her daily model = a hard no; she wants to just pick Agency and
+have everything else unchanged). Decision (Paul + Lori):
+
+- **Model-naming convention (2026-07-09):** environment is conveyed by the **workspace** (`GEP Test Models` /
+  `GEP Prod Models`), NOT the dataset name — so datasets carry no `(Test)`/`(Prod)` suffix (matches how
+  `Data Model` already works). The pair is **`Data Model`** (daily/sales — left *exactly* as-is; renaming it
+  would break Heather's "nothing changed" promise) + **`Marketing Model`** (the sibling). The dataset was
+  renamed from `Navira Marketing Model (Test)` → `Marketing Model` on 2026-07-09 (Fabric item rename; id
+  `2d8587b5` unchanged); the two bound reports were re-deployed with `initial catalog=Marketing Model`, the
+  workbook binds by ID so was unaffected.
+- **Two-model architecture.** Leave the **daily `Data Model`** (PROD, Amazon-scoped, familiar) untouched.
+  Stand up a **separate `Marketing Model`** (GEP Test Models, dataset id `2d8587b5`) as a
+  sibling — it holds Agency, Google/Meta, cross-channel, and the ad-spend-inclusive margin. Split rule:
+  *a feature goes in the marketing model iff it adds a relationship/dim to the star* (Agency dim,
+  Google/Meta platform/campaign, marketing→marketplace attribution). Purely additive-to-the-Amazon-star
+  features (UK marketplace, ASIN attribution) may stay in the daily model. The loaded TEST model
+  `66151728` is the prototype of the marketing model; **PROD daily model is never repointed**.
+  - ⚠ **Evidence correction (2026-07-08, empirical probe of all 3 models — `INFO.VIEW.TABLES()` +
+    measure-resolution).** PROD daily (`74a529b3`) is **not** zero-new-tables as first assumed. It
+    *already contains* **MAP Violators** (all 3 tables, visible — **757 sellers / 20.6% rate live in
+    PROD**) and the **`Marketing Activity` fact + `Campaign`/`Platform` dims** (Amazon ASIN attribution:
+    **Ad Sales $12.55M / Ad Cost $2.44M resolve in PROD**). These were already there and don't add a
+    cross-channel relationship → they correctly belong to the **daily** model. PROD genuinely **lacks**
+    (marketing-model-only): `Agency`, `Marketing Efficiency` (+Product), `Marketing Platform Detail`,
+    `Creative` (+Placement), `Google Ad Spend (Dest)` + margin, Google Grounding, Customer Cohort. So
+    **no destructive migration is needed** — the daily model never gained the relationship-heavy features.
+    Net: the split is *already real at the model level*; the showcase just had to **label** it correctly.
+- **Margin including Google/Meta ad spend** (Heather asked for Google spend as a *separate margin column,
+  marketplace-specific*). Finding: **neither existing margin netted Google/Meta** — `Margin After Ad Spend`
+  = Contribution Margin − *Amazon* spend only (the $219K Google+Meta "Cross-Channel" bucket was undeducted).
+  - **Option B (blended, shipped):** `Margin incl. Ad Spend (USD)` = `Margin After Ad Spend` − (Google+Meta),
+    total grain. The seam measure `G/M Ad Spend (in Margin)` is the B→C swap point.
+  - **Option C1 (Google channel-attributed, shipped):** warehouse view
+    `WAREHOUSE_TEST_GP226.MARKETING_GOOGLE_SPEND_BY_DEST` (deduped campaign→`DESTINATION_CHANNEL` crosswalk ⨝
+    Google fact, `ACTIVITY_DATE>='2024-06-01'`) → reconciles to `Spend - Google` to the penny (Amazon
+    $53,520 / Websites $151,075). Wired into the marketing model as table `Google Ad Spend (Dest)` + the
+    seam redefined to read it → `Margin incl. Ad Spend - Amazon` / `- Websites` slice by channel; blended
+    total unchanged.
+  - **Attribution grain = CHANNEL (Amazon vs Websites), by design.** This *aligns with the existing Amazon
+    convention*: attribute ad spend to the finest marketplace the **source** identifies. Amazon reaches
+    specific marketplace (US/CA/UK) only because Amazon ad data is marketplace-tagged; Google/Meta data only
+    carries destination *channel* (via campaign-name classification), so channel is the honest max. Per-
+    specific-marketplace would *invent* a US/CA split Amazon never had to.
+  - **C3 (Meta) UNBLOCKED (2026-07-08) — was "no name source found".** Source = **`META.CURRENT_FACEBOOK_AD_INSIGHTS`**
+    (`CAMPAIGN_ID`, `CAMPAIGN` name, `ADSET_NAME`) — the direct analog of Google's `GOOGLE_ADS.CURRENT_GOOGLE_ADS_CAMPAIGN`.
+    Join: fact `CAMPAIGN_ID` = `'META_'||raw.CAMPAIGN_ID`. All **13** Meta campaigns ($14,668) use an **"M2W"
+    (Meta-to-Web)** convention (`M2W_US_CIBU_SALES`, `..._WebVisitors`, `..._ATC/IC`, `Retargeting_Catalog`)
+    with **zero Amazon signal → all classify to Websites** (Brinno/Cibu Shopify traffic). Build recipe (mirror
+    C1): `MARKETING_META_SPEND_BY_DEST` + a Meta-by-dest measure family → net Meta into `Margin incl. Ad Spend
+    - Websites` (blended total unchanged; only the Amazon/Websites split shifts −$14,668 → Websites).
+    ✅ **SHIPPED 2026-07-08** (view `_marketing_meta_spend_by_dest.sql` + `_marketing_model_C3_wire.py`).
+    Gates PASS: view reconciles $14,668.24, 100% Websites; DAX-validated blended $37,080,620 UNCHANGED,
+    Amazon $36,008,358 UNCHANGED, Websites $376,458→$361,789. Live 66151728 untouched. Underlying Meta
+    *numbers* still gated on Nicholas before PROD promotion.
+- **Surfaced:** report `Navira - Cross-Channel Margin` (GEP Test Models, bound to the marketing model).
+- **Currency rule reinforced** (see [[star-schema-convention]] Currency Triple Pattern): the destination
+  view only reconciles because Google is USD-native and it applied the efficiency view's exact date filter;
+  any new ad source must land USD before feeding margin. Open item: standardize model-wide USD-at-ingestion.
+- **Showcase reframe SHIPPED (2026-07-08).** The "New Data Showcase" was rebuilt to the two-model story
+  (was "everything in one model, bound to live 66151728"):
+  - **xlsx workbook** (`pbi_ops/demo/_build_demo_workbook.py`) — **Section A (daily model)**: A1 UK Orders ·
+    A2 ASIN · A3 UK Ad Spend · A4 MAP; **Section B (Marketing Model)**: B1 Blended · B2 Google+Meta ·
+    B3 Agency/Lectric · B4 **Margin by Channel (NEW)**. Evidence-based binding: ASIN + MAP pull live from
+    **PROD 74a529b3** ("live in production"); UK tabs House-scoped from the marketing model with a
+    "deploying to production (#490)" badge (PROD's UK is only partially backfilled — $141.8K + zero UK ad
+    spend, vs full $307.6K + $2,982 in the marketing model).
+  - **Native PBI report** `Navira — New Data Showcase` (`_build_navira_showcase_report.py`, report id
+    `c194abf5`) — rebound to the marketing model (one dataset can't split PROD+MKTG, and Margin-by-Channel
+    needs the marketing model), 9 pages, two-section nav + per-page "Lives in" badges + Margin-by-Channel page.
+  - Talking points / walkthrough script / onepager(+PDF) rewritten to the two-model spine.
+  - Live `66151728` confirmed **untouched (44 tables)** throughout.
+- **PROD promotion** of the marketing model is gated on **Nicholas** (Google/Meta validation, YTD) +
+  **Heather** (Lectric sales). Open: Paul to eyeball both PBI reports + publish the workbook to Eclipse
+  app_report 57. Build/rollback scripts: `aldc-launchpad/pbi_ops/_build_xchannel_demo_clone.py` (variant
+  `marketing`), `_marketing_model_margin_B.py`, `_marketing_model_C1_wire.py`,
+  `_build_marketing_margin_report.py`; full record in `aldc-launchpad/pbi_ops/navira_heather_requirements_and_plan.md`.
+  ⚠ Latent tooling bug to fix: `pbi_ops/xmla.py` `XmlaClient._get_model()` returns `Databases[0]`
+  (ignores Initial Catalog) — select the target DB by name via TOM.
 
 ## Implications for Tickets
 
