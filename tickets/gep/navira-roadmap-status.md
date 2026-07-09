@@ -3,10 +3,21 @@ tags: [ticket, gep, navira, navira-roadmap, roadmap, status, hub, pbi, cogs, mar
 aliases: [Navira Roadmap Status, Navira Completion Status, Navira Roadmap Hub]
 sources: [aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md, aldc-launchpad/boot-prompts/navira-roadmap-review-and-ceo-report.md]
 created: 2026-06-16
-updated: 2026-06-25
+updated: 2026-07-08
 ---
 
 # Navira Roadmap — Completion Status Hub
+
+> **▶ 2026-07-08 — Cross-channel marketing model state (read [[GP-225]] §"2026-07-08" for full detail).**
+> The unified marketing fact already spans Amazon+Google+Meta in the live TEST model; the "why isn't
+> Google/Meta in the same table" perception was the Amazon-scoped `Marketing Measures`. This session (TEST +
+> repo only, live `66151728` untouched): built an isolated **`Data Model — Cross-Channel Preview`** clone
+> (+cross-channel measures + Sponsored-Display dim; validated all 5 platforms populate) + comparability
+> report; reconciled canonical marketing SQL on branch `feature/paulrussell/navira-marketing-canonical-consolidation`
+> (equivalence gate caught+fixed a Google/Meta revenue-zeroing regression + UK `_170→_178`). **NEW direction
+> (Paul):** stand up a SEPARATE **`Navira Marketing Model (Test)`** sibling dataset rather than promoting into
+> the daily `Data Model`. Architecture gaps to "pivot new like old": conformed **Channel** dim, `SPEND_USD`
+> on the fact, sentinel relabels, grain guards. Lori/Heather meeting shifted requirements — diff against this.
 
 > **Single source of truth for "what's done, where (PROD vs UAT), and what's left"** on the Navira/[[GEP]] roadmap. Reconciles Jira status vs actual implementation. Compiled 2026-06-16 from Jira (`navira-roadmap` label, cloudId `239c1bf0-93f4-4201-95fe-ab73ce4a6eff`), the per-ticket wiki pages, the live model, and the [[processes/distributed-workflow/active/navira/README|Navira workflow hub]]. Master plan: `aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md`.
 
