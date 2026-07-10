@@ -18,6 +18,19 @@ updated: 2026-07-08
 > (Paul):** stand up a SEPARATE **`Navira Marketing Model (Test)`** sibling dataset rather than promoting into
 > the daily `Data Model`. Architecture gaps to "pivot new like old": conformed **Channel** dim, `SPEND_USD`
 > on the fact, sentinel relabels, grain guards. Lori/Heather meeting shifted requirements — diff against this.
+>
+> **▶ 2026-07-08 (later) — separate marketing model BUILT + margin incl. ad spend shipped.**
+> `Navira Marketing Model (Test)` (GEP Test Models, id `2d8587b5`) stood up as a validated clone of live
+> 66151728 (daily `Data Model` / 66151728 untouched). **B** = blended `Margin incl. Ad Spend (USD)` $37.08M
+> (Google+Meta netted — neither existing margin netted G/M before). **C1** = Google **channel-attributed**
+> margin via warehouse view `WAREHOUSE_TEST_GP226.MARKETING_GOOGLE_SPEND_BY_DEST` (reconciles to the penny:
+> Amazon $53,520 / Websites $151,075) → `Margin incl. Ad Spend - Amazon` $36.0M / `- Websites` $376K. Grain =
+> CHANNEL (Amazon vs Websites), aligned with the Amazon convention (finest grain the source supports).
+> Report `Navira - Cross-Channel Margin` deployed (bound to the marketing model). **C3 (Meta) deferred**
+> (fast-follow, $14.7K). **NEXT: reframe the New Data Showcase for the two-model story.** Full record:
+> `aldc-launchpad/pbi_ops/navira_heather_requirements_and_plan.md`; design: [[cross-channel-marketing-attribution]]
+> §"Two-Model Architecture"; boot: `aldc-launchpad/boot-prompts/navira-marketing-model-showcase-reframe.md`.
+> **PROD promotion gated on Nicholas (G/M validation) + Heather (Lectric sales).**
 
 > **Single source of truth for "what's done, where (PROD vs UAT), and what's left"** on the Navira/[[GEP]] roadmap. Reconciles Jira status vs actual implementation. Compiled 2026-06-16 from Jira (`navira-roadmap` label, cloudId `239c1bf0-93f4-4201-95fe-ab73ce4a6eff`), the per-ticket wiki pages, the live model, and the [[processes/distributed-workflow/active/navira/README|Navira workflow hub]]. Master plan: `aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md`.
 

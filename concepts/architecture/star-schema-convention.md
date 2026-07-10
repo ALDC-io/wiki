@@ -3,7 +3,7 @@ tags: [concept, architecture, snowflake, naming, star-schema]
 aliases: [star schema, naming convention, warehouse naming]
 sources: [clients repo __TEMPLATE_ACCOUNT/snowflake/readme.txt, GEP/snowflake/warehouse/*.sql, Confluence TECH/1238499340 (Warehouse Standards)]
 created: 2026-04-16
-updated: 2026-04-17
+updated: 2026-07-08
 ---
 
 # Star Schema Convention
@@ -67,6 +67,36 @@ SALES_GROSS_CONSOLIDATED    -- Converted to reporting currency via CONSOLIDATED_
 ```
 
 Exchange rates come from `ALDC_LIBRARY.WAREHOUSE.SHARED_FCT_EXCHANGE_RATE` (sourced from exchangeratesapi.io).
+
+### ⚠ Transaction-currency handling in the data model (rule + open item)
+
+**The rule:** every monetary value must be converted to a single reporting currency (USD `*_CONSOLIDATED`)
+**before** it enters any cross-marketplace aggregation, margin, or ratio. **Never sum a raw
+`*_TRANSACTION` / local-currency column across marketplaces** — Amazon US is USD, Amazon CA is CAD, UK is
+GBP, etc., so a raw sum silently blends currencies.
+
+- **Sales fact** — use `*_CONSOLIDATED` (USD). `*_TRANSACTION` is native only.
+- **Marketing fact (`MARKETING_FCT_ACTIVITY`)** — its `COST`/`SALES_AMOUNT` are **local currency**
+  (Amazon US=USD, CA=CAD; Google/Meta are USD-native). Do **not** sum `COST` for a USD total. The
+  `MARKETING_EFFICIENCY` view is the USD-converted layer (`SPEND_USD*`): `AMZ_DAY` maps
+  `MARKETPLACE_NAME`→currency then applies FX; Google/Meta pass through USD-native. Any new marketing
+  measure/margin must consume the USD layer, and any **new ad source must land USD** (or be conditioned on
+  its marketplace's currency) before it feeds margin. See [[cross-channel-marketing-attribution]].
+- **Lectric agency fact** — `SALES_GROSS_TRANSACTION` is native (=USD today, US-only), **no
+  `*_CONSOLIDATED` column**. Fine while US-only; **adding a non-USD Lectric marketplace requires the
+  consolidated triple first**, or its sales will blend currencies into Navira totals.
+
+**Exchange-rate caveats:** `SHARED_FCT_EXCHANGE_RATE` carry-forward fills **forward only** (interior gaps
+must be healed — the Jan-2026 gap was patched manually), the ALDC Library feed **stopped 2026-03-03**
+(carry-forward interim in place, see [[exchange-rate-pipeline]] / `project_exchange_rate_pipeline`), and the
+table has **corrupt far-future dates** — always bound `EXCHANGE_DATE`.
+
+> **OPEN ITEM (2026-07-08, to resolve):** standardize a single, model-wide currency-consolidation
+> convention so *every* fact feeding the Navira data model (sales, marketing spend, agency tenants, and new
+> ad sources) exposes a USD-consolidated column at ingestion — rather than each consumer view re-deriving FX.
+> This removes the per-view `MARKETPLACE_NAME`→currency `CASE` maps and the risk that a new source is summed
+> in local currency. Surfaced while building the cross-channel `Margin incl. Ad Spend` work (Google/Meta
+> destination spend). Tracked in memory `feedback_transaction_currency_handling`.
 
 ## Common SQL Patterns
 

@@ -54,6 +54,13 @@ Scheduled execution of templates. Tasks define when and how often Eclipse pulls 
 ### Capacity / Dataset
 `capacity.json` and related configs define the Eclipse account's capacity allocation and data model structure.
 
+### Users / login (two stores — do not confuse)
+Eclipse has **two separate user/login stores with near-identical field shapes**. The
+legacy portal `eclipse-test.aldc.io` reads **Postgres `app_user`**; the next-gen v2 SPA
+`eclipse-exp.aldc.io` ([[eclipse_exp]]) reads **Cosmos `user`**. Editing one does not
+affect the other — always confirm which the login surface actually reads before
+provisioning. Full detail + runbook: [[eclipse-test-user-provisioning]].
+
 ## Data Landing Pattern
 
 Eclipse loads data into Snowflake source schemas using a `CURRENT_*` table naming pattern:
