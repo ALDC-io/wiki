@@ -61,6 +61,13 @@ legacy portal `eclipse-test.aldc.io` reads **Postgres `app_user`**; the next-gen
 affect the other — always confirm which the login surface actually reads before
 provisioning. Full detail + runbook: [[eclipse-test-user-provisioning]].
 
+**Members-page crash on orphaned roles ([[ALDC-622]], fixed 2026-07-15):** the v2 SPA
+Members page renders `RoleAssignmentsTable`, which resolved roles via `roleMap[roleId]`;
+a legacy account-level assignment that lost Account scope (Oct-2025 RBAC rework `8aba2c7`)
+returned `undefined` → `undefined.name` crashed the render → "Something went wrong",
+blocking all member edits/removals. Fixed (PR #91) by dropping unresolved roles gracefully.
+Prod user store is **Cosmos** `aldcprodcsdb1c01`/`core`.
+
 ## Data Landing Pattern
 
 Eclipse loads data into Snowflake source schemas using a `CURRENT_*` table naming pattern:

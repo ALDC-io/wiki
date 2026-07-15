@@ -232,6 +232,9 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 ### Templates
 - [[tickets/_bug-template|_bug-template]] — Bug ticket template with boot prompt, investigation log, ranked causes
 
+### ALDC (platform / Eclipse)
+- [[ALDC-622]] — Eclipse "Something went wrong" on user delete (Navira/GEP). Root cause = orphaned legacy account-level role assignment → `undefined.name` crashes the Members-page `RoleAssignmentsTable` on render, blocking all member edits/removals. Fix (PR #91) drops unresolved roles gracefully; departed user cleaned from prod Cosmos. ✅ Done, live in prod 2026-07-15.
+
 ### GEP
 - [[GP-169]] — Marketing activity marketplace attribution. Profile-based mapping of Amazon Ads profiles to canonical marketplaces in `MARKETING_FCT_ACTIVITY`.
 - [[GP-197]] — Future-proof Amazon marketplace filter in `sales_fct_cost.sql`. Replaced hard-coded name list with `IS_AMAZON_MARKETPLACE` flag. Subsumed into GP-204.
