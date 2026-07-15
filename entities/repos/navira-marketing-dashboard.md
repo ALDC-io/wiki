@@ -3,7 +3,7 @@ tags: [repo, gep, navira, dashboard, insite, marketing, advertising, nextjs, ver
 aliases: [navira-marketing-dashboard, GEP InSite, InSite, navira-mktg, insite-prototype]
 sources: []
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-13
 ---
 
 # navira-marketing-dashboard (GEP InSite)
@@ -40,6 +40,140 @@ Branch `feature/insite-calendar-brand-reach-region` (pushed; ~14 commits). Deplo
 - `unstable_cache` per-(source,range) enabled in **dev too** (was uncached); cold first-load-per-range warms it, then reads are ~0.1s.
 - `export const maxDuration = 300` on the page so the ~60-90s cold render completes and warms the cache (default serverless timeout was killing it).
 
+## 2026-07-10 — redesign initiative (evolve toward the prototype)
+Client emailed prototype mockups → full redesign initiative. **Hub:** `aldc-launchpad/navira-dashboard-redesign/`
+(`specs/{design-spec,gap-matrix,current-state,data-catalog,source-registry}.md`, `plan/{PLAN,PHASES}.md`,
+`prototypes/`); boot prompt `aldc-launchpad/boot-prompts/navira-marketing-dashboard-redesign.md`.
+**Evolve in place, iterate locally, single prod deploy at the END.**
+
+- **Prototype finding:** ~70% of the mockup is fabricated (SmartScout, keywords, New-to-Brand, DSP
+  reach, inventory, ratings — hash-seeded). Its IA already matches this app (segmented lens toggle,
+  one dataset). It commits metric-law bugs — sums attributed sales across channels, and "TACoS" is
+  actually ACoS — the redesign fixes them (see [[cross-channel-marketing-attribution]]).
+- **Locked decisions:** (1) ROAS-led **Overview** lens, feature-flagged (easy on/off); (2) unsourced
+  fields as **Live/Coming/Gated** (never fabricate) — **SmartScout first to activate** (contracted,
+  pending client credentials), then Email, then Inventory (client pushed out, expected later);
+  (3) fix metric-law (per-channel + MER, relabel ACoS, build true-TACoS); (4) restore UK+marketplace
+  grain ([[project_gp226_roadmap_gap]]), true-TACoS view, defer campaign-USD (no `CURRENCY_CODE`).
+- **Phase 0 foundation ✅ merged** to `feature/insite-calendar-brand-reach-region` (359 vitest +
+  build green; e2e 42/42): design system + chart kit (`src/components/ui/`, light=canonical, dataviz
+  palette), Playwright harness (`e2e/`), data-wiring — `getTraffic()` (`TRAFFIC_FCT_ACTIVITY`:
+  sessions/buy-box/CVR), `getPlatformDetail()` (`MARKETING_FCT_PLATFORM_DETAIL`: Google SOV/video,
+  Meta reach), real campaign names via `MARKETING_DIM_CAMPAIGN` join.
+- **Phase 2 (build) in progress:** ROAS-led Overview, then restyle the lenses onto the design system
+  with Live/Coming/Gated states. **Phase 3 (data, evidence-gated):** UK/marketplace grain + true-TACoS;
+  a gated Snowflake read verifies the newly-wired object schemas. Roadmap + DoD: `plan/PHASES.md`.
+
+## 2026-07-12 — prototype CARD rebuild (all views)
+Branch `feature/insite-calendar-brand-reach-region`, commits **`c1a1704`** (rebuild) + **`978b65a`**
+(orphan cleanup). NOT deployed — local review only (`http://localhost:3300`, warehouse). Gate green:
+tsc + **363 vitest** + build + **50 Playwright** + lint.
+
+Every view now matches the client prototype's **card-per-entity** layout: a card per entity → header →
+8-tile KPI scorecard → **ONE unified expandable section table** (grey caption, sticky "Section / Row"
+column, blue section-header rows with "N rows" + expand toggle, row-type badges). All sections share
+**ONE global 40-column set** with a **global Customize Columns + Download CSV** in the toolbar
+(prototype parity — replaced the prior per-drill-table pickers/CSV).
+
+- **Paul's decision: "full prototype scaffold — so we know what is left to populate."** Columns &
+  sections with no warehouse source render as honest **Coming** (Amazon Ads / Attribution / DSP /
+  Traffic) or **Gated** (SmartScout) placeholders — never a fabricated number. **The dashboard IS the
+  data-enablement roadmap now.**
+- **New reusable engine:** `src/lib/insite-table.tsx` (shared `INSITE_COLUMNS`, byte-faithful to the
+  prototype's `BRAND_TABLE_COLUMNS`, with per-`_kind` resolvers + `availability` live/coming/gated +
+  `source`; `INSITE_CARD_LIMIT=50`), `InsiteColumnsContext` (global visible-column state, localStorage
+  `insite:columns:card`, + CSV registry), `CardSectionTable`, `InsiteCard`, `CardTruncationNote`;
+  `matrixToCsv` added to `src/lib/csv.ts`.
+- **Views:** Brand (real: Ad platforms / Top products / Campaigns; kept coverage note + `?focus=`
+  scroll), Product (real: marketplace-context row only — no product↔campaign link), Campaign (real:
+  Campaign summary; currency-free KPI + native-currency caveat), Ad Platform (real: Brands / Campaigns
+  / Top products **+ a "Marketplaces" section beyond the prototype** preserving per-marketplace UK
+  detail — [[project_gp226_roadmap_gap]]; the page now passes `campaigns`+`products` to PlatformView).
+  Trends chart swapped to the design-kit `LineChart`.
+- **Cards capped to top-50 by spend** (`INSITE_CARD_LIMIT`) with a truncation note — the warehouse
+  returns up to 2,500 products; a unified table per card ×2,500 isn't viable. Brand renders all filtered.
+- **Removed orphaned `EntityCard.tsx` + `RegionView.tsx`** (superseded by the unified card).
+- **Data-enablement backlog the scaffold makes explicit** (= the `next:`): **SmartScout** (Gated —
+  market share, ratings/reviews, organic rank, win rates, search volume; biggest unlock, next source),
+  **Amazon Ads** (portfolio/bid strategy/dates/top-of-search), **Amazon Attribution** (new-to-brand,
+  long-term), **Amazon DSP** (reach/video), **Amazon Traffic** (detail/store page views), plus the
+  **product↔campaign bridge** (warehouse/query change: ASIN via `MARKETING_FCT_ACTIVITY_UNIFIED.
+  PRODUCT_ID` ↔ `SHARED_DIM_MARKETPLACE`, evidence-gated).
+- Consumer render verified (warehouse): Brinno $7.47M / NAVAC $7.16M brand cards; Amazon channel $83.1M
+  total sales, MER 34.0x; Google→Amazon Total Sales $0 (honest — cross-channel has no marketplace actual).
+- Boot prompt: `aldc-launchpad/boot-prompts/navira-prototype-card-rebuild-done-next-enablement.md`.
+
+## 2026-07-13 — data-enablement lane 1: Amazon Traffic (detail page views)
+First scaffold column turned real. Branch `feature/insite-calendar-brand-reach-region`, commit
+**`becf603`**. NOT deployed — local review only. Gate green: tsc + **365 vitest** (+2 grain tests) +
+build; consumer render verified in warehouse mode.
+
+Replaced the prototype's **mocked** `detail_page_views` (the mockup computes `rowClicks × 0.78` on every
+row — `brandRowValue` ~L12522) with **real per-ASIN Amazon on-platform traffic** from
+`TEST_DG1_GEP.WAREHOUSE.TRAFFIC_FCT_ACTIVITY`.
+
+- **Join key proven by discriminating probe (not inferred):** `Product.asin` →
+  `TRAFFIC_FCT_ACTIVITY.CHILD_ASIN` — **92.1% distinct / 98.7% views-weighted** coverage. The fact's
+  `PRODUCT_ID` is the internal **merchant SKU** (`FBM_…`/`GEP_…`), NOT an ASIN (matched 1 product);
+  `PARENT_ASIN` is the variation group (47%). See [[star-schema-convention]] — this is a case where three
+  ASIN-ish columns exist and only the child is the reporting/join grain.
+- **Re-grained `buildTrafficQuery` to `CHILD_ASIN`** (the consumer grain). It was speculatively grouped by
+  SKU×child×parent + capped at 2,500 rows-by-sessions — fine when nothing consumed it, but that would
+  truncate a per-product join. Now ~5,886 bounded rows (cap raised to a 25,000 safety net); the feed is
+  **Amazon US-only** (single MARKETPLACE_KEY, decoded to "Amazon US"). `Traffic` type/mapper/tests reshaped;
+  dropped the vestigial `productId`/`parentAsin` (nothing consumed them — the whole feature was dead-ended
+  at the provider before this).
+- **`detail_page_views` column flipped Coming → live** (real number on product rows, honest `—` where
+  there's no per-row traffic). `brand_store_page_views_new` stays honestly **Coming** (separate Brand-Store
+  report, not in this fact).
+- **Wired `getTraffic` through** `page.tsx` (new `traffic` slice) → Brand/Product/Platform views; helpers
+  `buildTrafficByAsin`/`detailPageViewsFor`/`trafficFor`/`trafficMetaSummary` in `insite-table.tsx`
+  (ASIN join is case/space-normalized via `asinKey`). Product/Brand/Platform product-rows carry
+  `detailPageViews` by ASIN; **Product cards gained a real "On-platform traffic (Amazon)" section** whose
+  row `_meta` surfaces the richer real feed (sessions · buy-box · unit-session) **inline — deliberately NOT
+  as new global columns** (prototype is the north star: no columns beyond its set).
+- **Consumer-layer proof:** rendered values `750,213` & `239,613` are **byte-exact** to independently-queried
+  DB values; the re-grained query reconciles to **28,989,203.95** total views / 5,886 child-ASIN rows / single
+  "Amazon US"; other columns + KPI grid unchanged (no regression). Screenshot: Slobproof card = `33,541` real
+  + honest `—` on the SmartScout-pending marketplace-context row.
+- Evidence recorded in `aldc-launchpad/navira-dashboard-redesign/specs/data-enablement-findings.md`. Boot
+  prompt: `aldc-launchpad/boot-prompts/navira-traffic-enabled-next-enablement.md`.
+
+## 2026-07-13 — demo prep: default columns + product↔campaign bridge (DEFERRED)
+Branch `feature/insite-calendar-brand-reach-region`, commit **`ae33a20`**. Local-only. Client demo ran on
+localhost (warehouse mode). Gate: tsc + **365 vitest** + build; warehouse smoke on all 5 views (0 console
+errors, cards render).
+
+- **Default columns reworked to lead with real data** (`INSITE_DEFAULT_COLUMNS`): cards now open showing
+  impressions/clicks/CTR/total_cost/CPC + the now-live **detail_page_views** + sales/ACoS/ROAS, plus a small
+  SmartScout teaser (review rating/count) + the Amazon-Ads portfolio placeholder. Dropped the default-visible
+  organic-rank/win-rate/search-volume **Gated** columns (still one click away in Customize Columns) so the
+  first impression isn't a wall of "Gated". Trimmed from the prototype's own default for presentation.
+- **Demo-day gotcha:** the per-(source,range) cache is **in-memory per server process** — a fresh `next
+  start` is cold (~13–18s/view first hit, worst case ~60–90s per code comments). Demo runbook = start ONE
+  warehouse server, warm every view once (`for v in brand product campaign platform trend; do curl -s -o
+  /dev/null "localhost:3300/?view=$v"; done`), then KEEP THAT PROCESS ALIVE. A stale overnight process drops
+  its Snowflake connection and starts 500ing — restart fresh.
+
+### Product↔Campaign bridge — DEFERRED (by design, not a bug)
+Attempted to populate Product "Campaigns" + Campaign "Advertised products". **The warehouse keys advertised
+products by merchant/SellerCloud SKU, but the product roster by ASIN, with no crosswalk between them:**
+- `MARKETING_FCT_ACTIVITY_UNIFIED.PRODUCT_ID` is **~99%-of-spend a merchant SKU** (`6007`, `amzn.gr.*`,
+  `FBM_*`), NOT an ASIN (spend-weighted format: 80% other + 19% numeric + 0.8% ASIN). `SHARED_DIM_MARKETPLACE`
+  is in the same SKU space (why the vendor bridge works: activity SKU → dim = 2,643/3,102 ≈ 85%).
+  `MARKETING_EFFICIENCY_PRODUCT` (the product roster) carries **only ASIN**, no SKU.
+- ⇒ direct `activity.PRODUCT_ID = Product.asin` covers **6.3% of products / <1% of spend** → would leave
+  Campaigns empty for 94% of products. Not shippable; **kept the sections honest "Coming"** (the evidence
+  gate correctly killed it). Brand↔Campaign linkage already works (~99% spend, DEFAULT_VENDOR path).
+- **Corrected a contradiction:** the 2026-07-10 lane-(b) finding called activity `PRODUCT_ID` "the ASIN" — it
+  is the SKU; the coverage number it cited is a SKU→vendor match. Superseded (see
+  `data-enablement-findings.md`).
+- **Candidate crosswalk for later:** `TRAFFIC_FCT_ACTIVITY` carries BOTH an internal `PRODUCT_ID` and
+  `CHILD_ASIN` — evidence-gate whether its SKU space reconciles with the activity fact's before building.
+- **Latent cleanup (non-urgent):** `buildProductsQuery`'s `dm.PRODUCT_ID = p.ASIN` vendor join is ASIN-vs-SKU
+  so it rarely matches → silently `COALESCE`s to the product-view BRAND (cards still render fine).
+- Boot prompt: `aldc-launchpad/boot-prompts/navira-demo-day-and-enablement.md`.
+
 ## Deploy runbook (this project) — hard-won
 1. `vercel link --yes --scope aldc --project navira-marketing-dashboard`, then **`vercel --prod --yes`** (Vercel CLI as `paulrussell-3307`, which CAN access the ALDC scope). Git-push auto-deploy is author-blocked for russell94paul ([[project_vercel_deploy_author_block]]) — CLI is the path.
 2. **Env `SNOWFLAKE_SCHEMA`** must be `WAREHOUSE_TEST_GP226` (was wrongly `..._TEAM`, which also showed pre-Lectric-fix numbers). Env vars are Sensitive → can't `vercel env pull` values; change via `vercel env rm`+`add`.
@@ -47,7 +181,7 @@ Branch `feature/insite-calendar-brand-reach-region` (pushed; ~14 commits). Deplo
 4. **Stale Data Cache gotcha:** Vercel `unstable_cache` persists ACROSS deployments. After a query-SHAPE change (new columns/joins), **bump the cache key version** (`insite-dashboard` → `insite-dashboard-v2` in `page.tsx`) or the new build serves the old payload (symptom: reach columns read 0 despite the warehouse having data).
 
 ## Open / next
-- **2026-07-10 (later day):** Paul has **prototype HTML files** → iterate the dashboard toward the **client's desired layout**. Expect a layout/design pass.
+- **Prototype layout pass ✅ DONE (2026-07-12); data-enablement underway.** The dashboard is the enablement roadmap now — fill the Coming/Gated scaffold source by source. **Lane 1 Amazon Traffic ✅ DONE (2026-07-13)** — `detail_page_views` is real (see that section). **Remaining lanes:** SmartScout (Gated — biggest unlock, blocked on client credentials), Amazon Ads (portfolio/bid/dates/top-of-search), Amazon Attribution (new-to-brand/long-term), Amazon DSP (reach/video), and the **product↔campaign bridge** (no new source, warehouse/query only — a good next lane, lane-(b) already scoped in the findings doc). Cleanup: Campaign tile-4 "Top Search Adj." (needs Amazon-Ads top-of-search). Still local-only — no remote deploy of the rebuild/enablement yet.
 - **Perf follow-up:** cold first-load-per-range is ~60-90s (heavy `MARKETING_EFFICIENCY_PRODUCT`/brand views, serial queries on one connection). Materialize the heavy views or parallelize the provider's connections so the client's first hit isn't slow.
 - **Security hardening (deferred):** move prod `SNOWFLAKE_ROLE` off ACCOUNTADMIN → a least-privilege role for the service account (kept as-is this deploy to avoid breaking auth).
 
