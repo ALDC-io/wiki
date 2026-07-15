@@ -3,7 +3,7 @@ tags: [entity, tool, connector, amazon-ads, amazon-dsp, oauth]
 aliases: [Amazon Ads Connector, Amazon DSP Connector]
 sources: [Confluence CONN/1298792450]
 created: 2026-04-18
-updated: 2026-06-11
+updated: 2026-07-15
 ---
 
 # Amazon Ads and Amazon DSP Connector
@@ -87,6 +87,16 @@ Using the wrong endpoint for code exchange will silently fail or return US-only 
 - **`profile_ids`** — list filter to scope a pull to specific profiles (e.g. `["1236242149887729"]` for UK-only).
 
 `refresh_token` comes from the connection; `client_secret` from env `AMAZON_ADS_CLIENT_SECRET`. Merged to `development` (`:development` image = `40430ed`); connector prod branch = **`master`** (deferred). **Proven end-to-end through real [[Eclipse]] dispatch 2026-06-11** — UK GBP data landed to `TEST_DG1_GEP.AMAZON_ADS`, exact-match to the sandbox, 0 regression. See [[GP-257]] for the dispatch pattern + the backfill visibility-timeout gotcha.
+
+### Attribution product ([[GP-287]], 2026-07-15) — off-Amazon media → Amazon conversions
+
+`amazon_ads.py` gained an `ATTRIBUTION` product (`options.amazon_ads_product: "attribution"`, category `performance_report`) — measures Google/Meta ads driving Amazon orders. **It uses a DISTINCT API** (`/attribution/*`, cursor-paginated on `cursorId`), NOT the `/reporting/reports` flow, so it is handled by `run_attribution()`: per profile `GET /attribution/advertisers` → paginate `POST /attribution/report`. Dates → `YYYYMMDD`; metrics template-overridable via `options.attribution_metrics`. Branch `feature/amazon-attribution-connector`; image `agent-dcgeneral:attribution`. **Deployed + canary-validated LIVE in TEST** (landed `AMAZON_ADS.ATTRIBUTION_PERFORMANCE_REPORT`).
+
+Gotchas learned building it:
+- **`RestSimple.Transact()` raises on ANY non-200** — status handling must be in `except` (inspect `_response_code`), not after the call. A **403 on `/attribution/advertisers`** = that profile is not authorized for Amazon Attribution (GEP's **BR** profile) → catch + skip, don't abort the whole multi-profile run.
+- **PERFORMANCE reportType rejects `attributedNewToBrand*` metrics** (HTTP 400 "Invalid metric") — keep them out of the PERFORMANCE list (may be PRODUCTS-only).
+- **Shared-account scoping:** the `66627ed9` conn serves multiple GEP clients (advertisers GlobalEcom / The Super Savers / Falls River). Scope to Navira's `profile_id`s (US `2874274850477920` is the only one carrying attribution data) — either downstream in the warehouse (MARKETPLACE_PROFILE_MAP) **or** at pull-time via the existing **`profile_ids`** template option (cleaner; avoids landing other clients' data + their vendor-profile edge cases).
+- **Landed shape:** UPPERCASE VARCHAR; `Click-throughs`→`CLICK_THROUGHS`; `DATE`='YYYYMMDD'; no NTB columns; publisher values include `Youtube`/`GlobalPR` (map Youtube→GOOGLE).
 
 ## Known Limitations
 

@@ -3,7 +3,7 @@ tags: [process, deployment, docker, connector, agents]
 aliases: [connector deployment, Docker agent deployment, agent deployment]
 sources: [sources/obsidian-import/general/Docker -Core Connectors - VMs.md, CORE/1074823173]
 created: 2026-04-16
-updated: 2026-04-18
+updated: 2026-07-15
 ---
 
 # Connector Docker Deployment
@@ -144,6 +144,20 @@ echo $DOCKER_CLI_TOKEN | sudo docker login ghcr.io --username <github-username> 
 ```
 
 **Important**: Use `sudo` before the docker login or the pipe may send the token to the sudo password prompt. Use `aldc-svc-automation` account, or a personal token if problems persist.
+
+**GHCR push token expires on `wks-agent` (recurring).** `build.sh` runs `docker build` (fine) then `docker push`, and the push can `403: unauthorized: unauthenticated` because the cached GHCR credential on the box has gone stale — even though the image built cleanly (it's sitting locally, just not uploaded). Fix = re-auth and re-push (no rebuild needed):
+```bash
+echo '<token>' | docker login ghcr.io -u aldc-svc-automation --password-stdin   # token: vault § Docker / GHCR service account (no-expiry, regen 2026-05-04)
+docker push ghcr.io/aldc-io/agent-<name>:<tag>
+```
+`docker` runs **without sudo** on `wks-agent` (aldc is in the docker group) — so run `build.sh` unprivileged to avoid the sudo-password-vs-stdin problem entirely (observed 2026-07-15, GP-287).
+
+### `wks-agent` SSH is fail2ban-prone — space your connections
+Several SSH connections in quick succession (~5 in <1 min) trip fail2ban (connection **reset**, then **timeout** for ~10 min). Space connections out, **batch commands into a single `ssh`**, and don't rapid-retry. For build completion, **poll the GHCR REST API off-box** instead of SSH-tailing the build log:
+```bash
+gh api "orgs/ALDC-io/packages/container/agent-<name>/versions" --jq '.[] | select(.metadata.container.tags[]? == "<tag>") | .updated_at'
+```
+(watch the tag's `updated_at` advance). `build.sh` prompt tip: answer **dev-image = N** and give a **version** string → clean tag `agent-<name>:<version>`; a branch name containing `/` breaks the docker tag. (GP-287, 2026-07-15.)
 
 ### Server Path Differences
 The `docker_assets/images/agent_template` path may vary by server. Each server is set up slightly differently.
