@@ -387,6 +387,14 @@ Best practices from the review:
 - Monthly query credit budget: ~60 credits/month (target ceiling from that engagement)
 - Monitor reader account daily
 
+## Cost Analysis & Optimization
+
+Credit + storage cost is tracked as its own workstream — see [[snowflake-cost-analysis]] (epic ALDC-651). Key facts for anyone touching warehouse compute or storage:
+
+- **No cost monitoring exists** beyond the 2-credit/day reader-account cap. Read-only `ACCOUNT_USAGE` cost toolkit lives at `observability/jobs/snowflake-cost/` (run as ACCOUNTADMIN; `METERING_DAILY_HISTORY`, `WAREHOUSE_METERING_HISTORY`, `TABLE_STORAGE_METRICS`, etc.).
+- **Everything runs on one shared `COMPUTE_WH` per account** (no isolation/attribution); all facts are full `CREATE OR REPLACE TABLE ... AS SELECT` (no incremental) — so hourly rebuilds also generate Time Travel + 7-day Fail-safe churn. Convention target: make rebuild tables `TRANSIENT`, right-size `TARGET_LAG`, tag queries.
+- **Sandbox/clone sprawl** (`WAREHOUSE_TEST_*`, `_SHADOW`/`_RB`/`_BEFORE`/timestamped clones) is a real storage cost — but `WAREHOUSE_TEST_GP226` / `_NAVIRA_ROADMAP` are live prod deps; never blind-drop.
+
 ## Task Suspension Diagnosis
 
 When warehouse tables appear stale (PBI reports show old data), check task state **before** investigating data sources. Snowflake auto-suspends a task DAG's root task after repeated errors — this is a common silent failure mode.
@@ -446,6 +454,7 @@ The procedure scans `INFORMATION_SCHEMA.VIEWS` for all `CURRENT_*`/`COMBINED_*` 
 
 ## See Also
 
+- [[snowflake-cost-analysis]] — credit + storage cost optimization (epic ALDC-651)
 - [[star-schema-convention]] — naming patterns
 - [[data-pipeline-flow]] — full pipeline flow
 - [[Power BI]] — downstream consumer
