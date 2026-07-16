@@ -3,7 +3,7 @@ tags: [repo, gep, navira, dashboard, insite, marketing, advertising, nextjs, ver
 aliases: [navira-marketing-dashboard, GEP InSite, InSite, navira-mktg, insite-prototype]
 sources: []
 created: 2026-07-09
-updated: 2026-07-13
+updated: 2026-07-16
 ---
 
 # navira-marketing-dashboard (GEP InSite)
@@ -174,14 +174,58 @@ products by merchant/SellerCloud SKU, but the product roster by ASIN, with no cr
   so it rarely matches → silently `COALESCE`s to the product-view BRAND (cards still render fine).
 - Boot prompt: `aldc-launchpad/boot-prompts/navira-demo-day-and-enablement.md`.
 
-## Deploy runbook (this project) — hard-won
+## 2026-07-15 — Google/Meta channel grounding (Option D) + Amazon Attribution GO ([[GP-287]])
+Branch `feature/insite-calendar-brand-reach-region`, commit **`3eeadee`**. Local-only — **NOT deployed**
+(Paul's call: hold prod until more of the channel story is built). Gate green: tsc + **392 vitest** (+13) +
+build; warehouse consumer render reconciled penny-exact.
+
+**Fixed the Google/Meta channel data gap (Option D — destination-honest grounding).** The cross-channel cards
+led with each platform's *self-reported* attributed sales and couldn't compute total-sales metrics
+(`totalSales` hardcoded 0 for non-Amazon channels). Chose to ground ad spend to **actual orders by destination
+channel** using ALDC's penny-validated grounding views (no new source, no DDL) — see
+[[cross-channel-marketing-attribution]].
+- **Google card → new `"grounded"` headline**: Grounded ROAS / Grounded Sales / Grounded Spend(+coverage %)
+  from `MARKETING_EFFICIENCY_GOOGLE_BRAND` (spend reconciled to actual Websites orders: **10.4× on $104,550 →
+  $1,082,341**). New "Destination & grounding" section splits Websites-grounded vs ungrounded vs
+  **Amazon-destination (spend shown, "attribution pending tagging")**.
+- **Meta card → destination-honest**: Ad Sales labelled self-reported; destination spend shown; grounded sales
+  honestly "Coming" (no Meta grounding view). Never fabricates a Meta grounded number.
+- Display-rename "Google→Amazon"/"Meta→Amazon" card headers → "Google"/"Meta" (internal `PlatformName` keys
+  unchanged). New fields `groundedSpend/groundedSales/destSpend*` on `MetricRow`; `groundedRoas` in `metrics.ts`
+  (never touches `totalSales`, Flag-A-safe). Cache **v5→v6**.
+
+**Amazon Attribution feasibility PROVEN → [[GP-287]] (In Progress).** The Amazon-destination slice can only be
+measured via the Amazon Attribution feed (external click → verified Amazon order). Read-only Windsor probes:
+- **Enrollment confirmed** (Brand Registry via Sponsored Brands). **Google tagging LIVE via Quartile** —
+  landing URLs carry `?maas=…&ref_=aa_maas&tag=maas`; **93% of Amazon-bound Google spend tagged** ($37,836 of
+  $40,682, 90d). **Meta N/A** ($5,969/30d, 0 Amazon-bound, all Websites/M2W).
+- **Key finding:** `final_url` is available from Windsor but not pulled (curated `fields` list) — field-selection
+  gap, not access gap. The Attribution *report* is a separate `amazon_ads` connector product (LWA OAuth), not
+  built. Build boot prompt: `aldc-launchpad/boot-prompts/navira-amazon-attribution-build.md`.
+
+
 1. `vercel link --yes --scope aldc --project navira-marketing-dashboard`, then **`vercel --prod --yes`** (Vercel CLI as `paulrussell-3307`, which CAN access the ALDC scope). Git-push auto-deploy is author-blocked for russell94paul ([[project_vercel_deploy_author_block]]) — CLI is the path.
 2. **Env `SNOWFLAKE_SCHEMA`** must be `WAREHOUSE_TEST_GP226` (was wrongly `..._TEAM`, which also showed pre-Lectric-fix numbers). Env vars are Sensitive → can't `vercel env pull` values; change via `vercel env rm`+`add`.
 3. **Grants gotcha (broke the first deploy — 500 "Object … does not exist or not authorized"):** the prod role `NAVIRA_MKT_RO` had grants only on the OLD `_TEAM` schema. When migrating schemas you MUST re-grant it: `USAGE` + `SELECT ON ALL/FUTURE VIEWS IN SCHEMA WAREHOUSE_TEST_GP226`, plus `USAGE ON SCHEMA REPORT_COMMON` + `SELECT ON REPORT_COMMON.MARKETING_DIM_AGENCY` (the new agency dim). Validate by temp-granting `NAVIRA_MKT_RO` to an admin user and running all dashboard queries as that role.
 4. **Stale Data Cache gotcha:** Vercel `unstable_cache` persists ACROSS deployments. After a query-SHAPE change (new columns/joins), **bump the cache key version** (`insite-dashboard` → `insite-dashboard-v2` in `page.tsx`) or the new build serves the old payload (symptom: reach columns read 0 despite the warehouse having data).
 
+## 2026-07-16 — real campaign names verified + honest top-level Type (Campaign lens)
+
+First gap-closure lane off the prototype-parity punch-list (`boot-prompts/navira-dashboard-prototype-gap-closure.md`). Committed `f57e0c8` on branch `feature/insite-calendar-brand-reach-region` — **not merged/deployed** (single prod deploy stays the gated end-step).
+
+**Live probe (read-only, `TEST_DG1_GEP`) settled a spec contradiction:** `MARKETING_DIM_CAMPAIGN` = `CAMPAIGN_ID, CAMPAIGN_KEY, CAMPAIGN_NAME` — **no type column** (the gap-matrix had claimed Type "comes with real names from the dim"; `data-catalog.md` was right — both specs now corrected).
+
+- **Campaign names — already wired, now VERIFIED.** The `LEFT JOIN MARKETING_DIM_CAMPAIGN` was written but carried a `⚠ schema unverified` flag. Probe: join resolves **99.0% of Amazon / 95.5% overall**. Dim is **Amazon-only** (all IDs `AMZ_…`) → Google/Meta campaigns carry no dim row and keep the `CAMPAIGN_ID` fallback (honest). Stale comment cleared.
+- **Campaign Type — was fabricated, now honest.** `mapCampaigns` had hardcoded `type: "sponsored-products"` for *every* campaign (mislabels the 6% SB/SBV). No type column exists to source, but Amazon names encode the product as a prefix token → new `deriveCampaignType()` maps `SP/SB/SBV/SD` → top-level (`Sponsored Products / Brands / Display`; SBV folds into Brands). Whole-token match (no false-positive on "SPRAY"). Coverage over live real names: **97.2% classify** (SP 93.8 / SB 1.8 / SBV 1.7); the 2.8% legacy agency schemes (`OW_/OP_/BR_…`) + all Google/Meta → honest **"—"**, never a guess. The prototype's richer sub-type ("Sponsored Products Keyword") is itself fabricated (derived from its own synthetic `AMZ_US_…_SP_KW` names) → deliberately NOT reproduced.
+- **Files:** `types.ts` (`Campaign.type` → `CampaignType|null`, `CAMPAIGN_TYPE_LABEL` + `campaignTypeLabel()`), `providers/warehouse.ts` (`deriveCampaignType`), `warehouse.test.ts` (mapper + classifier coverage), `CampaignView/BrandView/PlatformView` (render label, "—" when null). Gate: tsc + eslint clean, **399/399 vitest**. Validated at the data + unit-test layer; full consumer-layer SSR eyeball belongs to the deploy gate.
+- **Jira:** no ticket cleanly covers a dashboard-frontend population lane (GP-287 = Amazon Attribution; GP-225 = schema; GP-226 = Google connector) — left uncommented pending Paul's call on where the redesign population lanes should be tracked.
+
 ## Open / next
-- **Prototype layout pass ✅ DONE (2026-07-12); data-enablement underway.** The dashboard is the enablement roadmap now — fill the Coming/Gated scaffold source by source. **Lane 1 Amazon Traffic ✅ DONE (2026-07-13)** — `detail_page_views` is real (see that section). **Remaining lanes:** SmartScout (Gated — biggest unlock, blocked on client credentials), Amazon Ads (portfolio/bid/dates/top-of-search), Amazon Attribution (new-to-brand/long-term), Amazon DSP (reach/video), and the **product↔campaign bridge** (no new source, warehouse/query only — a good next lane, lane-(b) already scoped in the findings doc). Cleanup: Campaign tile-4 "Top Search Adj." (needs Amazon-Ads top-of-search). Still local-only — no remote deploy of the rebuild/enablement yet.
+- **2026-07-16 — per-brand Amazon Attribution ROAS shipped (TEST) + prototype parity verified.**
+  - **Per-brand attribution ROAS** ([[GP-287]]): view `WAREHOUSE_TEST_GP226.MARKETING_ATTRIBUTED_ROAS_BY_BRAND` + "Attribution by brand" section on the Google→Amazon card (commits clients `11892a66`, dashboard `e1eef8f`). Reconciles $91,667.16 sales / $63,902.30 spend (attr 100% / spend 98.9% brand-resolved). **Per-CAMPAIGN grain proven NOT defensible** (Quartile CAMPAIGNID is a re-labeled grouping — ≤50% joinable; ~42% of sales have no matching Google campaign spend); **Meta→Amazon structurally impossible** (walled garden, no history — client conversation). See [[GP-287]] + `boot-prompts/navira-attribution-brand-roas-shipped.md`.
+  - **Prototype parity verified by literal mockup diff** (2026-07-16): layout ≈ 1:1 — header/8-tile scorecard exact, **21/21 sections** byte-faithful across all 4 lenses, 60-col table byte-faithful; all 6 metric-law errors fixed; ~70% fabricated prototype fields → honest Coming/Gated. **Gap to prototype = data population** (SmartScout biggest unlock) **+ one UI feature** ("see all" expanded modals). Specs `aldc-launchpad/navira-dashboard-redesign/specs/{design-spec,gap-matrix,current-state}.md` updated. **Gap-closure roadmap:** `boot-prompts/navira-dashboard-prototype-gap-closure.md`.
+  - **Operational blocker:** the whole restyle + Option-D + GP-287 stack is on branch `feature/insite-calendar-brand-reach-region`, **43 commits ahead of `main`** — NOT on prod. Merge + single prod deploy gates all client-facing progress.
+- **Prototype layout pass ✅ DONE (2026-07-12); data-enablement underway.** The dashboard is the enablement roadmap now — fill the Coming/Gated scaffold source by source. **Lane 1 Amazon Traffic ✅ DONE (2026-07-13)** — `detail_page_views` is real (see that section). **Remaining lanes:** SmartScout (Gated — biggest unlock, blocked on client credentials), Amazon Ads (portfolio/bid/dates/top-of-search), **Amazon Attribution — GO, [[GP-287]] In Progress** (feasibility proven 2026-07-15: Google 93% tagged via Quartile, Meta N/A; build = `amazon_ads` attribution product), Amazon DSP (reach/video), and the **product↔campaign bridge** (no new source, warehouse/query only — lane-(b) already scoped in the findings doc). **Google/Meta channel grounding (Option D) shipped 2026-07-15 (commit `3eeadee`, local-only).** Cleanup: Campaign tile-4 "Top Search Adj." (needs Amazon-Ads top-of-search). Still local-only — no remote deploy of the rebuild/enablement yet.
 - **Perf follow-up:** cold first-load-per-range is ~60-90s (heavy `MARKETING_EFFICIENCY_PRODUCT`/brand views, serial queries on one connection). Materialize the heavy views or parallelize the provider's connections so the client's first hit isn't slow.
 - **Security hardening (deferred):** move prod `SNOWFLAKE_ROLE` off ACCOUNTADMIN → a least-privilege role for the service account (kept as-is this deploy to avoid breaking auth).
 
