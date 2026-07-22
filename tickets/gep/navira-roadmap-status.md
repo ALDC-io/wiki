@@ -1,13 +1,53 @@
 ---
 tags: [ticket, gep, navira, navira-roadmap, roadmap, status, hub, pbi, cogs, marketing, map-violators]
 aliases: [Navira Roadmap Status, Navira Completion Status, Navira Roadmap Hub]
-sources: [aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md, aldc-launchpad/boot-prompts/navira-roadmap-review-and-ceo-report.md]
+sources: [aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md, aldc-launchpad/boot-prompts/navira-roadmap-review-and-ceo-report.md, aldc-launchpad/boot-prompts/navira-priorities-plan-and-ticketing.md]
 created: 2026-06-16
-updated: 2026-07-08
+updated: 2026-07-21
 ---
 
 # Navira Roadmap — Completion Status Hub
 
+> **▶ 2026-07-21 (PM) — PBI/MAP lane EXECUTION progress (GP-289 / GP-291 / GP-293).**
+> Boot: `aldc-launchpad/boot-prompts/navira-pbi-lane-execution.md`.
+> - **GP-289 (YTD default) — DONE (applied, NOT deployed).** Flipped the on-load default `all → ytd`
+>   (`navira-marketing-dashboard` `src/lib/filters.ts` parser fallback + `DEFAULT_FILTERS`), plus two forced
+>   downstream fixes caught by tests: `FilterBar.tsx` URL contract (param-absence now = YTD, so "All time" is
+>   written as `range=all`; only "Clear filters" → bare URL/YTD) and `PlatformView.tsx` sales-only-entity
+>   explainer (baseline window now all-OR-default). 554/554 vitest green, tsc/lint clean. Deploy gotcha:
+>   `unstable_cache` landing key shifts `all→ytd`.
+> - **GP-291 (two-model separation) — Marketing Model SURFACED for client download + validated; Daily cleanup
+>   PLANNED (gated).** Proven offline that Marketing `2d8587b5` is a content+relationship **superset** of Daily
+>   `66151728` (40 shared tables, 358 shared measures 0 DAX diffs, relationship superset, 0 dangling). **Client
+>   download surface corrected:** clients download from **Eclipse-1** (legacy Django `eclipse-test.aldc.io` →
+>   report FILES, per-account storage `aldcteststac1c<account_id>`), NOT eclipse-2.1/Cosmos datasets (those drive
+>   dashboards). Added **"Marketing Model (Live)"** FILE report + `Marketing Model (Live).xlsx` (live PBI conn
+>   repointed to `2d8587b5`, GUID-only swap) for GEP `da8904db`; end-to-end validated (client sees it in FILES,
+>   downloads intact, connection → `2d8587b5`). Daily subtractive cleanup **not executed** — plan +
+>   Agency-filter proof in `aldc-launchpad/pbi_ops/_gp291_daily_cleanup_plan.md` (Agency↔Order Line KEEP edge →
+>   **sales-by-Agency filtering survives** removal). Superset/step-0 evidence: `pbi_ops/_gp291_evidence.md`.
+>   **MAP HELD in Daily** (both eclipse MAP dashboards AND the daily download expose MAP from `66151728`) until
+>   GP-293 migrates it. `[[project_daily_model_no_touch]]` SUPERSEDED.
+> - **GP-293 (MAP native in Eclipse-2.1) — boot prompt READY, parallel lane.**
+>   `aldc-launchpad/boot-prompts/navira-gp293-map-eclipse-native.md`. Step-0 Cosmos probe proved `2d8587b5` is
+>   **not registered** as an Eclipse-2.1 Dataset (0 records; only `66151728` = "Sales Model"/"Marshall Test").
+>   First step = register + `getInfo` sync + RBAC, then build the embeddable MAP dataView. Prerequisite for the
+>   MAP-removal half of GP-291.
+> - **Follow-ups:** (1) expired PBI embed secret `AADSTS7000222` (app `63205559-650f-4393-8e19-96508f7900cd`)
+>   breaks the embedded "Test Data Model" pane on eclipse-test (downloads unaffected; NOT ticketed). (2) Decision:
+>   repoint CEO `888d72c2` + embedded `15128c39` to `2d8587b5` vs accept-break, before Daily cleanup executes.
+>   **GP-292 (friendly names) stays AFTER GP-291.**
+>
+> **▶ 2026-07-21 — Lori call: prioritized work items + data-issue investigation.** New priority list from
+> Lori (see "## 2026-07-21" section below) → next step is a PLAN/ticketing session
+> (`aldc-launchpad/boot-prompts/navira-priorities-plan-and-ticketing.md`): ground each item in parallel,
+> reconcile conflicts (P5 agency-data-into-daily-model vs the standing `[[project_daily_model_no_touch]]`
+> decision; P3 UK ads = likely already DONE per GP-257), create comprehensive Jira tickets. Separately, a
+> data-correctness investigation (client says dashboard data "really not right", campaigns called out) found
+> **DQ-001**: PBI "Actual Cost Advertising"/TACOS/ACOS are Amazon-only while the same report shows all-channel
+> spend — a PBI relabel+rebase fix, **not** inherited by the Next.js dashboard (which computes TACoS/ACoS from
+> ad spend). Register: `aldc-launchpad/navira-dashboard-redesign/reports/navira-data-issue-register.md`.
+>
 > **▶ 2026-07-08 — Cross-channel marketing model state (read [[GP-225]] §"2026-07-08" for full detail).**
 > The unified marketing fact already spans Amazon+Google+Meta in the live TEST model; the "why isn't
 > Google/Meta in the same table" perception was the Amazon-scoped `Marketing Measures`. This session (TEST +
@@ -33,6 +73,52 @@ updated: 2026-07-08
 > **PROD promotion gated on Nicholas (G/M validation) + Heather (Lectric sales).**
 
 > **Single source of truth for "what's done, where (PROD vs UAT), and what's left"** on the Navira/[[GEP]] roadmap. Reconciles Jira status vs actual implementation. Compiled 2026-06-16 from Jira (`navira-roadmap` label, cloudId `239c1bf0-93f4-4201-95fe-ab73ce4a6eff`), the per-ticket wiki pages, the live model, and the [[processes/distributed-workflow/active/navira/README|Navira workflow hub]]. Master plan: `aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md`.
+
+## 2026-07-21 — Lori call: prioritized work items + data-issue investigation
+
+**Source:** Lori (EI Lead) call with Paul, 2026-07-21. Prioritized items (numbering per her list — no #4).
+**Next:** PLAN/ticketing session — `aldc-launchpad/boot-prompts/navira-priorities-plan-and-ticketing.md`
+(ground in parallel → reconcile → comprehensive Jira tickets, project **GP** / label `navira-roadmap`).
+
+**✅ DONE 2026-07-21 — grounded (6 parallel subagents) + tickets CREATED in S8** (assignee Paul, label
+`navira-roadmap`). Full record: `aldc-launchpad/navira-dashboard-redesign/reports/navira-lori-priorities-tickets-draft.md`.
+- **GP-289** P1 YTD default (dashboard, S) · **GP-290** P2 Definitions/Glossary + DQ-005 close (dashboard, M)
+- **GP-291** P5 two-model separation — Daily keeps Agency, sheds marketing **+ MAP** → Marketing Model
+  `2d8587b5` (PBI, M–L; **do FIRST**, blocks 292/293) · **GP-292** P6 friendly names BOTH models + DQ-001
+  relabel (PBI, M) · **GP-293** P7 MAP embeddable native-Eclipse on the Marketing Model (MAP, S–M)
+- **GP-294** DQ-003 → **environment-parity initiative** (TEST=preview-of-prod-next; full-parity + promotion-gate;
+  ADR `[[test-prod-environment-parity]]`) · **GP-295** DQ-002 campaigns (BLOCKED — client doc Fri 2026-07-24, backlog)
+- **P3 UK ads: VERIFIED LIVE + closed** (no ticket) — `Amazon UK` $6,593.25 / £4,954.86 in `MARKETING_EFFICIENCY`
+  (TEST), live feed through 2026-07-21; Lori reply drafted. GP-257/GP-252 = close-out candidates.
+- **Two-model decision UPDATED:** `[[project_daily_model_no_touch]]` SUPERSEDED — daily model now in scope for
+  subtractive clean-up (keep Agency, shed marketing+MAP). Execution boot: `aldc-launchpad/boot-prompts/navira-pbi-lane-execution.md`.
+
+| P | Item | Surface | Likely disposition | Key note / conflict |
+|---|---|---|---|---|
+| 1 | Add YTD date filter, default YTD | Next.js dashboard | build ticket | `FilterBar.tsx`/`filters.ts`/`page.tsx`; data starts 2024-05-31 |
+| 2 | Definitions / glossary | Next.js dashboard | build (design started) | one structured source → in-app Definitions tab + PDF + reconciliation harness |
+| 3 | Confirm Amazon UK ads in TEST → tell Lori | warehouse verify | **verify-and-close** | **Likely already DONE** — GP-257 integrated UK into `MARKETING_EFFICIENCY` 2026-06-25 (+$3,968 USD). Run 1 query, reply. |
+| 5 | Agency/marketing data → (daily) Data Model | PBI model | ticket (scope gated) | **⚠ CONFLICT** with `[[project_daily_model_no_touch]]` — is this the deferred two-model cutover? Reconcile intent w/ Lori. "In progress" = canonical-consolidation branch. |
+| 6 | Column mapping CAPS → PBI business names | PBI model | build ticket | In progress — `pbi_ops/navira_model_entity_review.md` + `…_marketing_model_entity_review.md` (both modified in tree) |
+| 7 | MAP Violators dashboard → embeddable dataview/table component | MAP / PBI / Eclipse | build ticket | GP-261; clarify host (PBI visual vs Eclipse-native vs Next.js); `navira_map_eclipse_native_spec.md` |
+
+**Data-correctness investigation (client: dashboard data "really not right", campaigns called out).**
+Register: `aldc-launchpad/navira-dashboard-redesign/reports/navira-data-issue-register.md`. A fuller client
+issue doc is due **Fri 2026-07-24** (expect re-scope). Findings:
+- **DQ-001 (PBI, confirmed):** `Actual - Cost - Advertising` = Amazon settlement fees only (Order Line
+  `*_ADVERTISING_FEE_CONSOLIDATED`); `TACOS`/`ACOS` inherit that Amazon-only scope while the same report
+  shows all-channel spend (Marketing Efficiency) → looks self-contradictory. **Valid original reason**
+  (legacy Amazon-P&L measures; blended ACOS is invalid — attributed sales double-count ~$12M vs ~$75M real;
+  Google/Meta had no attributed sales until 2026-06). **Fix:** relabel to "Amazon…", rebase TACOS on total
+  ad *spend* ÷ total sales, surface existing MER/per-channel ROAS; do NOT build a blended ACOS.
+- **DQ-002 (dashboard):** campaigns — awaiting a concrete example (Friday doc). `getCampaigns` top-150/channel
+  truncation is a suspect.
+- **DQ-003 (environment):** TEST-vs-PROD/source trust unproven — reconciliation pass queued (GP-281 clone-
+  staleness is the documented failure mode). Highest-leverage; needs `NAVIRA_MKT` creds.
+- **DQ-005 (dashboard):** aggregate ACoS/ROAS could double-count attributed `adSales` if the warehouse
+  provider feeds un-deduped cross-channel rows (`metrics.ts` L45–50 self-flags) — verify.
+- **QA lesson:** DQ-001 is a *semantic* defect — unit/Playwright tests can't catch it; needs a metric
+  contract (scope column) + reconciliation harness (generalize the existing `Ad Spend Integrity Check`).
 
 ## CEO-facing report
 
