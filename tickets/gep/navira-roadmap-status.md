@@ -8,6 +8,23 @@ updated: 2026-07-22
 
 # Navira Roadmap — Completion Status Hub
 
+> **▶ 2026-07-22 — Client meeting: two-model split confirmed + ad-spend-into-Daily scoped.**
+> Minutes + scope: [[processes/distributed-workflow/active/navira/meeting-2026-07-22-model-split-ad-spend|Meeting 2026-07-22]].
+> Execution boot: `aldc-launchpad/boot-prompts/navira-daily-model-marketing-efficiency-addback.md`.
+> - **Direction:** two models — cleaned **Daily *Sales* Model** (`66151728`: business-friendly names + agency +
+>   cross-channel ad-spend columns) and the separate **Marketing Model** (`2d8587b5`). Partially re-adds a minimal
+>   ad-spend layer to Daily (reversing part of GP-291's sales-only cleanup, deliberately).
+> - **Daily ad-spend ask:** UK + Google + Meta spend, USD, **by ad type** (SP/SB/SD), **per SKU** → add
+>   `Marketing Efficiency` (+ `Marketing Efficiency Product` for SKU grain), agency-wired. Nothing else.
+> - **⚠ UK=$0 reframe:** the client's "Amazon UK = $0" is on **`Actual − Cost − Advertising`** = **DQ-001**
+>   (Amazon settlement *fees* from Order Line, Amazon-only) — **NOT** the ad-spend table; adding Marketing
+>   Efficiency won't change it. That measure's relabel = **GP-292/DQ-001**. Verify report-51 binding + UK
+>   Order-Line data (Gate 0).
+> - **Attribution PAUSED** (Google/Meta → Amazon at ASIN) pending **Nicholas** defining campaign tagging (Justin
+>   briefing; client doc **Fri 2026-07-24**). [[GP-295]] BLOCKED / [[GP-287]]. **Do not build it.**
+> - **Deadline:** deliver the two models (business/sales + agency) by **EOW Fri 2026-07-24**. Owners: Lori
+>   (delivery), Heather (validation), Justin (bridge to Nicholas).
+>
 > **▶ 2026-07-22 — GP-291 Phase 1 EXECUTED + deeply validated (Daily model is now sales-only).**
 > Boot: `aldc-launchpad/boot-prompts/navira-gp291-phase2-and-gp292.md`. Full record + rollback:
 > `aldc-launchpad/pbi_ops/_gp291_phase1_deletion_record.md`.
