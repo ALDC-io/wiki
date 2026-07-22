@@ -130,6 +130,29 @@ core_api deploys like other ALDC [[Azure]] web apps / function apps: [[GitHub Ac
 
 > **Default branch changed to `eclipse-2.1` (2026-04-29).** Previously `main`. Changed after an incident where deploying from `main` caused the dummy workflow to overwrite the Actions UI. See [[eclipse-azure-deployment]] § Incident: 2026-04-29 wrong-branch deploy.
 
+### Hosting — Azure Functions, NOT an on-prem container (clears a recurring confusion)
+
+core_api runs as an **Azure Functions app** (FastAPI-in-a-Functions-container on App Service). Per env:
+
+| Env | Function App | Resource group | Cosmos it talks to |
+|---|---|---|---|
+| TEST | `aldctestfnapcore1c01` | `aldctestrsgp1c` | `aldctestcsdb1c01` (db `core`) |
+| PROD | `aldcprodfnapcore1c01` / `…c03` | `aldcprodrsgp1c` | `aldcprodcsdb1c01` |
+
+**There is NO on-prem core_api container to `docker exec` into.** `192.168.31.20` (`aldcsuptdock1c01` / Nostromo, Portainer) and `wks-agent` (`192.168.31.210`) host **connector agents + observability**, not core_api. To run core_api code against a real env you either (a) call the Function App over HTTPS with the **master token** = `base64(MASTER_CLIENT_ID:MASTER_CLIENT_SECRET)` from that app's settings (route `/v1/{function}/{option}`, anonymous authLevel, raw `Authorization` header — no `Bearer ` prefix), or (b) **run it locally / in-process** pointed at the target env by exporting that app's settings (`az functionapp config appsettings list -g <rg> -n <app> -o json`). Full local runbook: [[core-api-local-setup]].
+
+### Eclipse dataset sync (`dataset_synchronize`) — silent-empty gotcha + fix
+
+Synchronizing an Eclipse **Dataset** (`type:data_model`) over the deployed HTTP path (the Explorer ⋮ → **Synchronize**, or `POST /v1/dataset/accountsynchronize`) can **toast/return success while writing an EMPTY `definition`** (0 tables/columns/measures → the Eclipse field picker shows "Nothing found"). Two independent failure modes, both in `model_get_metadata` (`route_dataset.py`), which probes **every non-hidden column** via a `model_get_cardinality` `executeQueries` round-trip:
+
+1. **Timeout on large models** — hundreds of sequential Power BI `executeQueries` calls exceed the Azure gateway's ~230s limit, so `dataset_update` never runs. (Confirmed GP-293, model `2d8587b5` = 42 tables.)
+2. **`model_get_cardinality` returns `None`** for some column → `TypeError: '<=' not supported between 'NoneType' and 'int'` at `route_dataset.py:1280` (`if column_cardinality <= 100`) → crashes before the write. Data-dependent (only if a column's cardinality probe yields no row). (Confirmed GP-291.)
+
+**Fix / workaround (proven):**
+- **Preferred** — run core_api's own `dataset_synchronize(account_id, dataset_id)` **in-process locally** (no gateway timeout), env from `az functionapp config appsettings list`. This completes the full scan and writes the correct `definition` via `dataset_update`. Used for GP-293 (`2d8587b5` → 29 tables / 223 cols / 199 measures incl. the 4 MAP tables + 21 MAP measures). Driver: `aldc-launchpad/pbi_ops/_gp293_coreapi_local_sync.py` (import `route_dataset`, feed settings via stdin JSON; needs `pip install azure-functions twilio mailjet_rest croniter` on Python 3.11/3.13).
+- **If mode 2 (None-cardinality crash) also fires** — surgical Cosmos edit of the `dataset` doc's `definition` (remove dead entries from `tables`/`columns`/`measures` + `format_strings` + `sort_by_columns`, back up first, `upsert_item`): `aldc-launchpad/pbi_ops/_gp291_cache_surgical_edit.py`.
+- **Real fix (unticketed):** guard `None` in `model_get_cardinality`/line 1280 (default `column_dropdown=False`), and/or move the per-column cardinality probe off the synchronous request path.
+
 ## Access
 
 Paul's current state (2026-04-17):
