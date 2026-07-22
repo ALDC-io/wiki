@@ -3,11 +3,30 @@ tags: [ticket, gep, navira, navira-roadmap, roadmap, status, hub, pbi, cogs, mar
 aliases: [Navira Roadmap Status, Navira Completion Status, Navira Roadmap Hub]
 sources: [aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md, aldc-launchpad/boot-prompts/navira-roadmap-review-and-ceo-report.md, aldc-launchpad/boot-prompts/navira-priorities-plan-and-ticketing.md]
 created: 2026-06-16
-updated: 2026-07-21
+updated: 2026-07-22
 ---
 
 # Navira Roadmap — Completion Status Hub
 
+> **▶ 2026-07-22 — GP-291 Phase 1 EXECUTED + deeply validated (Daily model is now sales-only).**
+> Boot: `aldc-launchpad/boot-prompts/navira-gp291-phase2-and-gp292.md`. Full record + rollback:
+> `aldc-launchpad/pbi_ops/_gp291_phase1_deletion_record.md`.
+> - **Removed from Daily `66151728`:** 11 marketing tables + 2 transitive `Customer` measures (CAC, LTV:CAC) =
+>   100 measures. Shape **44→33 tables / 381→281 measures / 38→19 rels**. Everything removed survives in
+>   Marketing Model `2d8587b5` (proven superset).
+> - **No regression (deep 282-measure before/after DAX):** 242 byte-identical, 38 float-ULP noise, **0 real
+>   diffs**. Agency-sliced sales identical → **sales-by-Agency filtering intact**. Gross $128,350,949.78, MAP
+>   Sellers 787 / rate 20.2% unchanged. Removed marketing measures correctly error.
+> - **Gates:** Gate 2 (Eclipse) — only consumer of removed content was departed-employee **Karen Prete**'s
+>   personal dashboard (documented for reinstatement, accept-break). Gate 3 — CEO `888d72c2` (dead) + embedded
+>   `15128c39` (already broken) accept-break. Gate 4 — TMSL baselines captured.
+> - **Eclipse field-picker re-synced** (surgical cache edit; sanctioned `accountsynchronize` blocked by a
+>   pre-existing **core_api bug** — `model_get_cardinality` None → TypeError `route_dataset.py:1280`, worth a
+>   ticket). Cache 18→15 tables, 0 stale; end-to-end `dataset/request` verified.
+> - **NEXT:** GP-293 (MAP → Eclipse-native on `2d8587b5`) unblocks GP-291 **Phase 2** (remove 4 MAP tables +
+>   MAP measures from Daily). Then **GP-292** (friendly names, both models). `[[project_daily_model_no_touch]]`
+>   remains SUPERSEDED.
+>
 > **▶ 2026-07-21 (PM) — PBI/MAP lane EXECUTION progress (GP-289 / GP-291 / GP-293).**
 > Boot: `aldc-launchpad/boot-prompts/navira-pbi-lane-execution.md`.
 > - **GP-289 (YTD default) — DONE (applied, NOT deployed).** Flipped the on-load default `all → ytd`
