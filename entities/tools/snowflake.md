@@ -113,6 +113,13 @@ Steps:
 3. Verify view/table was created correctly
 4. Pause → recreate → resume any scheduled tasks that reference the changed objects
 
+### Dropping a view safely — consumer-check + rollback gotchas (2026-07-22, GP-226)
+
+Before dropping a view you believe is orphaned, prove no consumer AND make the rollback actually work. Two traps burned in during the GP-226 `_FIXED` view cleanup:
+
+- **`ACCESS_HISTORY.base_objects_accessed` MASKS secure-view names.** For a **secure** view it records only the underlying base tables (lineage is redacted), so filtering `base_objects_accessed` for the view name returns a **false "no reads."** Use `direct_objects_accessed` instead, PLUS a `QUERY_HISTORY` text-match on the `FROM` target. (Also: `ACCESS_HISTORY` has **no `role_name`** column — only `user_name`.) `OBJECT_DEPENDENCIES` catches internal view→view refs but NOT external readers (PBI/Eclipse) — you need query history for those. Discriminating consumer check = "who SELECTed this object, and does the real consumer now read the replacement?"
+- **A captured `GET_DDL` is NOT a working rollback until rehearsed.** `GET_DDL` emits **unqualified** names (needs a `USE SCHEMA` header) and a trailing `;;`. If the view's `COMMENT='…'` contains literal semicolons, a naive `split(';')` statement runner **shreds** the DDL — use the quote-aware `snowflake.connector.util_text.split_statements` (or `execute_string(remove_comments=True)`). And `CREATE OR REPLACE` **strips grants** — the rollback must re-`GRANT SELECT` to the consumer role and recreate as the original owner. **Rehearse** the rollback (recreate → verify selectable + grants + anchor → re-drop to desired end state); the rehearsal is what exposes all of the above. Reference tooling: `aldc-launchpad/warehouse_ops/_gp226_fixed_consumer_check*.py`, `_gp226_FIXED_drop_ROLLBACK.sql` (+ runner).
+
 ## Core API Integration
 
 Source: Confluence INFRA/1532067843 (ALDC Snowflake ecosystem / integration, 2025-02-05). A General Datawarehouse workflow diagram existed on the source page but is image-only and unretrieval via MCP — deferred.
