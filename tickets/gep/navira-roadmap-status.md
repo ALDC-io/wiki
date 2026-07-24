@@ -8,6 +8,41 @@ updated: 2026-07-22
 
 # Navira Roadmap — Completion Status Hub
 
+> [!warning] "GP-226" is overloaded — three distinct things (disambiguation, 2026-07-23)
+> The token **"GP-226"** appears on this page in two unrelated senses. Do not conflate them:
+> 1. **Jira GP-226** = *"Google Ads Connector (Windsor)"* — an unrelated, **Done** story (see the roadmap
+>    table row: `GP-226 | Google Ads (Windsor) | QA`).
+> 2. **`WAREHOUSE_TEST_GP226`** = the Snowflake **schema** that holds the Navira dashboard data copy. This is a
+>    real object name — it will not be renamed. Older boot-prompts and the `_gp226_*.py` scripts use "gp226" as a
+>    shorthand for *this schema / the ad-spend workstream*, **not** the Jira ticket above.
+> 3. **Jira GP-301** = *"Navira — Amazon ad spend in the marketing models"* — the **proper Jira home** for the
+>    ad-spend/ad-type/CM workstream that the dated log entries below (from 2026-07-22 onward) informally call
+>    "GP-226". Created 2026-07-23; linked to GP-291/GP-296/GP-257/GP-292.
+> **Rule of thumb:** on this page, "GP-226 EXECUTED / ad spend / CM fix" = workstream **GP-301**; the schema name
+> `WAREHOUSE_TEST_GP226` stays verbatim; the roadmap-table `GP-226` row = the unrelated Google Ads connector.
+> Historical dated entries below are left as-written (record of what was believed at the time).
+
+> **▶ 2026-07-22 (PM) — GP-226 EXECUTED: cross-channel ad spend + ad-type into BOTH models + view consolidation.**
+> Handoff/boot: `aldc-launchpad/boot-prompts/navira-gp226-adspend-consolidation-handoff.md`. TEST only;
+> DAX-validated on both models; **rendered-surface validation still pending** (top next step).
+> - **Ad spend + ad-type in both models:** Daily `66151728` had `Marketing Efficiency` (+Product) **re-added**
+>   (reversing GP-291's removal) with `SPEND_USD_AMAZON_SP/SB/SD` ad-type split + 3 spend-by-ad-type measures;
+>   29 pure-analytics measures HIDDEN (spend+margin visible). Marketing Model `2d8587b5` gained the same ad-type
+>   cols/measures. Both wired agency+date.
+> - **UK source parity (DQ-006 fixed):** `MARKETING_FCT_ACTIVITY_PREPROD` Branch 8 repointed from a stale sandbox
+>   copy (frozen 2026-06-09, £2,982) → the live `AMAZON_ADS` SP feed (UK profile). **UK ad spend $3,968 → $6,602.**
+> - **Contribution Margin fix (DQ-007):** the canonical efficiency view lacked the `ENTITY_CODE='NAVIRA'` filter
+>   → Lectric ($0 COGS) leaked into Navira CM (**$40.61M → correct $37.89M**). **Consolidated** the duplicate
+>   `..._FIXED` pair into ONE canonical `REPORT_COMMON.MARKETING_EFFICIENCY(_MARGIN)` both models read;
+>   `_FIXED` now orphaned (verified droppable — no other consumer). DQ-001 unchanged (still GP-292: the
+>   "Actual − Cost − Advertising" = Amazon settlement *fees*, Amazon-only; UK $0 is expected there).
+> - **Validated (DAX, both models identical):** Navira CM $37,894,667 · Lectric CM BLANK · UK $6,602 ·
+>   SP+SB+SD == SPEND_USD_AMAZON · sales anchors unchanged. Warehouse views version-controlled: clients **PR #493**
+>   (branch `feature/paulrussell/gp226-uk-source-parity-adtype`). Lineage: [[navira-daily-model-lineage]].
+> - **NEXT:** rendered-surface validation (ours — build a small PBI verify report or open the live download);
+>   drop orphaned `_FIXED`; **GP-292** (friendly names + DQ-001 relabel) → boot
+>   `aldc-launchpad/boot-prompts/navira-gp292-friendly-names-and-dq001-relabel.md`.
+>
 > **▶ 2026-07-22 — Client meeting: two-model split confirmed + ad-spend-into-Daily scoped.**
 > Minutes + scope: [[processes/distributed-workflow/active/navira/meeting-2026-07-22-model-split-ad-spend|Meeting 2026-07-22]].
 > Execution boot: `aldc-launchpad/boot-prompts/navira-daily-model-marketing-efficiency-addback.md`.
@@ -24,6 +59,20 @@ updated: 2026-07-22
 >   briefing; client doc **Fri 2026-07-24**). [[GP-295]] BLOCKED / [[GP-287]]. **Do not build it.**
 > - **Deadline:** deliver the two models (business/sales + agency) by **EOW Fri 2026-07-24**. Owners: Lori
 >   (delivery), Heather (validation), Justin (bridge to Nicholas).
+>
+> **▶ 2026-07-22 — ROADMAP FLAG: no Google/Meta → Amazon sales-attribution mechanism (needs Nicholas/CMO).**
+> Today there is **no mechanism to attribute Amazon sales back to Google Ads / Meta Ads spend** — we can report
+> per-channel spend and totals, but cannot link a Google/Meta ad to the Amazon sale it drove.
+> - **Action:** Paul + Justin to speak with **Nicholas (CMO)** on what Navira/GEP must do *on their end*
+>   (campaign tagging / UTM / landing-page attribution / click-ID capture) so Google/Meta ad-driven sales can be
+>   tied to Amazon.
+> - **Historical:** almost certainly **not** back-attributable (no tagging existed on past clicks; can't
+>   reconstruct).
+> - **Going forward:** likely **implementable** once a tagging/tracking scheme is agreed — this is the lever.
+> - **Deliverable:** prepare **a few options to present to the client** (what each requires of them, what it
+>   can/can't attribute, effort/level).
+> - Related: [[GP-295]] (campaign tagging, BLOCKED — client doc Fri 2026-07-24) · [[GP-287]] (Amazon Attribution
+>   feed). Out of scope for the current ad-spend-into-Daily work.
 >
 > **▶ 2026-07-22 — GP-291 Phase 1 EXECUTED + deeply validated (Daily model is now sales-only).**
 > Boot: `aldc-launchpad/boot-prompts/navira-gp291-phase2-and-gp292.md`. Full record + rollback:
