@@ -39,6 +39,16 @@ When you run into a gap or bug that isn't in scope for your current work:
 
 ## Open
 
+### Eclipse embedded reports down — expired Azure AD client secret — eclipse (TEST)
+
+- **Surfaced:** `2026-07-24` during [[GP-301]] rendered-evidence capture (eclipse-test.aldc.io report surface)
+- **Category:** bug / infrastructure
+- **Priority:** high (blocks all Eclipse embedded Power BI report rendering on TEST)
+- **Description:** The Eclipse embedded report surface (e.g. `eclipse-test.aldc.io/report/51/`, the "Test Data Model" report) fails to load data with `AADSTS7000222: The provided client secret keys for app '63205559-650f-4393-8e19-96508f7900cd' are expired`. Any embedded PBI report that authenticates via this service-principal app is affected.
+- **Root cause / evidence:** Azure AD app registration `63205559-650f-4393-8e19-96508f7900cd` client secret expired (error timestamp `2026-07-24 19:13:57Z`, Trace ID `16c84c91-069f-4a0e-a817-f621caa43e00`). The Eclipse "Data Model (Live)" Excel-desktop connection uses the user's own ALDC tenant sign-in and is unaffected — this is specifically the embedded-report service principal.
+- **Proposed fix:** Create a new client secret (or certificate credential) for app `63205559-…` in the Azure portal, update the Eclipse/core_api config that holds it, redeploy/restart. Consider certificate credentials + an expiry monitor so this doesn't silently recur.
+- **Estimated effort:** S
+
 ### Eclipse repo Prettier debt blocks the pre-commit hook — eclipse (repo)
 
 - **Surfaced:** `2026-06-12` during [[eclipse-2.1-editor-performance]] (F1 debounce fix)
