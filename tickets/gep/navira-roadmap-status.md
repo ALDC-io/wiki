@@ -22,6 +22,22 @@ updated: 2026-07-22
 > `WAREHOUSE_TEST_GP226` stays verbatim; the roadmap-table `GP-226` row = the unrelated Google Ads connector.
 > Historical dated entries below are left as-written (record of what was believed at the time).
 
+> **▶ 2026-07-24 — GP-292 DONE (captions applied to both models); GP-301 unblocked, stays in QA.**
+> GP-292 (friendly-name captions) **applied and moved to Done**. Commit `9b06091` on
+> `feature/lectric-scheduled-connector` (⚠ follow-ups `5259d57` on `feature/gp298-brinno-comparison-columns` —
+> **branch split, reconcile before PROD**). Applied via `pbi_ops/_gp292_apply_renames.py` (by-name TOM,
+> in-transaction reference-rewrite, atomic + Calculate); rollbacks + evidence in `docs/evidence/gp292/`.
+> - **Applied:** Daily `66151728` = 42 renames + 4 DQ-001 relabels + 5 hides; Marketing `2d8587b5` = 110 + 6 + 8.
+>   **0 visible raw ALL-CAPS columns.** `Customer Cohort` hidden on Daily (Marketing-model entity). Ad-fee family
+>   reads "Amazon Advertising Fees (settlement / …)".
+> - **Validated (DAX + Paul's visual inspection):** `SP+SB+SD == Spend-Amazon` exact · CM $37.97M · Lectric CM
+>   BLANK · COGS coverage 77.83% · **agency filter on Daily** splits Order Line **Navira $126.05M / Lectric
+>   $2.74M / total $128.79M** (this satisfies GP-301 Goal 2 at the query layer).
+> - **GP-301 status:** captions prerequisite now cleared. **Stays in QA** — remaining = rendered-layer validation
+>   on the Eclipse "Data Model (Live)" surface (UK ad spend $6,602 + agency slice) + Navira sign-off + **gated PROD
+>   promotion** (warehouse views + model changes). Boot:
+>   `aldc-launchpad/boot-prompts/navira-gp301-finish-daily-uk-agency-and-promote.md`.
+
 > **▶ 2026-07-23 (PM) — GP-301 created + labeling/coordination pass + finishing plan (ad-spend workstream).**
 > The Amazon ad-spend/ad-type/CM workstream got its proper Jira home: **GP-301** (was informally "GP-226" = the
 > schema). TEST only; no model writes this session. Boot for finishing:
