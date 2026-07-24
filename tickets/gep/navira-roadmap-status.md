@@ -22,6 +22,25 @@ updated: 2026-07-22
 > `WAREHOUSE_TEST_GP226` stays verbatim; the roadmap-table `GP-226` row = the unrelated Google Ads connector.
 > Historical dated entries below are left as-written (record of what was believed at the time).
 
+> **▶ 2026-07-23 (PM) — GP-301 created + labeling/coordination pass + finishing plan (ad-spend workstream).**
+> The Amazon ad-spend/ad-type/CM workstream got its proper Jira home: **GP-301** (was informally "GP-226" = the
+> schema). TEST only; no model writes this session. Boot for finishing:
+> `aldc-launchpad/boot-prompts/navira-gp301-finish-daily-uk-agency-and-promote.md`.
+> - **Ad-fee label family aligned:** `Actual − Cost − Advertising` (total + Brand/No-Sale/Product) → "Amazon
+>   Advertising Fees (settlement / …)" at the dictionary **builder** (source of truth), which had drifted from the
+>   hand-edited JSON and would have silently reverted the label on rebuild. 445/445 covered. Commit `f5a43ed`.
+> - **GP-292 coordination:** GP-292 (caption apply) is on the same two models + branch → its boot now carries an
+>   overlap block: **re-dump before applying** (this workstream landed 2 USD measure redefs + a new
+>   `MARKETPLACE_KEY_XREF` calc key/relationship after GP-292's baselines). Commit `5fc58cd`.
+> - **★ Key finding for finishing:** BOTH client asks are **already built at the Daily-model layer** (proven from
+>   baseline `Data_Model_66151728_20260723T025351Z`): UK ad spend flows via visible `Marketing Efficiency` spend
+>   cols; the `Agency` dim is related to **both `Order Line` (sales) AND `Marketing Efficiency` (ad spend)**, so an
+>   agency pivot-filter drives the whole model. → Finishing = **GP-292 captions first → rendered-layer validation
+>   → Navira sign-off (2026-07-24) → gated PROD promotion**, NOT a build. Agency = exposed field for pivot
+>   filtering (no pre-built slicer). Jira GP-301 status comment posted.
+> - **Open:** Heather — did UK run Sponsored Brands/Display? (UK ad spend currently = Sponsored Products only;
+>   yes → Option B connect feeds). Draft ready: `aldc-launchpad/dm-heather-uk-sb-sd-question.md`.
+
 > **▶ 2026-07-22 (PM) — GP-226 EXECUTED: cross-channel ad spend + ad-type into BOTH models + view consolidation.**
 > Handoff/boot: `aldc-launchpad/boot-prompts/navira-gp226-adspend-consolidation-handoff.md`. TEST only;
 > DAX-validated on both models; **rendered-surface validation still pending** (top next step).
