@@ -3,7 +3,7 @@ tags: [ticket, gep, navira, navira-roadmap, roadmap, status, hub, pbi, cogs, mar
 aliases: [Navira Roadmap Status, Navira Completion Status, Navira Roadmap Hub]
 sources: [aldc-launchpad/boot-prompts/navira-roadmap-master-plan.md, aldc-launchpad/boot-prompts/navira-roadmap-review-and-ceo-report.md, aldc-launchpad/boot-prompts/navira-priorities-plan-and-ticketing.md]
 created: 2026-06-16
-updated: 2026-07-22
+updated: 2026-07-25
 ---
 
 # Navira Roadmap — Completion Status Hub
@@ -21,6 +21,42 @@ updated: 2026-07-22
 > **Rule of thumb:** on this page, "GP-226 EXECUTED / ad spend / CM fix" = workstream **GP-301**; the schema name
 > `WAREHOUSE_TEST_GP226` stays verbatim; the roadmap-table `GP-226` row = the unrelated Google Ads connector.
 > Historical dated entries below are left as-written (record of what was believed at the time).
+
+> **▶ 2026-07-25 — GP-291 DONE (scope amended: MAP stays in BOTH models); GP-301 re-verified on TEST + relabel settled.**
+> - **DECISION (Paul): MAP is RETAINED in both PBI models. GP-291 Phase 2 is CANCELLED, not deferred.** Confirmed
+>   from fresh TMSL baselines: Daily `66151728` and Marketing `2d8587b5` each carry the same **4 MAP tables + 21
+>   MAP measures**. **Why:** every **prod** MAP consumer reads the **prod Data Model `74a529b3`** (the sales
+>   model) — 19 per-client dashboards, both internal dashboards, and the GP-293 Brinno pilot embedded 2026-07-24.
+>   Dropping MAP from TEST Daily would break TEST↔PROD structural parity and force a future promotion to re-add
+>   MAP or repoint 20+ Eclipse objects. Eclipse-1 "Data Model (Live)" also keeps its MAP columns as a result.
+> - ⚠ **Accepted cost:** MAP now exists twice — any MAP change must be applied to **both** models or they drift
+>   (GP-292 already hit this). A MAP parity check across the two models is recommended and not yet built.
+> - **Daily is NOT sales-only** — it also deliberately retains the canonical `Marketing Efficiency` layer (47
+>   measures, re-added by the GP-226/GP-301 ad-spend work), `Agency`, `Customer`, `Customer Cohort`. The
+>   2026-07-22 entry below calling Daily "sales-only" is **superseded**.
+> - **DEFECT found + fixed:** `Marketing Efficiency`[`Attributed Sales (platform-bound)`] in Daily referenced
+>   `'Marketing Activity'` — a table Phase 1 removed → invalid DAX that would ERROR if evaluated. **Provenance:
+>   NOT Phase-1 residue** — Phase 1 removed ME entirely and its dangling scan was clean; the **GP-226/GP-301 ME
+>   re-add** reintroduced it. Lesson: the *re-add* path needs a dangling check, not just the removal path. Hidden
+>   / QA-internal / no callers → removed from Daily; the valid copy in `2d8587b5` untouched. Daily tables 35→35,
+>   measures 332→331, **0 dangling refs**. Tool `pbi_ops/_gp291_fix_dangling_measure.py`, commit `71f6d4f`.
+> - **GP-291 no-regression (DAX):** Navira $126,175,646.28 / 2,837,587 orders; Lectric $2,744,998.00 / 4,667;
+>   **Company Total $128,920,644.28 penny-exact** to the sum (+0.10% vs 2026-07-24 = one day of sales). Retained
+>   ME measures evaluate (`Spend (USD)` 2,751,938.82; `MER` 30.907). **GP-291 → Done**, summary amended.
+> - **GP-301 re-verified on TEST — all claims hold.** UK spend **$6,603.89** vs UK fees **$0.00**; US 1.2% / CA
+>   1.1% fee-vs-spend gap; ad-type split SP 2,276,663.44 + SB 223,522.39 + SD 3,374.90 = **2,503,560.72** =
+>   `Spend - Amazon` penny-exact; marketplace slicer reaches the measure; UK in USD not GBP; Navira CM
+>   **$37,969,987.25** (49.06%); Lectric CM blank (known COGS gap). Totals: spend $2,503,560.72 vs fees
+>   $2,526,178.56.
+> - **RELABEL SETTLED (Paul):** `Actual - Cost - Advertising` → `Amazon Advertising Fees (settlement)` **shipped**;
+>   `Spend - Amazon` → `Amazon Ad Spend` **DROPPED** — `Spend - Amazon`/`- Google`/`- Meta` is a deliberate family
+>   and renaming only the Amazon member breaks the symmetry. **Option C is complete as delivered.**
+> - **GP-301 stays in QA** — blocked only on two *client* answers: (1) which figure is *the* advertising metric
+>   (recommend Ad Spend for marketing efficiency, fees for finance reconciliation); (2) did Navira run **UK
+>   Sponsored Brands / Display**? If yes, UK spend is understated (Option B); if no, UK coverage is complete.
+> - Client discussion PDF + settlement-vs-spend image **are attached to GP-301** (uploaded 2026-07-23); its
+>   description previously said "to be attached", which had been mis-read as missing. Repo copies in
+>   `aldc-launchpad/docs/evidence/gp226/`, byte-identical.
 
 > **▶ 2026-07-24 — GP-292 DONE (captions applied to both models); GP-301 unblocked, stays in QA.**
 > GP-292 (friendly-name captions) **applied and moved to Done**. Commit `9b06091` on
@@ -203,8 +239,10 @@ updated: 2026-07-22
 **✅ DONE 2026-07-21 — grounded (6 parallel subagents) + tickets CREATED in S8** (assignee Paul, label
 `navira-roadmap`). Full record: `aldc-launchpad/navira-dashboard-redesign/reports/navira-lori-priorities-tickets-draft.md`.
 - **GP-289** P1 YTD default (dashboard, S) · **GP-290** P2 Definitions/Glossary + DQ-005 close (dashboard, M)
-- **GP-291** P5 two-model separation — Daily keeps Agency, sheds marketing **+ MAP** → Marketing Model
-  `2d8587b5` (PBI, M–L; **do FIRST**, blocks 292/293) · **GP-292** P6 friendly names BOTH models + DQ-001
+- **GP-291** P5 two-model separation — **DONE 2026-07-25.** Daily sheds the **11 marketing source tables**;
+  **keeps Agency, the canonical Marketing Efficiency layer, Customer, Customer Cohort AND MAP.** The
+  original "sheds marketing **+ MAP** → Marketing Model `2d8587b5`" scope was **amended** — MAP Phase 2 is
+  CANCELLED (see the 2026-07-25 log entry) (PBI, M–L; blocked 292/293) · **GP-292** P6 friendly names BOTH models + DQ-001
   relabel (PBI, M) · **GP-293** P7 MAP embeddable native-Eclipse on the Marketing Model (MAP, S–M)
 - **GP-294** DQ-003 → **environment-parity initiative** (TEST=preview-of-prod-next; full-parity + promotion-gate;
   ADR `[[test-prod-environment-parity]]`) · **GP-295** DQ-002 campaigns (BLOCKED — client doc Fri 2026-07-24, backlog)
