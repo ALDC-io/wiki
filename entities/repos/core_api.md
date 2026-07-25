@@ -3,7 +3,7 @@ tags: [entity, repo, core-api, aldc, eclipse, api, azure-functions]
 aliases: [core_api, core-api, core api]
 sources: [daily/2026-04-17.md, ~/.claude/CLAUDE.md, CORE/1467940876, CORE/1048248321, CORE/238387201, CORE/7929869, CORE/886603777, CORE/885620774, CORE/909737996, CORE/892796955, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-17
-updated: 2026-06-11
+updated: 2026-07-24
 ---
 
 # core_api
@@ -126,7 +126,12 @@ Most endpoints have converged, but if a bug is reported against an endpoint only
 
 core_api deploys like other ALDC [[Azure]] web apps / function apps: [[GitHub Actions]] builds the container and pushes it to the staging slot, then a manual **swap** in the Azure Portal points production traffic at the new slot. See [[eclipse-azure-deployment]] for the full flow (same pattern as Eclipse) and [[GitHub Actions]] for the workflow-level detail.
 
-> **⚠ No real deploy workflow (as of 2026-04-29).** All three GitHub Actions deploy workflows in `ALDC-io/core_api` are **dummy stubs** (just echo statements): `deploy_az_webapp_container.yaml`, `build_docker_image.yaml`, `deploy_on_premise.yaml`. There is no `deploy_az_webapp.yaml` equivalent. The backend deploy mechanism needs to be clarified — it may use Azure Portal Deployment Center, `az webapp deploy` CLI, or manual SCM push.
+> **✅ Real deploy workflow EXISTS (corrected 2026-07-23; the 2026-04-29 "dummy stubs" note was stale).**
+> `deploy_az_webapp_container.yaml` = **"Deploy to Azure (Staging)"** (workflow id `192556804`) is the working
+> container deploy: `rollback-check → build → deploy` to the `stage` slot of `aldcprodwbapcore1c01`. Manual dispatch
+> `gh workflow run 192556804 --repo ALDC-io/core_api --ref eclipse-2.1 -f force_deploy=true`, then a **slot swap**
+> to prod. Full procedure + gotchas (push-trigger fails by design; `force_deploy` needed; mutable-tag rollback;
+> slot-specific `jwt_secret`) in [[eclipse-azure-deployment]] § Pitfalls. (`deploy_on_premise.yaml` remains a stub.)
 
 > **Default branch changed to `eclipse-2.1` (2026-04-29).** Previously `main`. Changed after an incident where deploying from `main` caused the dummy workflow to overwrite the Actions UI. See [[eclipse-azure-deployment]] § Incident: 2026-04-29 wrong-branch deploy.
 
@@ -153,6 +158,186 @@ Synchronizing an Eclipse **Dataset** (`type:data_model`) over the deployed HTTP 
 - **If mode 2 (None-cardinality crash) also fires** — surgical Cosmos edit of the `dataset` doc's `definition` (remove dead entries from `tables`/`columns`/`measures` + `format_strings` + `sort_by_columns`, back up first, `upsert_item`): `aldc-launchpad/pbi_ops/_gp291_cache_surgical_edit.py`.
 - **Mode 2 (None crash) — FIXED 2026-07-22, core_api PR [#246](https://github.com/ALDC-io/core_api/pull/246).** Guard added at `route_dataset.py:1280`: `if column_cardinality is not None and column_cardinality <= 100`. Validated in-process against TEST `da8904db` "Sales Model" (e80ffd34) + "Marshall Test" (0025d4b4), PBI `66151728` → 17 tables / 116 cols / 86 measures each, no crash. Deploy: merge main → container build → stage slot → swap to prod (rollback = swap back / revert single commit).
 - **Mode 1 (gateway ~230s timeout) — STILL OPEN (logged, not ticketed per Paul 2026-07-22).** The fix above does NOT address it: for large models the per-column cardinality scan on the HTTP sync path can still exceed the Azure gateway ~230s limit. **Mitigations to pursue:** batch the cardinality probes into fewer `executeQueries` calls, raise the function/gateway timeout, or move the per-column scan off the synchronous request path (async). Until then, use the in-process local runner for large-model syncs.
+
+### Eclipse dataView/dashboard data — the `capacity_options.dataset_name` name-resolution trap
+
+**Symptom:** an Eclipse-2.1 dashboard/dataView renders its *structure* (layout, KPI cards, filters, titles) but **every visual shows "Error loading data"** — and there is **no client-side network/console error** (the data fetch is server-side RSC → core backend → PBI, so it never appears in the browser network tab).
+
+**Root cause (GP-293, 2026-07-22):** the Eclipse data path resolves the target PBI model **by NAME**, using the `dataset` doc's `capacity_options.dataset_name` — **not** only `capacity_options.dataset_id`. If the stored name is stale/wrong (model was renamed, or the Eclipse dataset was created with a placeholder name), name resolution returns **HTTP 404 `PowerBIEntityNotFound`** and all `executeQueries` fail. GUID-based paths (the getInfo `dataset_synchronize` scan, and delegated `PBIClient.execute_dax` by GUID) **still succeed and mask the bug** — so the field picker/schema look fine while every dashboard visual is blank.
+
+**Diagnosis that nails it:** connect via XMLA **by name** (`XmlaClient(ws, name, token)`) — a mismatch throws `PowerBIEntityNotFound (404)` at "Getting the PBI shared database name". Cross-check the model's live name with `PBIClient.list_datasets(ws)` vs `capacity_options.dataset_name`. A/B: repoint → error; correct the name → renders.
+
+**Fix:** set `capacity_options.dataset_name` on the Cosmos `dataset` doc to the model's **exact** live workspace name, then re-load. Tooling: `aldc-launchpad/pbi_ops/_gp293_fix_dataset_name.py` (verify/fix/rollback). **Rule: whenever creating or repointing an Eclipse dataset, verify `capacity_options.dataset_name` == the model's live PBI name, not just the GUID.** (GP-293 example: doc said `"Navira Marketing Model (Test)"`; live name was `"Marketing Model"`.)
+
+## Eclipse-2.1 Explorer backend — code location & branch grounding (READ FIRST before touching Explorer)
+
+**The Explorer feature** (Datasets / DataViews / Visuals / Dashboards / Catalog, plus RBAC and per-client data
+isolation) for the **eclipse-2.1** product (`eclipse.analyticlabs.io` + its staging slot) is served by **`core_api`
+ON THE `eclipse-2.1` BRANCH — and ONLY that branch.** `main` and the various `fix/*` branches (e.g.
+`fix/dataset-sync-cardinality-none-guard`) **do not contain the Explorer backend at all** — a grep for
+`explorer_*` / `rbac_role_assignment` on them returns nothing, which is misleading.
+
+On `core_api@eclipse-2.1` the relevant code is:
+- `v1/route_explorer.py` — Azure-Functions handlers for dashboards/widgets/catalog; reads the Cosmos
+  `container_explorer_visual` / `explorer_data_view` / `explorer_dashboard` containers.
+- `api/dashboards/`, `api/visuals/`, `api/data_views/` (`router.py` + `db.py` + `schema.py`) — newer
+  FastAPI-style modules.
+- `api/rbac/role_assignments/` + `api/permission_checker.py` — RBAC / `rbac_role_assignment`.
+- `api/power_bi_model_client.py` and `v1/route_dataset.py` (`model_query`) — the PBI `executeQueries` path
+  (fixed-pool `impersonatedUserName`, see the dataset-sync section above).
+- The **frontend** is the **`eclipse` repo on its own `eclipse-2.1` branch** (Next 15 App Router; proxies to
+  this backend). Both repos have an `eclipse-2.1` branch — use it for both.
+
+**⚠ Do NOT analyze `eclipse_exp` for eclipse-2.1 questions.** `eclipse_exp` (FastAPI + **Postgres**, ACA,
+`eclipse-exp.aldc.io`) is a *separate next-gen successor for NEW tenants* — different storage, different
+deployment. Its route shapes look nearly identical to Explorer's, which makes it an easy wrong turn. The
+eclipse-2.1 product (Navira/GEP, GP-261/GP-293) stores Explorer content in **Cosmos** via `core_api@eclipse-2.1`,
+**not** in eclipse_exp's Postgres. (The `entities/repos/eclipse.md` page is flagged stale and frames eclipse_exp
+as "the successor," which contributed to this confusion.)
+
+**Grounding rule:** before investigating any eclipse-2.1 Explorer behaviour (data isolation, filter enforcement,
+RBAC, the query path), `git grep`/read the **`eclipse-2.1` ref of BOTH `eclipse` and `core_api`** — not whatever
+branch happens to be checked out. Mis-grounding here (analysing `eclipse_exp` + the wrong `core_api` branch) cost
+significant time in the GP-293 session (2026-07-22). Confirm the branch first; the wiki + your own session
+evidence (Cosmos containers, `route_dataset.model_query`) point to `core_api@eclipse-2.1` — trust that over
+route-shape inference.
+
+### Explorer per-client data isolation — SHIPPED (GP-299, prod 2026-07-23)
+
+> **✅ FIXED + DEPLOYED TO PROD 2026-07-23 (GP-299, PR [#247](https://github.com/ALDC-io/core_api/pull/247)).**
+> Option A implemented: `get_dashboard_visual_data` now passes `dashboard.filters`; `request_visual_data`
+> sanitizes the request **at entry** (via `visuals.lib.enforce_locked_filters`) so **every** query path (default,
+> previous-period, YoY, table-comparison) inherits the enforced scope. Enforcement covers **both `mode:locked`
+> AND `mode:hidden`** filters (Eclipse's `hidden` mode also carries a fixed `lockedValue` — `hasLockedValue =
+> Locked || Hidden` in the frontend — so it was bypassable the same way). Hardening: **case-insensitive** field
+> matching (DAX names are case-insensitive, so `brand` vs `Brand` can't slip the strip); an **inclusive-operator
+> whitelist** in `dashboards.lib.locked_filter_conditions` (only `Equals`/`IsOneOf` may be locked — a `NotEquals`
+> lock would *widen* scope); and **fail-closed** (raise `CoreApiException(500)`, never skip) on a
+> misconfigured/unparseable lock. 26 tests. Deployed via **stage→prod slot swap** on `aldcprodwbapcore1c01`
+> (Production 2). `jwt_secret` is slot-specific, so a stage-minted token 401s on prod (expected). GP-300 dep upgrade
+> shipped in the same swap. **The finding below is retained for context; it describes the pre-fix state.**
+>
+> **Not yet done (follow-ups):** quote/whitespace field-drift normalization (casefold handles casing only);
+> dashboard write-time validation of locked-filter fields against dataset column locators; live crafted-request +
+> Bypass-B 403 proof with a real client-scoped user (needs the first client tenant). Direct visual/dataView
+> endpoints remain guarded by `Visual_View`/`DataView_View` + grant discipline (no locked-filter enforcement there —
+> a dataView isn't bound to one dashboard's lock).
+
+#### ⭐ A visual can scope ITSELF — `visual.options.filters` is server-enforced and merge-only (GP-293, 2026-07-24)
+
+**The most reusable finding in this section: the answer to "how do I put a client-scoped visual on a dashboard
+whose lock can't reach that grain?" — and it needs no code change.**
+
+- **`explorer_visual.options.filters` is applied SERVER-SIDE and MERGED with (never replaced by) the client
+  request body.** So a per-client clone of a visual can carry `options.filters = [Brand[Brand]=<client>]` and be
+  correctly scoped **independently of the dashboard's locked filter**.
+- **Proven by a hardened tamper battery** (throwaway `Product[Default Vendor]`-locked dashboard, then repeated
+  live on `a4ec0d1d`): `filters=[]` → the client's own rows; `Brand equals <other client>` → **0 rows** (merge,
+  cannot widen); `Brand is_one_of [own, other]` → own rows only (intersection); `Brand not_equals own` →
+  **HTTP 400** (GP-299's inclusive-operator whitelist); tampered on **every** query path (`default`,
+  `expanded-timeframe`, `previous-period`, `year-over-year`, `table-comparison`) → 0 rows; holds under 7d/90d/205d
+  timeframe overrides. A client can only ever **narrow to empty**, never widen.
+- **This corrects an earlier conclusion on this page.** We reasoned that because `explorer_data_view` docs have
+  **no filter field**, row scoping could come *only* from the dashboard locked filter (GP-299) or RLS. The
+  dataView half is true; the conclusion was not — the **visual** layer was never checked. The lead that cracked
+  it: `SELECT * FROM explorer_visual` found `506db98c` already carrying `'Account'[Account Name]='BCBSM'`.
+- **Also disproved: an injected dashboard lock does NOT necessarily break a foreign-grain visual.** Components
+  with `ignore_global_filters` **true and false** rendered identically on a vendor-locked dashboard, because the
+  MAP seller table groups on the **terminal hub** — so the `Product[Default Vendor]` predicate is **inert**, not
+  fatal. The "single value … cannot be determined" 500s were specific to the **island table** and to grouping the
+  **by-brand** table. Don't over-generalise that failure.
+- **Cost of the pattern:** one visual clone per client — loses "edit once, all inherit", so a column change
+  becomes N scripted edits. The `dax_query_builder` `FILTER(ALL())` change is therefore an **optimisation, not a
+  prerequisite**.
+- **Comparison columns:** Eclipse auto-appends `Prev %`/`YoY %` per measure. `options.show_previous_period=False`
+  + `options.comparison_measures=[]` removes them (mechanism established by GP-298).
+- **Ops lesson:** a visual-data payload exposes **`lastRefreshedAt`**. A model refresh mid-session changes
+  fingerprints and *looks* like a regression from your edit — A/B by rolling the change out and re-measuring
+  under the same refresh generation before concluding anything.
+- Tooling: `aldc-launchpad/eclipse_ops/_gp293_optionC_test.py` (experiment; creates only new docs, full
+  rollback), `_gp293_pilot_embed_brinno.py` (`create`/`embed`/`verify`/`rollback`). Evidence:
+  `aldc-launchpad/docs/evidence/gp293.md` §3d.
+
+#### GP-293 — embeddable MAP component: what scopes vs. what doesn't (2026-07-24)
+
+Investigating a **reusable MAP Violators component droppable into any client dashboard** surfaced a hard
+interaction between GP-299's enforcement and Eclipse's DAX builder. Durable findings (read with the
+self-scoping finding above, which supersedes the "only three options" framing below):
+
+- **The per-client MAP fan-out ALREADY WORKS and is GP-299-safe.** The 19 dedicated **"MAP Violators —
+  <Client>"** dashboards (prod Cosmos `aldcprodcsdb1c01`) each lock on **`Brand[Brand]`** and share ONE visual
+  **`63d41094`** ("MAP Violators — Sellers", dataView `44388094`). Verified live: Brinno=6, Rain Bird=64,
+  Slobproof=4, Dalen=52 sellers — each shows only its own sellers, **stable under crafted-filter tampering**
+  (GP-299 strips the tampered Brand filter, re-injects the client's). This *is* the working reusable component.
+- **Why it works — the pattern:** display columns from the **terminal seller-hub** `Navira MAP Violators`
+  (no outgoing relationship), numbers from the **daily measures** (`MAP Daily Violations`, etc.) on
+  `MAP Violators Daily` (**related to `Brand`**). A `Brand[Brand]` lock cascades Brand→Daily and scopes cleanly.
+- **The catch — combined dashboards that lock on `Product[Default Vendor]` (e.g. "Brinno Dashboard"
+  `a4ec0d1d`) can't embed a scoped MAP visual as a pure data-model change.** GP-299 injects the dashboard's
+  locked filter into **every** visual, and `api/dax_query_builder.py` renders it as
+  `SUMMARIZECOLUMNS(<group cols>, KEEPFILTERS(<simple predicate>), <measure>)`. A `Product[Default Vendor]`
+  filter cannot reach the Brand-grained MAP data single-direction, and the **bare simple-predicate
+  `KEEPFILTERS`** throws PBI 400 **"a single value for column … cannot be determined"** (→ core_api 500 "Data
+  source returned no response") on any MAP table that isn't the terminal hub. Proven via core_api's exact
+  impersonated `executeQueries` (imperson. user from capacity `87888186`).
+- **The lever:** the **table-form** `KEEPFILTERS(FILTER(ALL('T'[Col]),'T'[Col]=v))` **does** work where the bare
+  predicate fails. Options considered at the time: **(1)** standardize embedding dashboards to a `Brand[Brand]`
+  (or conformed client-dimension) lock → the existing component drops in, no code change (tradeoff: sales scopes
+  by brand not vendor, ~1.7% for Brinno — **ruled out for combined dashboards** for that reason);
+  **(2)** change `dax_query_builder` to emit the `FILTER(ALL())` form for **locked** filters → keeps sales on
+  vendor **and** keeps ONE shared component; **(3)** RLS (applies as table-`FILTER`, dodges the trap entirely —
+  heaviest). ⭐ **Option (4), shipped instead — the self-scoped visual above.** It required no code change, left
+  sales on vendor, and is what put MAP on Brinno's combined dashboard. (2) remains worthwhile purely to avoid
+  per-client clones.
+- **Dead ends (do not retry):** bidi `Product↔Brand` (breaks `SUMMARIZECOLUMNS` on the by-brand table; hub+daily
+  query under bidi timed out >2min) — though it IS sales/COGS-neutral; a disconnected/connected **island** table
+  + 2nd locked filter (the injected `Product` lock errors on it). **DAX simulation is unreliable** — core_api's
+  real query is looser than hand-written `SUMMARIZECOLUMNS`; validate on the live path or via impersonated
+  `executeQueries`.
+- **The exposure was REAL and is CLOSED (2026-07-24).** `a4ec0d1d` carried **5 external `brinno.com` users**, and
+  `f16fb03d` was serving them a payload **byte-identical** (fingerprint `b1af53f80c6c`) to the internal all-brands
+  dashboard `eaa10f9e` — tampering the vendor filter changed nothing, proving the injected lock was wholly inert
+  rather than merely weak. Fix = removed that ONE layout component (visual doc kept; internal `eaa10f9e` still
+  uses it). After: the endpoint returns **404** for that dashboard+visual pair — closed server-side, not hidden.
+- **Client→brand exclusivity is provable from data, and it passes.** `Product` carries **both** `[Brand]` and
+  `[Default Vendor]`, so one single-table DAX query settles whether any Brand spans two clients: **19 SAFE, 0
+  BLOCKED, 0 unmatched**. The many-to-many runs in the harmless direction — a client has multiple *vendors* but
+  exactly **one** brand. Use this as the gate before any per-client RBAC release.
+- ⚠ **Do NOT filter client rosters by email domain.** Legitimate client users sit on **gmail.com** (360Feel, Rain
+  Bird), **yahoo.com** (CIBU), a third-party agency **marketspire.ai** (Dalen) and **icloud.com** (NAVIRA).
+  Mirror the client's own sales-dashboard roster **per user** instead.
+- Full plan + IDs + tooling: `aldc-launchpad/boot-prompts/navira-map-client-scope-SOLUTION-plan.md` and
+  `docs/evidence/gp293.md` (GP-293); e2e acceptance suite `aldc-launchpad/tests/e2e/` (26 tests).
+
+**RBAC IS server-enforced; the dashboard locked-filter WAS NOT (pre-GP-299).** Read from `core_api@eclipse-2.1`:
+- **RBAC is real.** Every Explorer data endpoint carries a FastAPI dependency: the dashboard-visual-data router is
+  `dependencies=[PermissionChecker.check_path("dashboard_id", [Dashboard_View])]` (`api/dashboards/router.py`),
+  the direct visual endpoint needs `Visual_View`, the direct dataView data endpoint needs `DataView_View`
+  (`api/visuals/router.py`, `api/data_views/router.py`). So **object access is genuinely gated** (contrast the
+  earlier eclipse_exp mis-read where checks weren't wired).
+- **The locked Brand filter is NOT injected server-side.** `get_dashboard_visual_data` calls
+  `request_visual_data(dashboard.dataset_id, account_id, visual.options, body)` — it **never passes
+  `dashboard.filters`**. `create_dataset_request` (`api/visuals/lib.py`) sets `filters = visual_data_request.filters
+  or []` (+ timeframe date-range only). → the returned rows are scoped **entirely by the client-supplied request
+  body**. A client with legitimate `Dashboard_View` on their own brand-locked dashboard can POST to that endpoint
+  with `body.filters=[]` (or a different brand) and receive **all brands' data**. The lock is presentation-only
+  (the frontend sends it for normal clicking — which is why GP-261's UI leak-test passed — but a crafted request
+  bypasses it).
+
+**Consequence:** a per-client `mode:locked` `Brand` dashboard is **NOT a robust data boundary** for external
+clients. RBAC isolates *which* dashboards/visuals a user can reach, **not** row-level brand scoping within a
+shared multi-brand model. The internal all-brands tier is unaffected (internal users are meant to see all brands).
+
+**Simplest robust fix (recommended over full RLS): enforce the locked filter server-side.** Patch
+`get_dashboard_visual_data` to pass `dashboard.filters` into `request_visual_data`, and force `mode:locked`
+filters into the query — **stripping/overriding any client `body.filters` on locked fields** so the client cannot
+remove or alter them. Pair with a **grant discipline**: client users get `Dashboard_View` on *their* dashboard
+**only** — never `Visual_View`/`DataView_View` on the shared visual/dataView (so the direct endpoints 403 for them).
+Contained blast radius (one endpoint), no model changes, and it makes GP-261's already-built per-client dashboards
+genuinely safe. **Heavier alternative:** true RLS — change `v1/route_dataset.model_query`'s `impersonatedUserName`
+(currently `choice(fixed_pool)`) to the end-user's brand principal + add RLS roles to the model; high blast radius
+(that line serves every account's queries). Tracked in the isolation ticket + boot prompt
+`aldc-launchpad/boot-prompts/navira-map-client-isolation.md`.
 
 ## Access
 
