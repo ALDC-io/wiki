@@ -30,7 +30,12 @@ updated: 2026-07-25
 >   Dropping MAP from TEST Daily would break TEST↔PROD structural parity and force a future promotion to re-add
 >   MAP or repoint 20+ Eclipse objects. Eclipse-1 "Data Model (Live)" also keeps its MAP columns as a result.
 > - ⚠ **Accepted cost:** MAP now exists twice — any MAP change must be applied to **both** models or they drift
->   (GP-292 already hit this). A MAP parity check across the two models is recommended and not yet built.
+>   (GP-292 already hit this). **Guard BUILT 2026-07-25:** `pbi_ops/_map_parity_check.py` — read-only, compares
+>   MAP tables/columns + every `MAP*` measure (host table, normalised DAX, hidden, folder, format) and **exits 1
+>   on unexpected drift** so it can gate a deploy. First run: all **21 MAP measures byte-identical** across both
+>   models; the only divergence is **7 dead columns** on `MAP Violators by Brand` in Daily only (leftovers from
+>   the reverted GP-293 brandscope trial, 0 measure references) — allowlisted in `ACCEPTED` with a reason and a
+>   note to delete the entry when they are dropped.
 > - **Daily is NOT sales-only** — it also deliberately retains the canonical `Marketing Efficiency` layer (47
 >   measures, re-added by the GP-226/GP-301 ad-spend work), `Agency`, `Customer`, `Customer Cohort`. The
 >   2026-07-22 entry below calling Daily "sales-only" is **superseded**.
