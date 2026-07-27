@@ -3,7 +3,7 @@ tags: [entity, repo, core-api, aldc, eclipse, api, azure-functions]
 aliases: [core_api, core-api, core api]
 sources: [daily/2026-04-17.md, ~/.claude/CLAUDE.md, CORE/1467940876, CORE/1048248321, CORE/238387201, CORE/7929869, CORE/886603777, CORE/885620774, CORE/909737996, CORE/892796955, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-17
-updated: 2026-07-24
+updated: 2026-07-27
 ---
 
 # core_api
@@ -218,10 +218,63 @@ route-shape inference.
 > shipped in the same swap. **The finding below is retained for context; it describes the pre-fix state.**
 >
 > **Not yet done (follow-ups):** quote/whitespace field-drift normalization (casefold handles casing only);
-> dashboard write-time validation of locked-filter fields against dataset column locators; live crafted-request +
-> Bypass-B 403 proof with a real client-scoped user (needs the first client tenant). Direct visual/dataView
+> dashboard write-time validation of locked-filter fields against dataset column locators; live crafted-request
+> proof with a real client-scoped user. Direct visual/dataView
 > endpoints remain guarded by `Visual_View`/`DataView_View` + grant discipline (no locked-filter enforcement there —
 > a dataView isn't bound to one dashboard's lock).
+>
+> **⚠ 2026-07-27 — this fix was INCOMPLETE. It covered the data path only; see [[GP-304]] below.**
+> **Bypass B is now settled from code** (no client tenant required): the RBAC hierarchy is **flat** —
+> `build_permission_map` parents *every* non-account resource to the **account**, so there is no
+> dashboard→visual inheritance edge. `external-user` carries `[Account_Access]` only, and a dashboard-scoped
+> `viewer` grants `Visual_View` on the **dashboard's** resource id, not on visuals. So a client 403s on the
+> direct endpoints **by role design**, not by per-dashboard config that could drift.
+
+#### ⚠ GP-304 — locked filters did NOT cover the filter-VALUE endpoint (found 2026-07-27)
+
+**The durable lesson, and the one to carry into any future scoping work: a locked filter is only as strong as
+the *narrowest* route that queries the dataset. Enumerate EVERY route, not just the obvious data route.**
+
+GP-299 secured `.../visuals/{id}/data/`. It did not touch:
+
+```
+GET /v2/dashboards/{dashboard_id}/dataset/fields/{field_locator}/values/
+```
+
+which is authorised by **`Dashboard_View` alone** — the exact grant a released client holds on their own
+dashboard — and was passed **no locked filters** (`request_field_values` issued its DISTINCT query with
+`filters=[]`). **No tampering required**: this is the endpoint that populates filter dropdowns, so it is
+reachable from an ordinary browser session.
+
+- **Measured on prod** against a dashboard locked to one brand: **177 brands**, **86 vendor email addresses**,
+  161 manufacturer names, 7 internal account-manager names. 54 of 112 columns enumerable. A second client's
+  dashboard returned the identical 177 — the lock was ignored **uniformly**, not misconfigured on one dashboard.
+- **Seller identity did not leak — but only by accident.** Every seller column exceeds the endpoint's
+  **200-cardinality cap** (`Seller ID` 759/1,556) and returns null. The **cap**, not the lock, was protecting it.
+  A fragile guarantee: it would fail silently the day a seller dimension fell below 200 distinct values.
+- **The tell that makes this unambiguous:** the comment on the data route 30 lines below says *"locked filters
+  are a security boundary and always apply"* — while this route applied none. An oversight against the
+  codebase's own stated invariant, and **no GP-299 test touched it**.
+- **Fix:** thread `dashboards.lib.locked_filter_conditions` through `get_dataset_field_values` →
+  `request_field_values`, landing in `DatasetRequest.filters` — the *same slot* the data path uses via
+  `visuals.lib.create_dataset_request`. Reuse the helper rather than reimplement, so the inclusive-operator
+  whitelist and fail-closed behaviour come along for free. Zero-regression by construction: no locked filter →
+  `filters=[]`, byte-identical to before, so the internal all-brands tier is untouched.
+- Branch `feature/GP-293-fieldvalues-locked-filter` off **`eclipse-2.1`**, 11 tests. **Not yet deployed.**
+- **Routes confirmed CLOSED (no action):** `/v2/datasets/{id}/fields/.../values/` and
+  `/v2/data_views/{id}/dataset/fields/.../values/` check `Dataset_View`/`DataView_View` via
+  `check_dependency(require_active_account, …)` — i.e. against the **active account**, which `external-user`
+  lacks. Note this is a *different check shape* from `check_path`: account-level `Creator` **does** hold both,
+  so any internal Creator can enumerate any dataView's values account-wide.
+
+**Two process lessons worth more than the bug:**
+1. **A code read answered what was parked on infrastructure.** GP-299 deferred Bypass B to "the first client
+   tenant" for ~4 days; the router dependency plus the role definition settled it in minutes. Check whether a
+   question is *actually* blocked on an environment before parking it.
+2. **`email-validator` is absent from `requirements.txt`**, so `api/password_reset/schema.py`'s `EmailStr` makes
+   **every** unit test in this repo fail to *collect* on a clean install — GP-299's own tests included. These
+   tests are therefore not running in any environment built from `requirements.txt` alone. Install it locally to
+   run the suite; worth its own ticket.
 
 #### ⭐ A visual can scope ITSELF — `visual.options.filters` is server-enforced and merge-only (GP-293, 2026-07-24)
 
