@@ -127,7 +127,15 @@ DIOS (Fusion92-owned, S3 source)
 
 ### Nextcloud folder structure
 
-Two folders drive the pipeline. Both live on the ALDC Nextcloud instance (`NEXTCLOUD_HOST`):
+Two folders drive the pipeline. Both live on **Fusion92's own Nextcloud instance** —
+`NEXTCLOUD_HOST=nextcloud.fusion92.net`, under the `aldc` account there:
+
+> **Correction 2026-07-26 (this page previously said "the ALDC Nextcloud instance"):** that
+> was wrong and it cost a full investigation lane on FU92-420 — `cloud.aldc.io` was searched
+> end to end (admin account, Agent account, `Client_Tenants/FUSION_92`) and found nothing,
+> correctly, because the folders were never there. Verified from the service's own
+> `/home/aldc/dios-api/env` on `aldcsuptdock1c01`. These folders are **client-owned
+> infrastructure**, which matters for access requests and for anything touching retention.
 
 **`DAX_RAW_DoNotUse/` (staging)**
 ```
@@ -356,16 +364,30 @@ docker run -d \
 
 Env vars must include all 6 values in the `.env` setup table above. Values in `vault/infra-credentials.md` § Fusion92 — DIOS API.
 
-### No CI/CD
+### No CI/CD — partially wrong, corrected 2026-07-26
 
-There is no `.github/` directory in this repo. All deployments are **manual**:
+There is no `.github/` directory in this repo and **no automated tests gate deploys**, but
+images are *not* built by hand on the host. The actual deploy script at
+`/home/aldc/dios-api/run.sh` on `aldcsuptdock1c01` pulls a **pre-built image from GHCR**:
 
-1. Pull latest from `main`
-2. Rebuild image: `docker build -t dios-api .`
-3. Stop + remove existing container: `docker stop <id> && docker rm <id>`
-4. Start new container with env file (see above)
+```bash
+sudo docker run --restart unless-stopped -d --name=dios-api-$1 \
+  -p 7000:80 --env-file=./env ghcr.io/aldc-io/dios-api:$1
+```
 
-No staging slot, no automated tests gate deploys.
+So: images are built and published to `ghcr.io/aldc-io/dios-api` and tagged; only the
+**deploy step** is manual (`./run.sh <tag>`). Container naming is `dios-api-<tag>`, host port
+**7000** — which is the NPM proxy target for `audience-fusion92-app.aldc-ca-w1.com`.
+
+Rollback is therefore `./run.sh <previous-tag>`, not a rebuild from source.
+
+**Logging consequence (matters for any usage-analysis work — see FU92-420):** `run.sh`
+passes **no `--log-opt`**, so the container uses the default `json-file` driver with **no
+rotation**. The log is unbounded and survives for the container's lifetime, which means
+available log history equals *time since the container was last recreated* — it is not
+truncated by a retention policy. Recreating the container destroys all of it.
+
+No staging slot.
 
 ### Rollback
 

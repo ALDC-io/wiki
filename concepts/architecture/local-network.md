@@ -113,7 +113,38 @@ SSH credentials for all machines: `aldc/aldc1234` — see `vault/infra-credentia
 | Support Docker Host | `aldcsuptdock1c01` | 192.168.31.20 | Nostromo (192.168.30.80:8006) | Support (192.168.31.20:9444) | Testing/QA resources + [[custom-fusion-92-audience-api|DIOS API]]. All publicly accessible on-prem services run here. |
 | Workstation agent | `wks-agent` | 192.168.31.210 | Nostromo (192.168.30.80:8006) | N/A | Building and pushing [[connector]] Docker images. See [[connector-docker-deployment]]. |
 | Galactica SQL Server | `server-galactica` | 192.168.35.138 | Nostromo (192.168.30.80:8006) | N/A | SQL Server for miscellaneous connector data. Local domain: `galactica.prod.site3.aldc`. |
-| Brayden's Workstation VM | `wks-brayden-marshall` | 192.168.31.218 | Nostromo (192.168.30.80:8006) | N/A | Legacy dev workstation. Useful for accessing the Support Docker host (not reachable via VPN). Password: `aldc1234`. |
+| Brayden's Workstation VM | `wks-brayden-marshall` | 192.168.31.218 | Nostromo (192.168.30.80:8006) | N/A | Legacy dev workstation. ~~Useful for accessing the Support Docker host (not reachable via VPN)~~ — **superseded, see note below**. Password in `vault/infra-credentials.md`. |
+
+> **Correction 2026-07-26:** the Support Docker host **is** reachable directly over VPN —
+> ports 22 (SSH) and 81 (Nginx Proxy Manager) both answer from a VPN-connected workstation.
+> The previous note claiming otherwise sent people through the legacy `wks-brayden-marshall`
+> VM unnecessarily. Go direct.
+
+### Accessing `aldcsuptdock1c01` (verified 2026-07-26)
+
+Use key auth, not the shared password. Pubkey is installed for `aldc`; an SSH alias lives in
+`~/.ssh/config` on Paul's workstation:
+
+```
+Host suptdock
+    HostName 192.168.31.20
+    User aldc
+    IdentityFile ~/.ssh/id_ed25519
+    BatchMode yes
+```
+
+Two gotchas, both learned the hard way:
+
+- **ControlMaster multiplexing fails on this host** — `read from master failed: Connection
+  reset by peer`. Same flakiness as [[connector-docker-deployment|wks-agent]]. Keep
+  `ControlMaster no`. Connection economy comes from **batching remote work into a single
+  `ssh` invocation**, which also avoids the fail2ban trip (~5 connects in <1 min → ~10 min
+  lockout).
+- **`aldc` is in `sudo` and `adm` but not `docker`**, and `sudo` requires a password. So
+  `docker ps` fails for a non-interactive session. Fix once with
+  `sudo usermod -aG docker aldc` (applies on next login). Note `docker` group membership is
+  effectively root-equivalent — acceptable here only because `aldc` already has full
+  password-based `sudo`.
 
 ## Publicly Accessible Services
 
