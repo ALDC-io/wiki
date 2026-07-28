@@ -347,8 +347,18 @@ See [[local-network]] for the Nginx reverse-proxy setup and [[aldc-naming-conven
 ### Image build
 
 ```bash
-docker build -t dios-api .
+docker build -t ghcr.io/aldc-io/dios-api:<tag> .
 ```
+
+> **`.dockerignore` was misnamed until 2026-07-28** (`dockerignore`, no leading dot), so Docker
+> never read it and `COPY . .` pulled in the whole repo — including the committed API key and
+> audience PII. Fixed in [[FU92-420]] PR #3. **Verify image contents before pushing:**
+> `docker run --rm --entrypoint sh <tag> -c "ls -A /code"` should show no `client/` and no `*.json`.
+
+> **Neither `aldcsuptdock1c01` nor `wks-agent` holds GHCR credentials**, so `run.sh`'s `docker pull`
+> fails with `unauthorized` and **cannot work as written**. The 2026-07-28 deploy pushed from a
+> workstation using `gh auth token` (which carries `write:packages`) then transferred the image with
+> `docker save | ssh | docker load`. Giving the host a read-only token is an open decision.
 
 Dockerfile summary: `FROM python:3.11` → install requirements → COPY source → EXPOSE 80/443 → CMD `["gunicorn", "main:app"]`.
 
@@ -501,12 +511,14 @@ instead of production. It had not:
 
 | Issue | Detail |
 |---|---|
-| **Committed API key** | `client/client.py:16` contains the production `X_AUTH_APIKEY` value committed in plaintext to git history. Key extracted to `vault/infra-credentials.md` § Fusion92 — DIOS API. **Rotate the key** and refactor `client.py` to read from env var. |
+| **Committed API key** | `client/client.py:16` contains the production `X_AUTH_APIKEY` value committed in plaintext to git history. **No longer reaches runtime images** as of 2026-07-28 (`.dockerignore` activated, FU92-420 PR #3) — but still in git history. Key extracted to `vault/infra-credentials.md` § Fusion92 — DIOS API. **Rotate the key** and refactor `client.py` to read from env var. |
 | Per-process `in_progress_uploads` | `main.py:29` — per-process set, not shared across Gunicorn workers. Duplicate-upload rejection is best-effort only. |
 | `gunicorn timeout=0` | `gunicorn.conf.py:8` — no worker watchdog. A hung worker stays hung indefinitely. Consider a non-zero timeout. |
 | `/audience/process` silent failures | `process_audience_data` logs errors but returns normally. Missing platform staging data is silently ignored. `# FIXME` comments at `main.py:408` and `main.py:478`. |
+| ~~`list_files` created the folder it listed~~ | **FIXED 2026-07-28** ([[FU92-420]] PR #2). `get_folder()` is create-or-get per its own docstring (`nextcloud/api_wrappers/webdav.py:630`), so `GET /projects/{p}/audiences` created a folder for every name passed to it — including from ordinary dropdown use. Now `get_file()`. Consequence that persists: **folder existence in this storage is not evidence of usage.** |
 | `create_file_handler()` hard-coded | `main.py:49` always returns `NextcloudFileHandler()`. Should be env-driven (e.g., `USE_LOCAL_HANDLER=true`) to enable local testing without code edits. |
 | Amazon DSP hash timing bug | `hash_fields` for Amazon DSP uses output column names (`first_name`, etc.) but hashing runs before `filter_and_rename_dataframe_columns` — column names don't exist at hash time. Fields are likely output un-hashed. |
+| **Committed audience payload with real PII** | `client/DIOS payload from Brian 2024-01-13.json` holds audience rows with names, postal addresses, email, IP and phone, committed to git history. `client/dios_audience.json` (10,000 rows, local only) is the same shape. Excluded from images since 2026-07-28, but **removal from history needs a rewrite** — open decision. Found during [[FU92-420]]. |
 | No test suite | `client/client.py` is a manual smoke-test script, not an automated test. No pytest, no unit tests, no contract tests against DIOS. |
 | No CI/CD | No `.github/` directory. All builds and deploys are manual steps on the host. |
 | No `.env.template` | Env var documentation lives in `README.md` only. A committed `.env.template` with placeholder values would reduce onboarding friction. |

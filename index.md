@@ -286,6 +286,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[FU92-398]] — Meta data discrepancies across all clients for April. Root cause: 25-day connector loading gap (Apr 5–28), self-recovered. No data loss. Ready for Customer.
 - [[FU92-415]] — Meta connector token refresh automation + CCCU/PCU template cleanup + connector monitoring. Follow-up to FU92-398.
 - [[FU92-416]] — Trade Desk + Viant auth token lifespan investigation. Unknown expiry, no auto-refresh.
+- [[FU92-420]] — DIOS API usage audit for Fusion92. 114 audiences converted, pipeline half-adopted (only 37 released), real use ended 2025-10-22. Two defects fixed + deployed.
 
 ### Internal / Research & Tooling
 - [[SHIP-001]] — Rename aldc-shipyard to shipyard. Drop `aldc-` prefix, update all refs. ~15-20 min dedicated session.
