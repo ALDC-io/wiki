@@ -464,6 +464,33 @@ JSON keys or folder structure provide sufficient client separation (e.g., Ford v
 
 *See [[fusion92-data-architecture]] § Snowflake-Centric Architecture Shift for the strategic context behind the Phase 2 direction.*
 
+## Usage — measured 2026-07-28 (FU92-420)
+
+Full enumeration of the audience storage. See [[FU92-420]] for method and caveats.
+
+| Measure | Value |
+|---|---|
+| Conversions, all | **114** (2025-03-31 → 2026-02-17) |
+| — real campaign audiences | **33** (8 on numbered NetSuite projects, 25 on ad-hoc folders) |
+| — testing / QA / scratch | **81** |
+| Platform-ready output sets produced | **1,582** (462 from real audiences) |
+| Complete output (14/14 platforms) | **112 of 114 = 98%** |
+| Released to the `DAX` production area | **37**, last **2025-05-30** — **none of them real work** |
+
+**Real audience work ran Sep–Nov 2025 and stopped.** The service was live from 2025-05-20 but the
+codebase was only consolidated 2025-09-05, and real work begins 2025-09-02 — the same week.
+
+**The load-bearing finding:** file preparation was fully automated, but the release step was used
+**zero times for real audiences.** Audiences were built by the service and then handled manually
+from that point, which is also why none of this work links back to media flights.
+
+> **Counting rule for any future analysis:** count **per-platform output subfolders**. Do NOT count
+> folder existence (QA traffic and a since-fixed create-on-read defect both produced folders), and
+> do NOT filter on project-folder naming (that discards real work done under `manual_1`, `AP_1`,
+> `PRJ_Alex HH` and similar).
+
+---
+
 ## Open questions
 
 ### Is the `aldc` account the only Nextcloud holder of DAX folders?
