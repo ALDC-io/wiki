@@ -454,6 +454,49 @@ JSON keys or folder structure provide sufficient client separation (e.g., Ford v
 
 *See [[fusion92-data-architecture]] § Snowflake-Centric Architecture Shift for the strategic context behind the Phase 2 direction.*
 
+## Open questions
+
+### Is the `aldc` account the only Nextcloud holder of DAX folders?
+
+*Raised 2026-07-28 during FU92-420. Unverified — parked, not blocking.*
+
+The DIOS service authenticates to `nextcloud.fusion92.net` as `NEXTCLOUD_USER=aldc`, and any
+enumeration of audience storage therefore sees only that account's view. **If another account on
+that instance holds its own `DAX` / `DAX_RAW_DoNotUse` folders, those audiences are invisible to
+us.** This is the one unexamined route to higher usage volume than FU92-420 measured (114
+conversions, of which 8 genuine campaign audiences).
+
+Question for Fusion92 when convenient: *does any account other than `aldc` hold DAX audience
+folders?* Answering it from our side needs admin visibility on their Nextcloud instance.
+
+Two lesser gaps in the same category: the documented **90-day retention** (per Dave Nugent) is
+demonstrably not running — folders from March 2025 survive — but if it ever ran, older audiences
+are gone; and audiences **deleted manually** leave no trace.
+
+### Ruled out — do not re-investigate
+
+Volume looking low prompted a reasonable suspicion that a *test* environment had been measured
+instead of production. It had not:
+
+- **Single deployment only.** See § *No staging environment* below. One DIOS container, on the
+  only publicly-exposed host; none on `wks-agent`, `aldcproddock1c01` or `aldcproddock1c03`;
+  the live service config points at the production Nextcloud host and paths.
+- **Test project names in production storage are expected, not anomalous.**
+  [[entities/repos/flight-check|flight-check]] runs two environments — prod
+  `dax.fusion92.eclipse.aldc.io` and QA `dax.fusion92.eclipse.aldc-ca-w1.com` — and both proxy
+  DIOS through a single `DIOS_API_URL`. With only one DIOS deployment they necessarily address the
+  same instance, so **QA activity writes into production storage.** That is why scratch names
+  (`zzz`, `asdf`, `wizard_test_7`) sit alongside real campaign audiences.
+- **Low volume matches the documented maturity.** Phase 1 was quick-delivery with Fusion92
+  running campaigns manually, and [[fusion92-data-architecture]] records the DIOS→DAX integration
+  as *"paused 2–3 weeks (client priorities)"*. A pilot that never scaled.
+
+> **Corollary worth remembering:** folder *existence* in this storage is not evidence of usage —
+> both the QA environment and a since-fixed create-on-read defect produced folders. Count
+> per-platform output subfolders instead.
+
+---
+
 ## Tech Debt / Known Issues
 
 | Issue | Detail |
