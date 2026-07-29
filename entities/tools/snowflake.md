@@ -3,7 +3,7 @@ tags: [entity, tool, snowflake, data-warehouse]
 aliases: [Snowflake, SF]
 sources: [clients repo snowflake/ directories, __TEMPLATE_ACCOUNT/snowflake/readme.txt, INFRA/1532067843, INFRA/1034092551, CORE/1571160065, CORE/374341641, CORE/418873390]
 created: 2026-04-16
-updated: 2026-05-22
+updated: 2026-07-29
 ---
 
 # Snowflake
@@ -206,7 +206,7 @@ USE ROLE ACCOUNTADMIN;
 
 CREATE WAREHOUSE COMPUTE_WH WITH
   WAREHOUSE_SIZE = 'XSMALL' WAREHOUSE_TYPE = 'STANDARD'
-  AUTO_SUSPEND = 300 AUTO_RESUME = TRUE;
+  AUTO_SUSPEND = 60 AUTO_RESUME = TRUE;   -- was 300; see snowflake-cost-analysis
 
 -- Mount the incoming share as a database
 CREATE DATABASE "<SHARE_DB_NAME>"
@@ -398,7 +398,8 @@ Best practices from the review:
 
 Credit + storage cost is tracked as its own workstream — see [[snowflake-cost-analysis]] (epic ALDC-651). Key facts for anyone touching warehouse compute or storage:
 
-- **No cost monitoring exists** beyond the 2-credit/day reader-account cap. Read-only `ACCOUNT_USAGE` cost toolkit lives at `observability/jobs/snowflake-cost/` (run as ACCOUNTADMIN; `METERING_DAILY_HISTORY`, `WAREHOUSE_METERING_HISTORY`, `TABLE_STORAGE_METRICS`, etc.).
+- ~~**No cost monitoring exists** beyond the 2-credit/day reader-account cap.~~ **Superseded 2026-07-28/29.** Both accounts now carry an account-level NOTIFY-only resource monitor (`ALDC_NONPROD_MONTHLY` 400/mo, `ALDC_PROD_MONTHLY` 800/mo, triggers at 75/90/100%, `suspend_at` unset), and **non-prod runs a daily serverless guardrail task** (`ALDC_OPS.COST.T_COST_GUARDRAIL`, 14:00 UTC) emailing on zero-suspends / step change / overnight burn / idle % / new principal, plus a Monday heartbeat. Prod's guardrail is **not** deployed — blocked on email verification. Read-only `ACCOUNT_USAGE` toolkit + the guardrail DDL live at `observability/jobs/snowflake-cost/` (run as ACCOUNTADMIN).
+- **`AUTO_SUSPEND = 60`, not 300, is now the convention** — see [[snowflake-cost-analysis]]. At 300 the estate billed ~24 credits/day per account for ~1.6–9.5 h of actual work. ⚠ Note `core_api` still provisions new warehouses at **300** (`route_capacity.py`, `route_setup.py`), so anything newly created needs an explicit `ALTER`. **Any poller whose interval is shorter than the `AUTO_SUSPEND` window turns its warehouse into a 24/7 charge.**
 - **Everything runs on one shared `COMPUTE_WH` per account** (no isolation/attribution); all facts are full `CREATE OR REPLACE TABLE ... AS SELECT` (no incremental) — so hourly rebuilds also generate Time Travel + 7-day Fail-safe churn. Convention target: make rebuild tables `TRANSIENT`, right-size `TARGET_LAG`, tag queries.
 - **Sandbox/clone sprawl** (`WAREHOUSE_TEST_*`, `_SHADOW`/`_RB`/`_BEFORE`/timestamped clones) is a real storage cost — but `WAREHOUSE_TEST_GP226` / `_NAVIRA_ROADMAP` are live prod deps; never blind-drop.
 

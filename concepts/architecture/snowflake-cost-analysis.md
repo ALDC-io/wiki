@@ -1,9 +1,9 @@
 ---
 tags: [concept, architecture, snowflake, cost, infrastructure, optimization]
 aliases: [Snowflake Cost Analysis, Snowflake Cost Optimization, Snowflake Credit Analysis]
-sources: [conversation 2026-07-16, code review of clients + aldc-launchpad + core_api + aldc-scripts, ALDC-651, live ACCOUNT_USAGE baseline both accounts 2026-07-28]
+sources: [conversation 2026-07-16, code review of clients + aldc-launchpad + core_api + aldc-scripts, ALDC-651, live ACCOUNT_USAGE baseline both accounts 2026-07-28, after-side pulse both accounts 2026-07-29]
 created: 2026-07-16
-updated: 2026-07-28
+updated: 2026-07-29
 ---
 
 # Snowflake Cost Analysis & Optimization
@@ -86,6 +86,70 @@ Consequence for design: put the highest-value alert **inside Snowflake** as a se
 
 Note also that the obs stack already wires `SF_ACCT`/`SF_USER`/`SF_PWD`/`SF_ROLE`, i.e. **password** auth. Since `ACCOUNT_USAGE` needs elevated privileges, reusing that pattern would place an admin password in a `.env` — the same anti-pattern that made this incident's spend unattributable. Use a `TYPE = SERVICE` user (Snowflake forbids passwords on them) with key-pair auth instead.
 
+## Confirmed 2026-07-29 — the after-side measurement
+
+**The fix worked.** Measured the day after, not inferred from the arithmetic.
+
+### The discriminating read: a complete window inside a partial day
+
+The trap on the morning after a change is that the day isn't over, so credits/day can't be compared. The way through: **the overnight 00:00–06:00 window is a complete elapsed period even on a partial day**, so it compares like for like a full 24 h before anything else can.
+
+| Account | Before (13 straight nights) | 29 Jul | Change |
+|---|--:|--:|--:|
+| Non-prod `OG35375` | 6.05 – 6.09 | **0.70** | **−88%** |
+| Prod `WJ66376` | 6.31 – 6.75 | **4.88** | **−25%** |
+
+Corroborated hour-for-hour against the same weekday before the change (Wed 22 Jul), overlapping hours 00–14: non-prod **15.15 → 1.60 (−89%)**, prod **16.67 → 13.53 (−19%)**. Suspends/day went from **0 on 11 of 13 days** to 38 by mid-morning on non-prod; prod from 23–32/day to 104.
+
+**The single most legible artefact — the 1.000 signature.** On 22 Jul non-prod billed **~1.000 credits in every single hour of the day**, all 24 of them. That flat line at exactly one credit/hour *is* an X-Small awake 24/7, and it is worth recognising on sight in any hour-of-day breakdown. Post-fix, most hours read 0.000, and `WAREHOUSE_EVENTS_HISTORY` shows `RESUME 13:00:33` → `SUSPEND 13:01:33` — exactly 60 s apart, i.e. `AUTO_SUSPEND=60` behaving precisely as specified.
+
+### Verify the metering watermark before believing a low number
+
+**A window that hasn't been published yet produces a low number indistinguishable from a win.** Before reading anything into the 0.70, check the publication high-water mark:
+
+```sql
+SELECT MAX(end_time) FROM SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY;
+```
+
+`end_time` is the *end* of the metering hour bucket, so a healthy value reads slightly ahead of wall-clock. If it sits before 06:00 local, the overnight figure is incomplete and means nothing yet.
+
+### Revised total — the headline came down ~8%
+
+| | Predicted 2026-07-28 | Measured 2026-07-29 |
+|---|--:|--:|
+| Non-prod credits/day | 24.1 → ~2.8 | **~2.5** (better) |
+| Prod credits/day | 23.8 → ~18.7 | **~19.5** (slightly worse) |
+| Combined | ~$1,851/mo · $22.2K/yr · 55% | **~$1,690/mo · ~$20.3K/yr · ~54%** |
+
+**Per-item attribution is not recoverable, and this is the methodological lesson.** `AUTO_SUSPEND` on both accounts *and* stopping the Cube poller all landed on 2026-07-28, and prod — originally designated the A/B control — was changed the same day. So the *total* is measured but the split is not: non-prod fell ~21.7 credits/day against 14.13 predicted for `AUTO_SUSPEND` alone, the excess belonging to the poller stop. **If you designate a control, do not change it the same day; the attribution is worth more than the extra day of saving.**
+
+## Alert design lessons (2026-07-29)
+
+Seven lessons from building the ALDC-656 guardrail. All of them are about an alert that is *technically correct* while being operationally useless or misleading.
+
+1. **Silence must be unambiguous.** An alert that only speaks on breach is indistinguishable from one that is broken, suspended, or emailing nobody. Fix: a **weekly heartbeat** on a fixed day, with the rule stated inside the message — *no email for 8+ days means the monitoring is broken, not that all is well.*
+2. **Never let the alert compare across your own change.** A prior-7-day median still contains pre-change days, so a deliberate improvement fires a −90% step change *every morning for a week*. Six consecutive alarms for a success is how people learn to ignore alerting. Fix: a **`CHANGE_LOG` table**; baseline becomes `max(latest change + 1, eval_day − 7) .. eval_day − 1`, and the check is **skipped below 2 baseline days** — one day is an anecdote — saying so explicitly rather than omitting a signal silently.
+3. **Put the reported date in the subject.** A backfilled or forced send about a historical day is otherwise indistinguishable from a live alarm. This actually happened: a test send reporting pre-fix 2026-07-27 (24.12 credits, 0 suspends) was read as *"the changes didn't apply, we're still wasting credits"*. Label manual sends `[TEST]` too. **A false alarm is a defect in the alert, not in the reader.**
+4. **One source of truth for recipients.** A list duplicated between `ALLOWED_RECIPIENTS` and a literal in the procedure will drift and start emailing nobody. Keep it in a table the procedure reads at run time, change it through one validated command, and **fail loudly** — report unverified addresses rather than silently dropping them, and refuse to leave the list empty.
+5. **Never address alerts to individuals.** The prod monitor was notifying **three people who had left the company**, so prod cost alerts reached nobody while looking correctly configured. Departures silently break individual-addressed alerting; a distribution list does not. Review `NOTIFY_USERS` whenever someone leaves.
+6. **Test the scheduled path separately from the logic path.** Calling a procedure from an admin session proves nothing about a serverless task running `EXECUTE AS OWNER` with the managed-task privilege. Trigger the task and read `TASK_HISTORY`. Note its first row is the *next scheduled* run, not yours.
+7. **⭐ An arriving alert proves only the account that sent it — put the account in the subject and check it.** "I'm getting the cost alert emails, so alerting is fine" is not evidence when two accounts are monitored separately. Verified 2026-07-29: **all 12 cost-alert emails received since 27 Jul carry `OG35375` (non-prod); zero carry `WJ66376` (prod).** Prod's guardrail was never deployed, so prod's silence and prod-being-quiet are indistinguishable — the exact failure mode lesson 1 exists to prevent, reappearing one level up because *another* account's alerts were filling the gap. Generalises beyond Snowflake: with per-account (or per-tenant, per-region) alerting, **a healthy signal from one scope is affirmative evidence about that scope only.** The account locator in the subject line is the discriminating field; without it the inbox cannot answer the question at all.
+
+### Snowflake email verification is per-account
+
+Extends the `090270` gotcha above: **the same address can be verified in one account and unverified in another.** `paul.russell@aldc.io` is verified on non-prod and unverified on prod, which is exactly why non-prod alerting works and prod's does not. Two distinct error codes surface it:
+
+| Statement | Error | Meaning |
+|---|---|---|
+| `ALTER RESOURCE MONITOR … SET NOTIFY_USERS` | `090270` | user's email not verified |
+| `ALTER NOTIFICATION INTEGRATION … SET ALLOWED_RECIPIENTS` | `394209` | address not a verified user in this account |
+
+Verification is a Snowsight UI action per account (Profile → email → resend verification); there is no SQL for it. Probe additively — keep the existing recipients in the trial list — so a rejection leaves the monitor exactly as found.
+
+**Confirmed from the inbox 2026-07-29 (still open):** every guardrail email received is `OG35375`, none are `WJ66376` — so non-prod alerting is live and prod alerting has no working path at all. Still outstanding: **three verifications** (Paul on prod; Vlad on non-prod *and* prod). Snowsight URLs — non-prod `app.snowflake.com/canada-central.azure/og35375`, prod `…/wj66376`. Until then the prod resource monitor's `NOTIFY_USERS` still lists three departed employees (see lesson 5), so prod cost alerts reach nobody.
+
+**Also visible in that batch — the lesson-2 fix landing live.** Two sends seven minutes apart on 2026-07-29 show the baseline logic changing over: `22:02 UTC` reported `prior 7d median : 24.12 · step vs median : -36.7%` (a deliberate improvement firing as an alarm), while `22:09 UTC` reported `baseline median : 0 (0 day(s) since 2026-07-28) · step vs baseline : 0%` — the `CHANGE_LOG`-aware baseline correctly declining to compare across the change and saying so in-message rather than omitting the signal.
+
 ## Estate under analysis
 
 Two primary accounts + one reader, all `AZURE_CANADACENTRAL`, Standard Edition (~$2.00–2.25 USD/credit). See [[GP-261]] / [[snowflake-environment-provisioning]] for account identity.
@@ -142,7 +206,15 @@ Lane tickets: **T0** ALDC-652 · **T1** ALDC-653 · **T2** ALDC-654 · **T3** AL
 | `cost_pulse.py` | Daily A/B companion to `cost_baseline.py` — credits/day, **overnight 00:00–06:00 credits**, suspend/resume counts, busy-vs-billed hours, and the idle-gap distribution that yields the exact `AUTO_SUSPEND` saving. Renders a before/after table pivoted on a `--marker` date, excluding partial and change-day rows. |
 | `reports/render_pdf.py` | Markdown → styled PDF (python-markdown + headless Chrome) so report deliverables stay reproducible from source. |
 
-Both on branch `feature/aldc-651-cost-reduction` in `ALDC-io/observability`.
+### Guardrail additions (2026-07-29)
+
+| File | Purpose |
+|---|---|
+| `guardrails/cost_alert_task.sql` | The whole guardrail as idempotent DDL — notification integration, `ALDC_OPS.COST` schema, `ALERT_RECIPIENTS` + `CHANGE_LOG` tables, `SP_COST_GUARDRAIL(BOOLEAN)`, the serverless task. Statements separated by a `--;;` sentinel because a naive split on `;` breaks the `$$`-quoted procedure body. |
+| `guardrails/apply_guardrails.py` | `--apply` / `--validate` / `--rollback` / `--set-recipients a@x,b@y`. Asserts the account locator before executing anything; rollback is 6 idempotent drops. |
+| `guardrails/COST_CONVENTIONS.md` | 19 provisioning / monitoring / notification / measurement rules distilled from this incident. |
+
+All on branch `feature/aldc-651-cost-reduction` in `ALDC-io/observability`.
 
 ## Status
 
@@ -156,7 +228,18 @@ Both on branch `feature/aldc-651-cost-reduction` in `ALDC-io/observability`.
   - **Gotcha:** `ALTER RESOURCE MONITOR … SET NOTIFY_USERS` fails for any user whose Snowflake email is unverified (`090270`). On prod only `BRAYDENMARSHALLADMIN`, `SEANOGRADY`, `STEVENDEUTEKOM` were accepted — service accounts and several admins (incl. Paul's and Vlad's prod users) are unverified, so **verify the email first or the guardrail is console-only.**
   - **Ticket restructure:** new **T6 (ALDC-744)** warehouse-idle lane = the real #1; new **T5 (ALDC-745)** inactive-client archive rescoped to storage/compliance (~$2/mo); **T2 (ALDC-654) closed as superseded**; T1 (ALDC-653) deferred (~$8/mo, worst value/risk); T3 (ALDC-655) rescoped down; T4 (ALDC-656) promoted.
   - **Contract recommendation: do not sign $40K.** It matches the pre-optimisation run rate ($37.1K/yr) almost exactly, on a baseline that is majority idle. Path to **$9–15K/yr**; re-size after 30 days of measured consumption. Ask Snowflake for the credit rate, term, overage rate and rollover-vs-forfeiture terms before considering any commit.
-  - **Still open:** post-change metering confirmation (due 2026-07-29 — if credits/day do not fall, revert to 300 and record the estimate as wrong); Cube `refreshKey` interval (~$355/mo, needs owner sign-off, **do not impact that instance**); FUSION_92 dynamic-table lag (consumer-gated); warehouse isolation for the chatty ingest; `cost_pulse.py` onto the Ofelia daily schedule.
+  - ~~**Still open:** post-change metering confirmation (due 2026-07-29…)~~ → **confirmed 2026-07-29, see [[#Confirmed 2026-07-29 — the after-side measurement]]**. Remaining: Cube `refreshKey` interval (~$355/mo, needs owner sign-off, **do not impact that instance**); FUSION_92 dynamic-table lag (consumer-gated); warehouse isolation for the chatty ingest.
+- **2026-07-29 — after-side measurement confirms the change; guardrail live on non-prod.**
+  - **Metering confirmed** — non-prod overnight 6.05→0.70 (−88%), prod 6.31–6.75→4.88 (−25%), suspends 0→38 and 23–32→104. Revised total **~$1,690/mo (~$20.3K/yr, ~54%)**, about 8% under the 2026-07-28 headline. Full-day (rather than overnight-window) confirmation due 2026-07-30. Does **not** change the contract recommendation — still do not sign $40K.
+  - **T4 (ALDC-656) guardrail LIVE on non-prod**: serverless task `ALDC_OPS.COST.T_COST_GUARDRAIL` + `SP_COST_GUARDRAIL(BOOLEAN)` + `ALDC_COST_ALERT_EMAIL` integration, daily 14:00 UTC. Covers all five ALDC-752 §1 same-day signals — zero-suspends, step change, overnight burn, idle %, new principal — plus a Monday heartbeat and a self-check on its own failed runs. Proven firing **autonomously** (07:00 local, `SUCCEEDED`), with email receipt confirmed in the inbox rather than trusted from a `SENT` return code.
+  - **Deliberate deviation from the ALDC-656 scope:** the ticket specifies the pulse on the Ofelia cron; built Snowflake-native instead, for the availability reason in [[#6. Constraint on where cost monitoring can run (2026-07-28)]].
+  - **Key-pair service account deprioritised** — it existed to let an *external* scheduled job run unattended; going Snowflake-native removed that need. Still wanted for `QUERY_TAG` attribution, no longer on the critical path.
+  - **PROD guardrail + monitor blocked** on email verification: `PAULRUSSELLADMIN`, `PAULRUSSELL` and `VLADRYZHKOV` all unverified on prod, and Vlad also unverified on non-prod → three verifications needed. Decision: alerts go to **Paul + Vlad**, not Paul alone.
+  - **Access-review item (not cost):** `BRAYDENMARSHALLADMIN`, `SEANOGRADY`, `STEVENDEUTEKOM`, `BRAYDENMARSHALL`, `STEVENDEUTEKOMADMIN` all still **enabled** on prod despite having left.
+  - **Security item (not cost):** a *prod* Snowflake admin credential (`snowflake-prod-admin`) is stored in the *QA* Key Vault `aldc-vault-qa`, crossing an environment boundary.
+  - **Azure held deletions triaged** (ALDC-745): all four sit in `Quality 1 / rg-aldc-launchpad` as one stopped QA Superset/Cube stack. Front Door `aldc-portal-afd` is the only clearly safe deletion and carries nearly all the money (~$35/mo base, no custom domains, route points at a stopped ACI). ACR `aldcqaazcr1c01` is **not** safe alone — both ACIs pull from it and the 2026-05-14 images may be the only copy. **Both Key Vaults should be kept**: Standard Key Vault has no monthly base charge, so deleting saves ≈$0 while risking the Lectric SP-API set and 15 `gep-prefect` secrets.
+  - **`pg-aldc-superset-qa` auto-restarts ~2026-08-04** (Azure restarts stopped flexible servers after 7 days), which silently reverses ~$19/mo *and* re-exposes a `0.0.0.0`–`255.255.255.255` firewall rule with public access enabled. Any "stop it to save money" action needs a deletion follow-up or a recurring check.
+  - **ALDC-744's description is stale** — it still says prod was "deliberately left unchanged so it acts as a clean A/B control". Prod was changed 2026-07-28; this page is correct and the ticket is not.
 
 ## See Also
 
