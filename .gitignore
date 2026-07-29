@@ -12,3 +12,7 @@ vault/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local-only session scratch (never committed)
+PROGRESS.md
+scratch/
