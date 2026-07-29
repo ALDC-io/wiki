@@ -3,7 +3,7 @@ tags: [repo, gep, navira, dashboard, insite, marketing, advertising, nextjs, ver
 aliases: [navira-marketing-dashboard, GEP InSite, InSite, navira-mktg, insite-prototype]
 sources: []
 created: 2026-07-09
-updated: 2026-07-17
+updated: 2026-07-19
 ---
 
 # navira-marketing-dashboard (GEP InSite)
@@ -279,3 +279,24 @@ The branch that had been ~65 commits ahead of `main` since 2026-07-09 finally **
 - **Gates throughout:** tsc + lint + **475/475 vitest** + 43/43 synthetic E2E + 7/7 warehouse E2E + clean prod build.
 
 Related: [[GP-288]] (prototype gap-closure punch-list) · [[GP-287]] (Amazon Attribution) · [[GP-225]] · [[project_gp226_roadmap_gap]] · [[cross-channel-marketing-attribution]] · [[GP-254]] (Lectric agency) · [[project_vercel_deploy_author_block]] · [[transaction_currency_handling]].
+
+## 2026-07-19 — unified product picker BUILT (committed, held) + client coverage report ([[GP-288]])
+
+New branch `feature/gp288-product-id-filters`, picker commit **`fd2e4b2`** — **committed, NOT deployed, NOT pushed** (deploy HELD). Full detail on [[GP-288]]; summary:
+
+- **Unified "Find products" typeahead** (Product lens) replaces the prototype's three ASIN/SKU/Master-SKU boxes: one search over ASIN + merchant SKU + master SKU + product name → single `?asin=`. **Two halves:** a full-catalogue lightweight **index** for client-side suggestions (`getProductIndex`) + a **server-side `?asin=` fetch** (`buildProductsQuery` drops the top-N cap, `WHERE UPPER(ASIN) IN …`) so a long-tail pick outside the loaded top-2500 still renders (fixes the silent-empty trap). Files: `ProductFinder.tsx`, `lib/product-search.ts`, `FilterBar.tsx`, `lib/filters.ts`, `providers/warehouse.ts`, `app/page.tsx` (cache **v15**).
+- **New TEST view (evidence-gated):** `WAREHOUSE_TEST_GP226.MARKETING_DIM_PRODUCT_ATTRS` = `GROUP BY ASIN` over `DATA_SHARE.WAREHOUSE_SHARED_DIM_PRODUCT` (`ASIN, MODE(MASTER_SKU), LISTAGG(DISTINCT AMAZON_MERCHANT_SKU,'|')`), 1 row/ASIN, **99.4% roster coverage**, consumer-agg byte-identical with/without the join, `NAVIRA_MKT_RO` granted. Rollback `DROP VIEW`. **Durable follow-up:** promote to a clients-repo warehouse template — a hand-made TEST view can be wiped by an Eclipse rebuild (same lesson as `MARKETING_DIM_CAMPAIGN_ATTRS`).
+- **Teams + Kits stay honest Coming** (source proven, client-/model-gated). SmartScout out of scope.
+- **Validation:** unit **517/517**, synthetic e2e **94/94**, live warehouse e2e **2/2**, tsc/lint/prettier clean.
+- **Client Delivery & Coverage report produced** (branded HTML → print-to-PDF, `aldc-launchpad/navira-dashboard-redesign/reports/navira-coverage-report.html`, plan `~/.claude/plans/prancy-knitting-fern.md`): exact per-row status of every feature/metric — **34 Live · 8 Partial · 5 Awaiting-data · 2 Pending-decision · 2 Not-in-scope** (51 itemised) — each gap with an honest reason + path forward; grounded against the live build (INSITE `availability`/`source`, FilterBar, view components); leak-scanned clean (no internal object/ticket/infra/person names). **Produced, not sent** — distribution is Paul's.
+
+## 2026-07-20 — Lectric/agency data-quality correctness + gap-spec reconciliation ([[GP-254]] / [[GP-288]])
+
+Branch `feature/gp288-product-id-filters`, commits **`390a1af`** (fix + tests) + **`544275f`** (un-gate). **Committed, HELD** (Vercel-CLI on Paul's go, not pushed/prod). Driven by Paul spotting Lectric per-product **Sales = $0** despite $2.7M of real sales.
+
+- **Root cause (two layers):** the drill-table "Sales" column binds to *ad-attributed* sales (= $0 for a no-ad entity); AND upstream `MARKETING_EFFICIENCY_PRODUCT` tagged Lectric's 29 ASINs `ENTITY_CODE='NAVIRA'` (BRAND='Lectric eBike') while `SALES_FCT` + entity-grain `MARKETING_EFFICIENCY` split LECTRIC correctly → `filterProducts(LECTRIC)` hid the 29 ASINs, so the Product lens falsely read "sales-only, no data". For Lectric the sales-fact `PRODUCT_ID` **is the ASIN** (B0-shaped); the traffic SKU→ASIN crosswalk bridges 0/29 Lectric SKUs.
+- **Dashboard fixes (`insite-table.tsx`, `MetricGrid.tsx`):** "Sales" column falls back to actual gross (`totalSales`) when a row has no ad activity (`spend===0`) → sales-only entities show real per-product/platform sales (NAVIRA advertised rows unchanged); CTR renders "—" when `impressions===0` (was misleading "0.00%").
+- **Upstream fix (clients repo, parallel session):** `MARKETING_EFFICIENCY_PRODUCT` entity tagging corrected on TEST (Lectric → `ENTITY_CODE='LECTRIC'`, 29 ASINs / $2,713,215 / 5,248u; COPY GRANTS preserved), durable template `GEP/snowflake/warehouse/marketing_efficiency_product.sql`. It is a **VIEW → live immediately, no Eclipse-rebuild wait**. Product lens under the Lectric filter now populated ($347,689 top product).
+- **New live-warehouse Lectric data-quality + E2E lane** `e2e/lectric-entity.warehouse.spec.ts`: asserts sales populated / **non-$0 rows** (the bug class), honest "—" (no fabricated 0.0x/0.00%), no blank crash, and a cross-view correctness invariant (Overview == Ad-Platform Total Sales). 5 Lectric + 14 full warehouse lane green; unit 544/544; no NAVIRA regression.
+- **[GOTCHA] `unstable_cache` masks a live warehouse fix** — dashboard data fns are wrapped in Next `unstable_cache` (revalidate 3600, persisted to `.next/cache`). A corrected view is invisible in a running `next start` for up to 1h and **a server restart does NOT clear it**; `rm -rf .next/cache` + restart to validate live. Prod self-heals within the hour.
+- **Gap-spec reconciliation** (`aldc-launchpad/navira-dashboard-redesign/specs/*`, commit `fe6904d`): the 07-10/16/17 specs were stale — they marked as NEW-VIEW/NOT-INGESTED/UNWIRED a set now BUILT by GP-288 (campaign metadata via `MARKETING_DIM_CAMPAIGN_ATTRS`; master-SKU via `MARKETING_DIM_PRODUCT_ATTRS`; detail-page-views; purchases; true-TACoS). Added 2026-07-20 blocks + 11 inline `BUILT [2026-07-20]` annotations. **Conclusion: essentially all in-scope prototype surface is delivered.** Only remaining in-scope implementable gaps (all data-in-hand): CPM (derivable), Google search-visibility depth (top-of-search/budget-lost/rank-lost IS already in the provider), Meta video-quartile drill columns — scoped to `boot-prompts/navira-minor-gaps-and-delivery-report.md` (which also refreshes the client `reports/navira-coverage-report.html`). Gated/out-of-scope unchanged (keywords/NTB/DSP/inventory/budget-pacing/teams/kits/activity; SmartScout cancelled; email marketing out of scope).

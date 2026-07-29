@@ -3,7 +3,7 @@ tags: [entity, client, fusion92, media, advertising]
 aliases: [Fusion92, Fusion 92]
 sources: [clients repo FUSION_92/ directory]
 created: 2026-04-16
-updated: 2026-05-22
+updated: 2026-07-17
 ---
 
 # Fusion92
@@ -86,6 +86,7 @@ Previous dataset owner was removed from Azure AD, breaking scheduled refresh. Bo
 
 ## Active Tickets
 
+- [[FU92-419]] — June-audit "Direct Connection Not Establishing for Meta" flights (Juliann Otto). **RESOLVED + live-verified in PROD 2026-07-17.** Root cause = 30-day `only_recent` sync window (`dax_api/sync/lib.py`) stranding flights edited just before the mid-May sync outage → blank platform IDs in `SHARED_DIM_FLIGHT` → DAX shows "no metrics". Fix = re-sync + account-wide sweep (15 flights, ~$188,983 recovered) + permanent safeguard (widened window + daily full reconcile). Both reported jobs confirmed live: Meta `5b07ef18` + follow-up `b1e2fc12`. Lesson: the data was fixed 06-16/18 but the thread stayed open a month (closure reply left unsent in Drafts) — a data fix isn't done until the customer thread is closed + safeguard prod-deploy confirmed. Open to double-check: safeguard deploy to prod funcapp `aldcprodfnapf921c01`; lone $0 flight "Social Week 1" (DR3SB, not reported, likely genuine no-spend).
 - [[FU92-415]] — Meta connector token refresh + cleanup (token-refresh/cleanup Done; reopened 2026-06-11 for the Smile Doctors data gap — account back in Windsor list but data still ends 2026-05-03; **Ready for Customer**, follow-up email sent 2026-06-11 awaiting confirmation of post-May-3 Meta spend)
 - [[FU92-418]] — Viant DSP Reach & Frequency Snowflake connector blocked on IP whitelist (`zj81514`); **Ready for Customer**, corrected connector IP `206.116.246.42` re-sent to client 2026-06-11
 - [[FU92-342]] — (see ticket page)

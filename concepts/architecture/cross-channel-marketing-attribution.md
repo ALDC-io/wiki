@@ -3,7 +3,7 @@ tags: [architecture, marketing, attribution, roas, mer, snowflake, navira, gep, 
 aliases: [Cross-Channel Attribution, Marketing Measurement Model, Blended ROAS, MER, True ROAS]
 sources: [clients/GEP/snowflake/warehouse/marketing_fct_activity.sql, clients/GEP/snowflake/warehouse/sales_fct_orderline.sql, clients/GEP/snowflake/warehouse/shared_dim_product_base.sql, clients/GEP/snowflake/warehouse/sales_fct_lectric_amazon_orderline.sql]
 created: 2026-05-29
-updated: 2026-07-09
+updated: 2026-07-15
 ---
 
 # Cross-Channel Marketing Attribution — Tiered Measurement Model
@@ -214,6 +214,33 @@ have everything else unchanged). Decision (Paul + Lori):
   ⚠ Latent tooling bug to fix: `pbi_ops/xmla.py` `XmlaClient._get_model()` returns `Databases[0]`
   (ignores Initial Catalog) — select the target DB by name via TOM.
 
+## Amazon Attribution — the measured path for Amazon-destination Google/Meta spend (2026-07-15)
+
+The tiered model grounds Google/Meta to **Websites** sales (brand × destination) and deliberately keeps
+**Amazon-destination** Google/Meta spend **spend-only** — grounding it against total Amazon brand sales gave
+absurd 1500–6800× ROAS (no click→order key). **Amazon Attribution** is the purpose-built feed that closes
+exactly that gap: it links an external ad click (a tagged landing URL) to a **verified Amazon order** —
+new-to-brand purchases/sales, long-term sales/ROAS. It is a *measured* source for the Amazon destination, not
+platform self-report, and is the one path that turns "Amazon sales driven by Google/Meta ads" into a real
+number rather than an honest "pending". This was **not** part of the original design (which reached Amazon-dest
+via reconciliation only); it's an additive enablement lane.
+
+**Feasibility PROVEN for Navira** (read-only Windsor probes, 2026-07-15 — see [[navira-marketing-dashboard]] +
+memory `project-amazon-attribution-feasibility`):
+- **Enrollment:** Brand-Registered (we ingest Sponsored Brands) → Amazon Attribution available.
+- **Tagging LIVE (Google), via Quartile:** landing URLs carry `?maas=…&ref_=aa_maas&tag=maas`; **93% of
+  Amazon-bound Google spend is tagged** ($37,836 of $40,682, 90d). Untagged residual ≈ $2,846 (Slobproof PMax +
+  small keyword campaigns).
+- **Meta:** no Amazon-destination spend ($5,969/30d, all Websites/M2W) → nothing to attribute.
+- **Access:** `final_url` (which carries the tag) is available from [[Windsor]] but not currently pulled (curated
+  `fields` list) — a field-selection gap, not an access gap. The Attribution *report* is a separate `amazon_ads`
+  connector product (reuses the Amazon LWA OAuth).
+
+**Build ([[GP-287]], In Progress):** add an `attribution` product to the `amazon_ads` connector → land
+`{ENV}_DG1_GEP.AMAZON_ADS.CURRENT_ATTRIBUTION_*` → warehouse join (by campaign/tag) → surface as
+Amazon-destination attributed sales in `MARKETING_EFFICIENCY` and the [[navira-marketing-dashboard]]
+Amazon-destination cells. TEST-only, evidence-gated.
+
 ## Implications for Tickets
 
 - **[[GP-225]]** delivers **Tier 1 only** (per-channel ROAS via the Windsor field fix). It does *not* close the cross-channel-truth gap — that's this design.
@@ -222,6 +249,8 @@ have everything else unchanged). Decision (Paul + Lori):
 - **Follow-on ticket (Phase 2b, gated):** Google **per-SKU** grounding — needs a **Shopify variant-id→internal-SKU crosswalk** (the ~94% of PMax/Shopping spend whose `offer_id` is an opaque Shopify composite). Build a Shopify/Merchant-Center product-feed source (deterministic) or a curated `product_title`→SKU map (fuzzy). Not started until the crosswalk source exists. *(navira-roadmap)*
 - **Agency ([[phase-1c-sales-agency-customers]]):** same model per `ENTITY_CODE`. Agency Amazon Ads → Tier 3 once a per-entity product dim is derived from their orders/catalog; until then Tier 2. Each new tenant inherits the model with zero per-tenant schema work beyond its product dim.
 - **GP-199** already supplies the Amazon-SB ASIN key that Tier 3 joins on — no rework.
+- **[[GP-287]]** (In Progress) — Amazon Attribution feed: the *measured* path for Amazon-destination Google/Meta
+  spend (see the Amazon Attribution section above). Feasibility proven (Google 93% tagged via Quartile).
 
 ## Calibrated ROAS — capped vs uncapped (OPEN client decision, surfaced 2026-06-05)
 
@@ -238,6 +267,8 @@ Both are now built in the Sandbox model (capped DAX verified == the `_MONTHLY` v
 
 - [[GP-225]] — unified marketing schema; delivers Tier 1 (the Windsor revenue-field fix)
 - [[GP-199]] — Amazon SB ASIN attribution (supplies the product key for Tier 3)
+- [[GP-287]] — Amazon Attribution feed (measured Amazon-destination path; feasibility proven 2026-07-15)
+- [[navira-marketing-dashboard]] — the consumer; Option-D destination grounding shipped 2026-07-15
 - [[Windsor]] — verified conversion-value field names + row-split gotcha
 - [[navira-data-dictionary-phase1a]] — platform-value-≠-revenue caveat at field level
 - [[navira-dwh-data-landing]] — sales/marketing entity segmentation, agency model
