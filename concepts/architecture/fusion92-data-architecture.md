@@ -3,7 +3,7 @@ tags: [concept, architecture, fusion92, snowflake, data-warehouse, dios]
 aliases: [Fusion92 Data Architecture, F92 Architecture]
 sources: [CF92/1367212038, CF92/1367703569, CF92/1382088715]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-07-29
 ---
 
 # Fusion92 Data Architecture
@@ -97,7 +97,12 @@ Manual upload activation via Viant Cleanroom:
 
 **Key constraints:**
 - Manual upload to Viant Cleanroom does NOT require DAX IDs (confirmed capability)
-- Nextcloud retention period: **90 days** (per Dave Nugent)
+- Nextcloud retention period: **90 days** (per Dave Nugent) — ⚠️ **not observed in practice for folders.**
+  A full enumeration on **2026-07-28** ([[FU92-420]]) found audience folders last written **31 Mar 2025**
+  still present — sixteen months old. Either the policy isn't applied, or it purges file *contents* while
+  leaving the folder tree. **Don't rely on this line for analysis:** an actual 90-day purge would have made
+  any usage count drawn from this storage badly understated. FU92-420 counted per-platform output
+  *subfolders*, which demonstrably persist, so its figures are unaffected.
 - File limits: **300,000 records max / 20 MB per file**
 - File organization: folder by date/time of audience receipt
 
