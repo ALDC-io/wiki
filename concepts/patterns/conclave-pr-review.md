@@ -129,8 +129,33 @@ Zeus Chat fabricated a full financial digest with a fake "Verified (100%)" prove
 
 **Artifacts:** `aldc-launchpad/docs/reviews/ALDC-739-PR167-council-review.md` (consolidated) and `…-DRAFT-pr-comments.md` (as-posted draft). Posted review: `zeus-chat-exp#167` review `4804432198`.
 
+## Revision log
+
+Each entry records what drove the change, so the skill's evolution is auditable and can feed a
+self-improvement loop. **Add an entry whenever `conclave-SKILL.md` changes.**
+Tracked source: `skills/conclave-SKILL.md` — see [[README]] for the mirror contract and drift check.
+
+### 2026-07-29 — created (226 lines)
+
+First run on `zeus-chat-exp#167` / [[ALDC-739]] — see the reference run above. Established the two
+gates, the five lenses, separate severity/confidence axes, feeding leads for refutation,
+mutation-testing the tests, unique-string provenance, and draft-then-post delivery.
+
+### No changes since — and one candidate deliberately NOT applied (2026-07-30)
+
+The [[inquest-bug-resolution]] revision of that date added *"mutation-testing is necessary but not
+sufficient — an absence assertion can be satisfied by destroying the population it measures"*. That
+lesson came from a **deploy**, and conclave does not deploy: it reviews a diff and posts a review, so
+it has no population to destroy. Its mutation-testing guidance (verify a PR's new tests actually fail
+without the change) is unaffected and still correct.
+
+**Recorded so the lesson is not reflexively copied across on a later pass.** The two skills share
+ancestry but not blast radius. If conclave ever grows a step that mutates anything, revisit this.
+
 ## See Also
 
+- [[inquest-bug-resolution]] — the sibling skill (resolves defects), derived from this one
+- [[README]] — mirror contract and drift check
 - [[ai-pr-workflow]] — the org-standard PR chain this plugs into
 - [[adversarial-investigation-skill]] — sibling adversarial method for *problems* rather than *changes*
 - [[zeus-chat-exp]] — repo of the reference run
