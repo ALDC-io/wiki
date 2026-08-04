@@ -1,9 +1,9 @@
 ---
 tags: [process, deployment, eclipse, azure, github-actions, docker, containers]
 aliases: [Eclipse Azure deployment, Eclipse deploy process, Azure staging swap]
-sources: [daily/2026-04-17.md, session/2026-04-28, session/2026-04-29, session/2026-06-17]
+sources: [daily/2026-04-17.md, session/2026-04-28, session/2026-04-29, session/2026-06-17, session/2026-08-03]
 created: 2026-04-17
-updated: 2026-06-17
+updated: 2026-08-03
 ---
 
 # Eclipse → Azure Deployment (GitHub Actions + Slot Swap)
@@ -101,6 +101,81 @@ If production is broken after swap, swap again — this points production back a
 - **Wrong Azure subscription** — the prod apps are in **Production 2** subscription. If `az webapp show --name aldcprodwbapeclipse1c01` returns nothing, run `az account set --subscription "Production 2"` first
 - **core_api deploy workflow — STALE NOTE CORRECTED (2026-07-23, GP-299/GP-300).** `core_api` now HAS a real, working container deploy, same pattern as eclipse: **"Deploy to Azure (Staging)"** (`deploy_az_webapp_container.yaml`, workflow id `192556804`) → `rollback-check → build → deploy` to the **`stage` slot** of backend **`aldcprodwbapcore1c01`** (Production 2, RG `aldcprodrsgp1c`). Run manually (`gh workflow run 192556804 --repo ALDC-io/core_api --ref eclipse-2.1 -f force_deploy=true`). Notes: (1) the **push-triggered** auto-run on merge to `eclipse-2.1` **fails by design** (can't pass `force_deploy`) — ignore it, use manual dispatch; (2) `force_deploy=true` is normally required because the mutable GitVersion tag makes stage≠prod trip `rollback-check`; (3) then **swap** `az webapp deployment slot swap -g aldcprodrsgp1c -n aldcprodwbapcore1c01 --slot stage --target-slot production` (rollback = swap back, time-sensitive due to the mutable tag); (4) `jwt_secret` is **slot-specific** — a stage-minted token 401s on prod, so smoke-test prod with a prod-minted token or the prod frontend. (`build_docker_image.yaml` is the reusable build; `deploy_on_premise.yaml` remains a stub.)
 - **Metrics card visuals for testing** — test Metrics Card / YoY features in the **GEP account** (`da8904db`), not Fusion92 (`0fc00e34`). GEP has the Metrics Card visuals with `show_previous_period: true`. YoY tooltip only appears with timeframes under 1 year
+- **Assuming the staging slot mirrors production (2026-08-03, GP-309)** — it does not. Different Cosmos, different data volume, different secrets, different user store. See § Staging is a SEPARATE ENVIRONMENT below before planning any stage-based verification
+- **A merge can sit `BLOCKED` with every check green and an approval in place (2026-08-03)** — the `eclipse-2.1` ruleset sets `required_review_thread_resolution: true`, so **unresolved automated review threads block the merge** and nothing in the PR UI says so plainly. `core_api#251` was stuck on 12 unresolved bot threads; `core_api#250` sat the same way for 6 days. Diagnose with GraphQL on `pullRequest.reviewThreads` (count `isResolved == false`) and read the ruleset's `pull_request` parameters — **not** by guessing at required checks or CODEOWNERS (both were wrongly blamed first)
+- **`CODEOWNERS` in `core_api` has two dead owners (2026-08-03)** — `@brayden-marshall` and `@strinsberg` exist as GitHub users but no longer have repo write access, so `gh api repos/ALDC-io/core_api/codeowners/errors` reports *Unknown owner* on every rule. 2 of the 5 owners on `*` are inert; approvals must come from `data-mission` or `mikestuart26`. Same rot as the [[clients-repo]] CODEOWNERS problem
+
+## ⚠ Staging is a SEPARATE ENVIRONMENT, not a shadow of prod (2026-08-03, GP-309)
+
+The existing note that `jwt_secret` is slot-specific understates the situation badly. On
+`aldcprodwbapcore1c01`, the `stage` slot is a **different environment entirely**:
+
+| | production slot | `stage` slot |
+|---|---|---|
+| Cosmos | `aldcprodcsdb1c01` | **`aldctestcsdb1c01`** (the TEST store) |
+| dashboards visible | **41** | **8** |
+| `JWT_SECRET` | prod | **its own** — a prod token gets **401** |
+| user store | prod | **its own** — a stage token gets **403** on prod object IDs |
+| `STORAGE_ACCOUNT` | `aldcprodstaceclipse1c01` | `aldcteststaceclipse1c01` |
+
+**Consequence: you cannot use the stage slot to verify behaviour that depends on prod data volume
+or prod objects.** In GP-309 the fix was a 50,000-row cap; the largest result reachable on stage was
+**705 rows**, so the guard could not be exercised there *at all*. Planning "QA it on stage" for that
+class of change is planning a test that cannot run.
+
+**What stage CAN prove** — and it is still worth doing before a swap: that the built image boots,
+authenticates, and serves every query path. GP-309 ran 70 requests across 8 stage dashboards and all
+5 Eclipse query paths, 0 failures. That converts the swap from *"deploy unverified code"* into
+*"deploy code proven to serve traffic, with one behaviour untestable here"*.
+
+Mint a per-slot token with `eclipse_ops/_eclipse_token.py --slot {prod,stage}` (in
+[[entities/repos/aldc-launchpad|aldc-launchpad]]) — tokens are **not** portable between slots.
+
+### Verify which app settings are SLOT-STICKY *before* swapping
+
+A non-sticky data-store setting would repoint production at the staging database on swap. Check:
+
+```bash
+az webapp config appsettings list -g aldcprodrsgp1c -n aldcprodwbapcore1c01 \
+  --query "[?slotSetting==\`true\`].name" -o tsv
+```
+
+As of 2026-08-03, **8 of 18** are sticky: `COSMOS_HOSTNAME`, `COSMOS_KEY`, `JWT_SECRET`,
+`ENCRYPTION_KEY`, `MASTER_CLIENT_ID`, `MASTER_CLIENT_SECRET`, `STORAGE_ACCOUNT`, `ALLOWED_ORIGINS`.
+**Every setting that differs between the slots is in that sticky set, and every non-sticky setting is
+identical** — which is why the swap moves only the container and each slot keeps its own data store
+and secrets. That is a property to re-verify, not assume. Compare values across slots by **equality
+only**; never echo them.
+
+### The `rollback-check` step is a NO-OP whenever the tag doesn't change
+
+Refines the existing mutable-tag note. `deploy_az_webapp_container.yaml` detects "staging holds a
+rollback version" by comparing the stage vs prod **image strings**. GitVersion derives the version
+from the **branch name**, so a normal merge to `eclipse-2.1` produces the *same* tag every time
+(`2.0.0-eclipse-2-1.1`) and GHCR **overwrites it in place**, leaving the prior layer untagged.
+
+- When the tag is unchanged, both slots read identical strings → **the check passes and can never
+  detect that the slots hold different builds.** It provides no protection in that case.
+- The existing note that `force_deploy=true` is "normally required" holds only when GitVersion *does*
+  produce a new string. **Corrected 2026-08-03:** the push-triggered auto-run on merge to
+  `eclipse-2.1` is *not* always broken — run `30770480648` completed `rollback-check → build →
+  deploy` all green with no `force_deploy`, precisely because the tags matched.
+- **To know which build a slot actually runs, read the GHCR push timestamp, not the tag.**
+  `gh api "orgs/ALDC-io/packages/container/core-api/versions"` and compare `updated_at` against the
+  deploy run time.
+- ⚠ **Rollback-by-swap-back is therefore time-sensitive**: it works only while the *old container
+  keeps running*. Once that slot restarts it re-pulls the same tag, which now resolves to the new
+  build, and the old code is only recoverable by digest.
+
+### Verifying after the swap — don't baseline on a moving window
+
+Use a re-runnable smoke rather than eyeballing (GP-309:
+`eclipse_ops/_gp309_deploy_smoke.py --base prod|stage|--ab`). One trap that will otherwise produce
+false failures: **never assert an exact row count against an all-time or rolling window.** Measured on
+Navira, an all-time result grew ~61 rows/day and a rolling `last-30-days` dropped 56 → 55 overnight as
+it shed its oldest day. Use **static date windows as the exact-assertion anchors** and bands for the
+rest — a static window reproduces yesterday's number exactly, which is how drift is distinguished from
+a regression.
 
 ## Incident: 2026-04-29 wrong-branch deploy
 
