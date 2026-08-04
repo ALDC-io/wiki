@@ -42,13 +42,21 @@ what makes drift detectable by a plain `diff`. Do not "improve" a mirror in plac
 
 ```bash
 for s in inquest conclave army; do
-  diff -q "$HOME/.claude/skills/$s/SKILL.md" \
-          "$HOME/repos/wiki/concepts/patterns/skills/$s-SKILL.md" \
+  diff -q --strip-trailing-cr "$HOME/.claude/skills/$s/SKILL.md" \
+                              "$HOME/repos/wiki/concepts/patterns/skills/$s-SKILL.md" \
     && echo "  in sync: $s" || echo "  DRIFTED: $s"
 done
 ```
 
 Run this before trusting a mirror, and after any skill edit.
+
+⚠ **`--strip-trailing-cr` is load-bearing, and so is `/.gitattributes`.** `core.autocrlf=true`
+converts these files to CRLF on checkout, which breaks byte-identity and makes this check report
+`DRIFTED` on every fresh clone — a check that reads authoritative and returns garbage. Measured on
+`army-SKILL.md`: a fresh `git checkout-index` produced **11,653 bytes / 180 CRLF** against the live
+file's **11,473 / 0**. The repo-root `.gitattributes` pins `*-SKILL.md` to `eol=lf` so the bytes
+survive checkout; the `diff` flag is insurance for working copies that predate that rule. Verified
+after the fix: all three mirrors 0 CRLF and in sync.
 
 ## Known limitation
 

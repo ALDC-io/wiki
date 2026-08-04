@@ -1,0 +1,9 @@
+# The skill mirrors under concepts/patterns/skills/ must stay BYTE-IDENTICAL to the
+# live skills at ~/.claude/skills/<name>/SKILL.md, which are LF. That byte-identity is
+# the whole point — it is what makes drift detectable by a plain `diff`.
+#
+# Without this rule, core.autocrlf=true converts them to CRLF on checkout (measured:
+# 180 conversions, +180 bytes on army-SKILL.md), so the drift check documented in
+# concepts/patterns/skills/README.md reports DRIFTED on every fresh clone — a check
+# that reads authoritative and returns garbage.
+concepts/patterns/skills/*-SKILL.md text eol=lf
