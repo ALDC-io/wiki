@@ -3,7 +3,7 @@ tags: [entity, tool, windsor, marketing, data-aggregation, fusion92, gep, navira
 aliases: [Windsor, Windsor.ai]
 sources: [CF92/1675001857, CF92/1675919361, clients/GEP/eclipse/templates/windsor/google_ads.json, clients/GEP/eclipse/templates/windsor/meta_ads.json]
 created: 2026-04-18
-updated: 2026-05-29
+updated: 2026-08-07
 ---
 
 # Windsor
@@ -65,6 +65,70 @@ If an expected account does not appear in Windsor's account list, the likely cau
 
 - The permissions for the authenticating user need adjusting (they lack ad access to that account in the platform).
 - Windsor was authenticated with a user who does not have access to the missing account — re-authenticate with a user who does.
+
+---
+
+## ⚠ The silent account-drop failure mode (confirmed twice — check this FIRST)
+
+**Windsor accounts disconnect silently, and it surfaces weeks later as "our data stops on date X".** No error, no failed run, no alert. The Eclipse pull keeps succeeding — it just returns fewer accounts.
+
+**Why it is silent:** the Fusion92 pull templates (`linkedin_ads.json`, `linkedin_ads_video_social.json`, the Meta feed) declare **no account list**. They ingest whatever the Windsor API returns, so an account leaving the response is indistinguishable downstream from an account that stopped spending.
+
+> Contrast [[GP-225]]/GP-226: the GEP/Navira templates *do* pin `options.account_ids`, which `windsorai_v1` serialises into a server-side `filter`. That guards against foreign accounts leaking **in**; it does **not** alert when an expected account drops **out**. Neither client has drop-out detection.
+
+### Confirmed instances
+
+| Date | Client / platform | Account(s) | Detected by | Lag |
+|---|---|---|---|---|
+| 2026-05-22 | [[fusion92]] Meta — Smile Doctors | 1076840895722327 | client complaint ([[FU92-415]]) | ~3 wks |
+| 2026-07-21 | [[fusion92]] LinkedIn | 509879445, 502845846, 506641008 (+508272220 on 05-31) | client complaint (Juliann, 2026-08-07) | **17 days** |
+
+Same client contact both times, both after weeks of missing data. Progressive decay is normal here — accounts fall out one or a few at a time over months.
+
+### Diagnosis runbook (~10 minutes)
+
+**Step 1 — ingestion or delivery?** Group the raw table by account **and load timestamp**. Aggregating at *platform* grain hides this completely — one healthy account makes the whole platform look current.
+
+```sql
+SELECT ACCOUNT_ID, MAX(TO_DATE(DATE)) AS MAX_SPEND_DT,
+       MAX(___ALDC___GLOBAL_HISTORY_TIMESTAMP_START___) AS LAST_LOAD, COUNT(*) AS N
+FROM LINKEDIN_ADS.CURRENT_LINKEDIN_CAMPAIGN_PERFORMANCE
+GROUP BY ACCOUNT_ID ORDER BY MAX_SPEND_DT DESC;
+```
+Several accounts sharing **one final load timestamp to the millisecond** while others keep loading ⇒ the account scope shrank. Not campaigns ending.
+
+**Step 2 — negative control (this is what makes it conclusive).** Confirm the feed *does* land literal `$0.00` rows when a campaign is live but not delivering:
+```sql
+SELECT ACCOUNT_ID, COUNT(*) AS ZERO_ROWS, MAX(TO_DATE(DATE)) AS LATEST
+FROM LINKEDIN_ADS.CURRENT_LINKEDIN_CAMPAIGN_PERFORMANCE WHERE SPEND = 0 GROUP BY ACCOUNT_ID;
+```
+If it does (LinkedIn: 450 such rows on one account), the **absence** of rows is positive evidence of no-load rather than no-spend. Without this control you cannot separate the two.
+
+**Step 3 — ask Windsor directly.** The discriminating test, and it names the fix owner:
+```bash
+KEY=$(az functionapp config appsettings list -n func-aldc-cred -g aldcprodrsgpconnector1c \
+      --query "[?name=='WINDSOR_API_KEY'].value" -o tsv)   # never echo it
+curl -s "https://connectors.windsor.ai/linkedin?api_key=$KEY&date_from=<pre-cutoff>&date_to=<today>&fields=date,account_id,account_name,spend"
+```
+Query a window **spanning the cutoff** so the three outcomes separate:
+
+| Result | Meaning | Owner |
+|---|---|---|
+| Account **absent** entirely | Windsor-side disconnection | **Client** — re-grant in Windsor portal |
+| **Present**, rows after cutoff | Windsor serves it; loss is Eclipse-side | **ALDC** — template / schedule |
+| **Present**, zero rows after cutoff | "Listed but stale" — platform denies insights | **Client** — re-grant platform permission |
+
+Reference implementation with pre-committed predictions: `clients/FUSION_92/snowflake/scripts/_fu92_windsor_accounts.py` (branch `feature/paulrussell/fu92-flight-actuals-diagnosis`).
+
+### Fix + the backfill trap
+
+Client re-authenticates the platform in Windsor (§ *Granting a Platform Access to Windsor*) as a user with ad access to the missing accounts, then ticks each one.
+
+⚠ **On resume, verify the backfill actually reaches back to the cutoff date.** The Fusion92 LinkedIn template uses `partition_scheme.window_type = month` with a 60-day `time_to_live` on `partition_date`, so monthly partitions *should* re-pull — but if the pull only covers a recent window, the gap between cutoff and reconnection stays **permanently** missing and flights show a hole rather than a tail. Confirm `MAX(DATE)` per account and spot-check a date inside the gap.
+
+### Prevention
+
+[[FU92-379]] "Flight Check Data Sync Monitoring" (still **To Do**) is the unbuilt alerting for exactly this. A per-account freshness check — *"any account that loaded yesterday but not today"* — would have caught the 2026-07-21 LinkedIn drop on 2026-07-22 instead of 2026-08-07. **Both confirmed instances were found by the client, not by us.** Highest-value preventable item on the Fusion92 backlog.
 
 ## See Also
 

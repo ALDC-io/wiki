@@ -285,6 +285,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[GP-PENDING-sales-data-outage-2026-05-22]] — RESOLVED incident: ~14-hour task chain suspension (2026-05-21 19:52 – 2026-05-22 09:14 PT). `PROD_DG1_ROLE_CORE_SVC_DA8904DB` lacked USAGE on `PROD_DG1_ALDC_LIBRARY`; `SALES_FCT_ORDERLINE` view expansion failed at step 7; Snowflake auto-suspended root task. Fix: explicit USAGE + SELECT grants. PBI refreshed 16:18 UTC. +1,387 orders / +5,114 order lines recovered.
 
 ### Fusion92
+- [[FU92-421]] — DAX flight actuals stop early. **Two unrelated causes, neither a code defect.** (A) 3 LinkedIn ad accounts silently dropped out of [[Windsor]] on 2026-07-21 — client must re-grant; feed down to 1 live account of 5. (B) GMX2U's Meta campaign rebuilt for a goal change while the flight kept naming the retired one — $26.5k stranded, fixed. Key lesson: group freshness by ad **ACCOUNT**, not platform. **QA.**
 - [[FU92-342]] — Viant campaign conversions fact table. Root cause: CONVERSION_EVENT_ID missing from connector PK caused duplicates. Fixed at source.
 - [[FU92-394]] — Viant DSP actuals missing after 4/2. Connector timeout bug → schedules disabled → never re-enabled. Fix + backfill.
 - [[FU92-393]] — NetSuite sandbox 500 error. Root cause: wrong Client ID stored in Azure env var. Fix: new integration + cert + updated env vars on aldctestfnapf921c01. **Status: In Progress — auth fixed, needs E2E PO sync test.**
