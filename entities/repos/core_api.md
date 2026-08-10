@@ -261,6 +261,67 @@ reachable from an ordinary browser session.
   whitelist and fail-closed behaviour come along for free. Zero-regression by construction: no locked filter →
   `filters=[]`, byte-identical to before, so the internal all-brands tier is untouched.
 - Branch `feature/GP-293-fieldvalues-locked-filter` off **`eclipse-2.1`**, 11 tests. **Not yet deployed.**
+
+> **⚠ 2026-07-29 — that fix was itself INCOMPLETE. It closes exactly ONE column. See the section
+> immediately below before treating GP-304 as solved by `filters` alone.**
+
+##### ⚠ GP-304 part 2 — passing the lock through scopes only SAME-TABLE columns (measured 2026-07-29)
+
+**The durable mechanism, and the reason a second bound was needed: the field-values query is
+`CALCULATETABLE(SUMMARIZECOLUMNS(<col>), KEEPFILTERS(<lock>))`, and that shape narrows only columns on the
+SAME TABLE as the locked column. A filter on a different table is silently ignored.**
+
+Measured on prod against Brinno's `Brand='Brinno'`-locked dashboard, *with* the part-1 fix applied:
+
+| Column | result |
+|---|---|
+| `'Brand'[Brand]` | 177 → **1** ✅ |
+| `'Product'[Brand]` | 177 → **177** ❌ — the identical roster, one column away |
+| `'MAP Violators Daily'[Brand]` | 112 → **112** ❌ |
+| `'MAP Violators by Brand'[Brand]` | 81 → **81** ❌ |
+| `'Vendor'[Vendor Email]` | 86 → **86** ❌ |
+
+- **Positive control, so this is not a probe artifact:** same-table *does* narrow — a `Product[Brand]` lock
+  takes `Product[Manufacturer Name]` from **162 → 1**. Filters are applied; they just don't propagate.
+- **Adding a measure** to the query scopes every *brand* column to 1 — the scoping comes from blank-row
+  elimination — but leaves `Vendor` at 86, because **`'Vendor'` has no relationship path to `'Brand'` at all**.
+  So no filter shape can ever scope it, and the measure cannot be chosen generically on a dataset-agnostic
+  route. **Shapes tried and rejected:** `fieldFilters=[lock]` (still 177); adding the locked column to the
+  group-by (**empty payload**).
+- **Fix (`06aa015`) — bound *which columns* may be enumerated, not just how they are filtered.** New
+  `dashboards.lib.assert_field_is_dashboard_filter()`: the dashboard-scoped route may only serve columns the
+  dashboard **configures as a filter**; anything else raises `CoreApiException(404)` (matching
+  `get_visual_from_dashboard`'s containment check; 404 not 403 so the response doesn't confirm the column
+  exists). Exact match — the bypass *is* a same-named column on another table, so suffix matching would
+  reopen it. Mode-independent, fails closed on a dashboard with no filters, short-circuits before the model is
+  queried.
+- **Why that is the right answer rather than a blunt deny:** prod serves **54 enumerable columns** while every
+  MAP dashboard — client *and* internal — configures exactly **3** (`'Brand'[Brand]`,
+  `'Navira MAP Violators'[Selling FBA (Yes/No)]`, `'Navira MAP Violators'[Avg ASINs Listed]`). The other ~51
+  have no UI function on this route; they are reachable only by calling the API directly, which is the attack
+  rather than the feature. **The allow-list *is* the dashboard's filter bar**, so it closes everything at once —
+  including the columns scoping provably cannot reach — at zero functional cost, and leaves the internal tier's
+  values unchanged.
+- **Residual, stated rather than buried:** `'Navira MAP Violators'[Avg ASINs Listed]` remains served
+  **unscoped** on client dashboards (55 values) because it *is* a configured filter and Brand cannot scope it.
+  Non-identifying numerics, but cross-client, and **not closed**. Separately,
+  `'Navira MAP Violators'[Selling FBA (Yes/No)]` already **404s** on this route because its column name contains
+  `/`, which breaks path routing — a *configured* client filter that can never load its values. Own ticket.
+- **Not yet verified:** the allow-list applies to **every** dashboard with a locked filter, including the ~21
+  combined client **sales** dashboards. Only 4 dashboards' filter configs were inspected. Sweep all of them
+  (read-only) before swapping.
+
+**⭐ The process lesson, which outlives the bug: the deploy gate would have certified the fix while the
+vulnerability remained.** The e2e `D1` test asserted on the single locator the original probe happened to
+measure, so after deploying part 1 it would have gone **GREEN** while `'Product'[Brand]` still returned all
+177 brands. *When you fix an enumeration bug, the test must enumerate every equivalent route to the same
+data — not the one instance you found first.* D1 now sweeps 4 brand-bearing columns × 19 dashboards, and a new
+`D5` asserts sensitive non-brand dimensions are scoped **or refused**.
+
+**Merge is dead-locked on process, not code.** PR #250 is OPEN/MERGEABLE with **11/11 CI green**, but
+`eclipse-2.1` requires an approving review: the author cannot self-approve, Paul's token is `admin: false`, and
+the green `review` check is the **Claude bot, which only COMMENTED** (0 approvals). ⚠ **A green bot "review"
+check does not satisfy a required-approval rule** — don't read the check list as merge-readiness.
 - **Routes confirmed CLOSED (no action):** `/v2/datasets/{id}/fields/.../values/` and
   `/v2/data_views/{id}/dataset/fields/.../values/` check `Dataset_View`/`DataView_View` via
   `check_dependency(require_active_account, …)` — i.e. against the **active account**, which `external-user`

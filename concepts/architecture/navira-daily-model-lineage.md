@@ -3,7 +3,7 @@ tags: [architecture, lineage, data-flow, navira, gep, power-bi, snowflake, daily
 aliases: [Navira Daily Model Lineage, 66151728 Lineage, Daily Data Model Data Flow, Navira Sales Model Lineage]
 sources: [aldc-launchpad/pbi_ops/_gp291_baselines/Data_Model_66151728_20260722T033253Z.tmsl.json, aldc-launchpad/.claude/plans/lovely-brewing-simon.md]
 created: 2026-07-22
-updated: 2026-07-23
+updated: 2026-08-09
 ---
 
 # Navira Daily "Data Model" (`66151728`) — Data-Flow / Lineage Map
@@ -162,6 +162,50 @@ Composed upstream (seen via `SHARED_DIM_MARKETPLACE` lineage) from `WAREHOUSE.SA
   (3) `MARKETING_EFFICIENCY_PRODUCT` extended base→base∪PREPROD(SP+SD) so UK appears at ASIN grain
   ($6,603.89, fully resolved). Client uses the **Live models** (not the deprecated reports). Client discussion
   doc + comparison: `aldc-launchpad/docs/evidence/gp226/`. Branch `feature/lectric-scheduled-connector`.
+
+## Requirement logged 2026-08-09 — cross-**platform** slicing, alongside cross-**channel** (Paul)
+
+Captured during the GP-317/GP-318 Daily-model cross-channel ad-spend design session. **Logged only —
+not designed, not scoped, not built.** Recorded here because the Daily model is where it lands.
+
+> Paul, 2026-08-09: *"I mentioned cross-channel, but what we will also want is an option for analysis
+> and slicing and reporting cross platform too. This is probably straightforward to add to the model."*
+
+**Read the two words in this estate's local sense — they are not synonyms:**
+
+| Term | Axis | Members | Where it lives today |
+|---|---|---|---|
+| **cross-channel** | the **ad** side — where marketing money is spent | Amazon Ads (SP/SB/SD) · Google Ads · Meta | `MARKETING_FCT_ACTIVITY_UNIFIED.PLATFORM_ID` → `Marketing Efficiency` |
+| **cross-platform** | the **selling** side — where revenue is earned | Amazon US/CA/UK/MX/BR/DE/FR/IT/ES · Shopify stores (Brinno, Cibu, Bigso, ION8, Slobproof, Carry-on, AnySharp) · Bridgford WooCommerce · Walmart · eBay · Target · Wayfair · NewEgg · Best Buy US/CA · Etsy · Reverb · GEP Brands · Wholesale | `SHARED_DIM_MARKETPLACE` → `Marketplace` dim, already joined to `Order Line` |
+
+So this is a **sales-side reporting axis**, not a second ad axis. The dimension and the relationship
+**already exist** in the Daily model — which is why Paul's "probably straightforward" read is
+plausible. The likely real work is *grouping and legibility*, not plumbing.
+
+**Open design questions when this is picked up (do not answer them from this page):**
+1. **Is a platform-GROUP level wanted** (e.g. Amazon / DTC-owned-site / retail-marketplace / wholesale),
+   or is slicing on the existing per-marketplace members enough? 25+ raw members is a lot of pie slices;
+   a grouping column on `SHARED_DIM_MARKETPLACE` is the cheap version. **Ask Paul before assuming.**
+2. **What does ad spend do under a cross-platform slice?** Only Amazon ad spend carries a marketplace.
+   Under a *Shopify* or *Walmart* platform slice, Amazon/Google/Meta spend must render **blank, never
+   zero** — the same rule the cross-channel design is adopting. Google/Meta own-site-destination spend
+   is the one bridge between the two axes, and it rests on a fragile campaign-naming convention.
+3. **Which measures are even valid cross-platform?** ⚠ **This is the trap.** [[navira-roadmap-status]]
+   gap #3 records it: a user can wrongly **cross-platform `SUM(SALES_AMOUNT)`** — platform-attributed
+   sales double-count and must never be summed across platforms; use `ACTUAL_SALES_*`. The **DAX Flag A
+   guardrail** was drafted for exactly this (`aldc-launchpad/pbi_ops/navira_dax_flags_A_B.md`) and is
+   **still not applied**. Shipping cross-platform slicing without Flag A hands users a correctness
+   footgun on the model the CEO report reads. **Treat Flag A as a prerequisite, not a follow-up.**
+4. **Coverage honesty per platform.** Several marketplace members currently carry no data at all
+   (Mexico, Brazil, and the EU members returned NULL in the 2026-08-09 probe). A platform slicer that
+   lists 25 members and populates 6 needs the four-kinds-of-zero treatment
+   ([[cross-channel-marketing-attribution]]), or users read "no data" as "no sales".
+
+**Related in-flight work:** the GP-317/GP-318 cross-channel design session (branch
+`feature/navira-ad-metrics-request`, boot prompt
+`aldc-launchpad/boot-prompts/navira-daily-model-cross-channel-adspend.md`). The two axes should share
+one blank-vs-zero rule and one legibility standard, so whoever designs cross-platform should read the
+cross-channel design's outcome first rather than inventing a parallel convention.
 
 ## Related
 [[data-pipeline-flow]] · [[star-schema-convention]] · [[Power BI]] · [[Snowflake]] · [[periodicity]] ·

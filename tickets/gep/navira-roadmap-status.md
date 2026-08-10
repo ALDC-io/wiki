@@ -465,6 +465,7 @@ access ask drafted at `aldc-launchpad/pbi_ops/navira_wave3_data_access_request.m
 | GP-230/231 | Multi-tenant SP-API / Seller Central | Development/Design | backlog (Phase 1C) |
 | GP-233 | Purchasing connector & COGS schema | Consulting/Design | backlog — **unblocks Lectric COGS** |
 | GP-228/229/234/235 | TikTok / Email / SmartScout / Unstructured | Consulting/Design | Phase 1B+ backlog |
+| *(unticketed)* | **Cross-platform slicing / reporting** (Daily model) | — | **Requirement logged 2026-08-09 (Paul) — not scoped, not designed.** The *sales-side* axis (Amazon marketplaces / Shopify stores / Walmart / eBay / …) **alongside** the cross-*channel* ad axis. Dim + relationship already exist in the Daily model → likely **grouping + legibility** work, not plumbing. ⚠ **DAX Flag A is a prerequisite, not a follow-up** (gap #3 below): cross-platform `SUM(SALES_AMOUNT)` double-counts attributed sales. Full open questions: [[navira-daily-model-lineage]] |
 
 ## ⚠️ Gaps / items to address
 1. **Jira out of sync** — GP-281 shows *To Do/Consulting-Design* but is deployed+validated in TEST; GP-225 still *Development*; GP-227 shows *QA* but isn't started. Reconcile (comment; transition on Paul's OK).
