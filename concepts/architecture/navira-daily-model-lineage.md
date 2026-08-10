@@ -163,6 +163,104 @@ Composed upstream (seen via `SHARED_DIM_MARKETPLACE` lineage) from `WAREHOUSE.SA
   ($6,603.89, fully resolved). Client uses the **Live models** (not the deprecated reports). Client discussion
   doc + comparison: `aldc-launchpad/docs/evidence/gp226/`. Branch `feature/lectric-scheduled-connector`.
 
+## ⭐ Consumer-layer defects found 2026-08-09/10 (`/assay`, 7 lenses) — READ BEFORE EDITING THIS MODEL
+
+All read-only, all re-runnable. Evidence: `aldc-launchpad/docs/evidence/gp317/assay-findings-ledger.md`
+(+ ~30 JSONs). **None fixed.** Boot prompt for the first one:
+`aldc-launchpad/boot-prompts/navira-august-allocation-divergence-inquest.md`.
+
+### ⭐⭐ THE DURABLE LESSON — validate in the gesture the CLIENT uses, not all-time
+
+Seven independent lenses measured this model for hours and all missed the biggest defect, because every
+one of them measured **all-time**. Paul then supplied one sentence of context — *"the client normally
+uses a pivot with calendar year on it, filtering for current year, so YTD"* — and reproducing that
+single gesture exposed a **262% error in the current month**.
+
+| Basis | What it showed |
+|---|---|
+| all-time | the two Amazon ad figures differ by **+4.1%** — looks reassuring |
+| CY2026 YTD | **+12.3%** |
+| **August 2026** | **allocated $163,689 vs spend $45,198 — +262%** |
+
+**The all-time view actively hid it**, because CY2024 (−0.2%) and CY2025 (−0.2%) dilute it. So does the
+"99.81% reconciliation over 26 months" that had been quoted to the client — measured on PROD, dominated
+by the agreeing months. ⇒ **Ask how the consumer slices before choosing a validation window, and put
+their pivot in the battery.** A defect can be invisible in every window except theirs.
+
+### The five model-layer defects (all MEASURED, none fixed)
+
+1. **The marketplace SLICER silently drops all Google + Meta; the MATRIX does not.**
+   `REPORT_COMMON.MARKETING_EFFICIENCY` relabels the fact's `Unknown` marketplace to `Cross-Channel`,
+   which is **not a member of `SHARED_DIM_MARKETPLACE`** ⇒ `MARKETPLACE_KEY_XREF`
+   (`MINX(FILTER(...))`) returns BLANK on exactly **768 rows / $244,870.44** ⇒ they attach to the
+   relationship's **auto unknown member**: unlabelled, un-renameable, **unselectable by any positive
+   slicer choice**. A matrix reconciles to $0.00; ticking named marketplaces drops **$118,206 YTD
+   (11.6%)** with no warning. ⚠ **The orphan is created by the view's relabel, not inherited from the
+   fact** — all 4 fact marketplace values are in the dim. ⚠ **Do NOT "just add `Cross-Channel` to the
+   dim"** — measured, that dim drives *sales* (Amazon US $81.4M), so a synthetic member pollutes every
+   sales slicer model-wide. **Channel must leave the marketplace axis.**
+2. **Every Brand/Product pivot of ad spend is 175× wrong.** `Marketing Efficiency` has no relationship
+   to `Brand`/`Product` (only Agency + Date) ⇒ 175 rows, **1 distinct value**, grand total on every
+   row; rows sum to $496,497,407 against a $2,840,291 truth. **The discriminator that makes this a
+   defect and not a query artifact: the Date-dim control PASSES** (3 rows / 3 distinct / sums exactly).
+   Keep that sentence next to the finding — without it the objection "isn't that just how DAX works?"
+   is open. Only correct brand field = `Marketing Efficiency Product[Brand]`, which appears in the
+   field list under the **same display name `Brand`**.
+3. **Sponsored Display reads a stale PROD source** — see the four-kinds-of-zero case below.
+4. **"Blank, never zero" is decided but NOT implemented.** Not one blank exists: the source column
+   emits a literal `0`, and the PBI format string `\$#,0;(\$#,0);\$#,0` has **no 4th (blank) section**,
+   so SQL `NULL` alone would still paint `$0`. **Two-part fix — SQL and format string.** 26 of 30
+   marketplaces, 23 Meta months, 248 UK days and the LECTRIC agency all assert a false `$0`.
+5. **`Margin After Ad Spend (USD)` nets Amazon ONLY** — $244,870 of Google+Meta never deducted, while
+   [[navira-metric-dictionary]] line 109 documents it as netting all three. Wrong on the model the CEO
+   report reads. Residual **$61.69**, entirely Amazon UK, undecomposed. Stored warehouse column, not DAX.
+
+### ⭐ Four-kinds-of-zero case study: Sponsored Display "died 2026-06-05" — it didn't
+
+| Source | Rows | Cost | Max date |
+|---|---:|---:|---|
+| **TEST raw** `AMAZON_ADS.CURRENT_SPONSORED_DISPLAY_CAMPAIGN_REPORT` | **9,433** | **$6,485.38** | **2026-08-08** |
+| PROD raw (same object) | 942 | $3,374.90 | 2026-06-05 |
+| **TEST fact** `MARKETING_FCT_ACTIVITY_UNIFIED` | **942** | **$3,374.90** | **2026-06-05** |
+
+The fact matches **PROD exactly, not TEST** — `_PREPROD` sources SD from `PROD_DG1_GEP.AMAZON_ADS.…`.
+⇒ `NOT RECORDED`, **not** `ZERO`. We were one step from telling the client their campaigns had stopped;
+they never did. **$3,110.48 invisible**, and Amazon + all-channel totals understated by the same.
+**The lesson: a discriminating three-way test (TEST raw / PROD raw / fact) separates a pipeline bug
+from a client-behaviour fact. Matching values are not provenance.**
+
+### Other measured facts worth having before any edit
+- **The `2024-06-01` date floor appears 5× LIVE**: `MARKETING_EFFICIENCY` L35/51/67, `_MARGIN` L44,
+  `_PRODUCT` L66. It cuts **$23,689.66 / 564 rows** of Jan–May-2024 Google from a client-facing figure.
+  A fix must touch all five or the layers disagree.
+- **Product grain covers 92% of Amazon spend, not ~99%.** `SB US is 88.6% sentinel by spend` — 364 real
+  ASINs but only **11.4% ($26,037 of $229,223)** of SB spend carries one. Counting ASINs that *exist*
+  ≠ counting spend that *carries* one. Always exclude `PRODUCT_ID = '-1'`.
+- **Every object on the marketing path is a secure VIEW, not a table** ⇒ **no ~06:00 Eclipse rebuild
+  wait for this family**; a view replace is live immediately, only a PBI refresh is needed. (Contradicts
+  the general assumption in [[project_navira_consumer_layer_pipeline]] *for this path only*.)
+- **7 of 11 in-scope TEST objects are owned by `ACCOUNTADMIN`** (hand-deployed, not reproducible via the
+  Eclipse `CORE_SVC` path); only 4 are `CORE_SVC`-owned.
+- **Zero SHARE grants on any in-scope TEST object** — the `COPY GRANTS`/re-grant ceremony applies to
+  exactly 2 PROD objects. **But `COPY GRANTS` is still mandatory on TEST**: `NAVIRA_MKT_RO` holds SELECT
+  on 3 of them (the client-facing `navira-mktg` dashboard) and a bare `CREATE OR REPLACE` silently 403s
+  it while every PBI check still passes.
+- **Figures move daily.** Refresh ~14:00 UTC; the all-channel total moved **$3,163** in one day.
+  Campaign spend's apparent $2,852 gap vs Snowflake **self-healed to the exact Snowflake value** after
+  the next refresh — final-day accrual, not a defect. The *allocated* side is the volatile one
+  (+$91,495 in one refresh). **Stamp every figure with the refresh instant.**
+- **Visible surface (contract for any "what changes" claim):** 97 measures visible / 164 hidden on
+  visible tables / 18 of 35 tables visible. `Marketing Efficiency` = **19 visible / 28 hidden of 47**
+  (the "48" in older notes is wrong). A naive `IsHidden=false` count returns 105 and is **wrong** —
+  8 unhidden measures are stranded on hidden `Customer` tables. Three visible folders, not two:
+  `Spend`, `Contribution Margin`, **`Grounded ROAS`** (on MEP).
+- **`executeQueries` redacts `[Expression]`/`[FormatString]`** and rejects `INFO.MEASURES()`
+  (`AnalysisServicesErrorCode 3239575574`). Use read-only TOM `JsonSerializer.SerializeDatabase`.
+  Do **not** read those NULLs as "no format string".
+- **Zero reports render the cross-channel spend measures** — across all 27 enumerable workspaces only 2
+  reports bind to `66151728` and neither uses the `Spend` folder. So "show the client what it looks like
+  exactly" **cannot be satisfied by pointing at anything today**; an approval surface must be authored.
+
 ## Requirement logged 2026-08-09 — cross-**platform** slicing, alongside cross-**channel** (Paul)
 
 Captured during the GP-317/GP-318 Daily-model cross-channel ad-spend design session. **Logged only —
