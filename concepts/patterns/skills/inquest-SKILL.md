@@ -172,6 +172,30 @@ Swap layers to fit the stack: *infra/network*, *auth/identity*, *third-party API
 
 `devil` is not optional and is not a formality. In the reference `conclave` run the highest-value category was **"valid comment, dangerous remedy"** — 2 of 9 findings would have made things *worse* if actioned as written. The bug analogue is worse still: a plausible fix deployed at the wrong layer.
 
+#### ⭐ `devil` must return NUMBERS, not objections — this is what makes it un-overrideable
+
+An adversary that returns prose returns something ignorable. "That change looks risky" gets argued
+past by four members who already agree with each other; a measured blast radius ends the discussion.
+So the `devil` prompt must **require, for every remedy the council is converging on**:
+
+| Required | Not acceptable |
+|---|---|
+| **Blast radius as a measured number** — rows, dollars, affected entities/users, and the **worst single case** | "this could affect other flights" |
+| **Does this even fix the reported symptom — explicit yes/no**, separately from whether it is safe | silence on efficacy |
+| The **query or command** that produced the number, so the synthesiser can re-run it | an estimate |
+
+Demand both axes, because they fail independently: a remedy can be **safe and useless**, or
+**effective and catastrophic**, and only the second column of that table tells them apart. Where the
+number genuinely cannot be measured from available access, say **"unmeasurable, here is why and what
+access it needs"** — never substitute an adjective.
+
+> Real case (FU92-421): the whole council was converging on loosening an `INNER JOIN` predicate.
+> `devil` did not call it risky — it measured it: **+$119,922 (+16.9%) admitted across 23,883
+> (account, campaign_group) pairs claimed by more than one flight, worst pair 97 flights**, which the
+> downstream even-split logic would smear across flights nobody had complained about — *and* it
+> answered the efficacy question: **no, it fixes nothing**, because zero raw rows existed to admit.
+> Two of that run's five highest-value outputs came from this one seat; both were numeric.
+
 ### Rules every member gets
 
 - **Verify by reading real code and real state.** Never cite a line or a row count you didn't open.
@@ -191,7 +215,51 @@ Swap layers to fit the stack: *infra/network*, *auth/identity*, *third-party API
 
   Precedent in this codebase: `eclipse_ops/_gp304_predict_scoping.py` wrote its predictions to `docs/evidence/gp304/predict_scoping.json` *before* the change, which is why the result was unarguable.
 
+- **⭐ A ZERO FROM AN INSTRUMENT YOU HAVE NOT PROVED CAN STILL SEE IS NOT A MEASUREMENT.** This ranks
+  alongside the discriminating-test contract, because it is how an inquest reaches a *confident wrong
+  answer about someone else's behaviour*. Before writing "none", "never", "stopped" or "zero",
+  demonstrate the instrument would have registered a non-zero **in that same window** — a positive
+  control, a heartbeat, a canary, or a corroborating second instrument.
+
+  Report the four states separately; collapsing them into "zero" is the error:
+
+  | Verdict | Meaning |
+  |---|---|
+  | **ZERO** | it did not happen, and the instrument was demonstrably live |
+  | **NOT-RECORDED** | it may have happened; nothing was instrumented to catch it |
+  | **NOT-VISIBLE** | instrumented, but this instrument cannot see this shape of event |
+  | **NOT-RETAINED** | recorded once, since destroyed (rotation, container teardown, TTL) |
+
+  > Real case (FU92-420): **three** instruments reported zero in one ticket, all blind, and all three
+  > zeros were reported to the client as findings about *their* behaviour. (1) A container log went
+  > quiet because a release renamed its markers. (2) A folder scanner reported "no activity since
+  > February" because it keyed on a directory layout the output format had since changed away from.
+  > (3) A warehouse column read `0 of 14,709` because the sync model never had the field the UI
+  > writes — a hypothesis that had been *written down and then dismissed* using a log from a
+  > different era to settle it. Five wrong client answers, no deploys.
+
+  **Corollary — an instrument's definition drifts out from under the measurement.** Any detector
+  keyed on a *structural signature* (a folder layout, a filename pattern, a marker string) is
+  version-bound. Re-validate it against the **newest** data, not the data it was written against.
+
 - **⭐ Never infer the target from matching values.** Two objects can hold identical values and still be different objects. Prove which one the consumer reads with something only one candidate has — a distinguishing column, the consumer's own query log, the import/partition source. *This exact inference caused a wrong-layer deploy and revert (GEP "Missing COGs", 2026-05-29).*
+- **⭐ A HEALTHY AGGREGATE IS NOT A HEALTHY POPULATION — bracket at the grain that can isolate the
+  fault.** `MAX()`, `SUM()` and `COUNT()` over a group are satisfied by **one** healthy member, and a
+  group carried by its single survivor is indistinguishable from a group that is fine. This is the
+  sibling of the matching-values rule: there you trusted the wrong *object*, here you trust the wrong
+  *level*. Before a group-level reading refutes anything, **decompose it one level finer than the
+  unit that could fail independently** — per account, per tenant, per region, per partition, per
+  device — and report the members, not the roll-up.
+
+  Practical test: ask *"what is the smallest thing that could break on its own here?"* and group by
+  that. If a refutation rests on an aggregate, it is not yet a refutation.
+
+  > Real case (FU92-421): "the LinkedIn connector is fine" was proven from
+  > `MAX(SPEND_DATE)` grouped by `PLATFORM_ID` — `Direct-LinkedIn` current to today across 112
+  > flights. It was carried **entirely by 1 of 4 ad accounts**; the other three had stopped loading
+  > 17 days earlier. The orchestrator put that refutation in the brief, so **all four council members
+  > inherited it** and had to re-derive the truth at account grain independently. The correct
+  > hypothesis was killed by a true statement measured too coarsely.
 - **⭐ Killing your own hypothesis with evidence is a SUCCESS. Report it as one.** You are assigned a layer, not a conclusion. "My layer is clean, here's the proof" is a first-class deliverable and shortens the whole inquest. Members who confirm their assignment 100% of the time are useless.
 - **Severity** ∈ `ROOT CAUSE | CONTRIBUTING | INCIDENTAL | CLEAN` and **confidence** ∈ `PROVEN | LIKELY | SPECULATIVE`, as **separate** axes. A PROVEN INCIDENTAL and a SPECULATIVE ROOT CAUSE are both useful and behave differently. In the reference run, a member's own `LIKELY` caveat is what exposed its error.
 - **Report what you checked and found clean**, explicitly. Exclusion is evidence. It's how the boundary gets drawn.
@@ -240,6 +308,39 @@ A discriminating test earns `LIKELY`. **`PROVEN` requires more, and it is usuall
 5. **Prove a cause inside a system you cannot read — by elimination plus capability.** When the defect lives in code you have no access to, you can still prove it: eliminate every readable layer *exhaustively* (4), then show the intermediate layer is **structurally incapable** of producing the symptom (e.g. *the API builds `SUMMARIZECOLUMNS` only, so it cannot apply an arbitrary distinct-count*). Cause is then established by construction, without reading a line of the offending source.
 6. **Run a negative control.** Find the case where your hypothesis predicts **no difference**, and show there is none. A window with zero placeholder rows where broken and correct outputs must agree *exactly* is stronger evidence than ten more cases where they differ. Positive cases confirm; the negative control is what rules out over-correction and coincidence.
 7. **State the sample and its limits.** Six rows, one vendor, one week is a real proof of *mechanism* and a weak proof of *scope*. Say which you have. Then widen it, or name the residual risk explicitly — don't let a mechanism proof masquerade as a blast-radius proof.
+8. **⭐ Derive a physical property of an actor you cannot observe, from the artifacts it left.** When
+   the question is *who or what did this* and you have no access to the actor, you can still
+   constrain it hard — and a physical constraint eliminates whole hypothesis classes at once, where
+   argument-from-plausibility eliminates none.
+
+   **Clock forensics** is the highest-yield version. Compare a timestamp the actor *wrote into its
+   own output* (an embedded filename stamp, a header, a record field) against a timestamp the
+   *storage* applied (mtime, `getlastmodified`, a DB insert time) — then **calibrate against a
+   known-good control in the same store**:
+
+   ```
+   control (known-UTC producer) : embedded 19:55:16 → mtime 19:55:19   = +3s
+   unknown producer             : embedded 15:35:36 → mtime 20:35:47   = +5h 00m 11s
+                                  … 4 samples, all +5h ± 20s
+   ```
+
+   A constant whole-hour offset with a small varying residual is a **clock difference**, not a
+   duration: four unrelated jobs cannot all take exactly five hours. That is a proven statement
+   about the actor's host, obtained with no access to it.
+
+   The same shape works on: DST behaviour (does the offset move by an hour between March and
+   November?), locale and encoding, path separators, filename-length limits, sort order,
+   float formatting, and library-version fingerprints in output headers.
+
+   > Real case (FU92-420): five conversion outputs appeared in a client's storage in a format the
+   > service could not produce. Clock forensics proved the writer ran at **UTC-5** while the service
+   > runs UTC — eliminating "a hidden build of our own service" outright, and ruling out the
+   > client's own head-office timezone (UTC-6). Cross-referencing the repo's `git log` **author
+   > offsets** then supplied the DST behaviour the artifacts couldn't: `-0500` in February, `-0400`
+   > in April, matching exactly. The remaining hypothesis was internal, and the client was never
+   > asked to explain our own activity.
+
+   **Do this before asking anyone a question.** A question commits you to not having known.
 
 **If you cannot reach `PROVEN`, say `LIKELY` and name exactly which of the above is missing.** That sentence is what tells the next session where to start, and it is the difference between honest and merely confident.
 
@@ -276,7 +377,47 @@ side-finding stand in for the answer, and do not bury it either.
 
    A query-layer check can pass while every visual is blank. Proven: a repoint passed DAX parity while every visual showed "Error loading data" from a stale name binding.
 5. **Prove no regression.** Out-of-scope rows/objects/users unchanged; before/after deltas equal to expectation; row counts stable. State this explicitly — "I didn't touch that" is not evidence.
+
+   ⚠ **A before/after baseline DECAYS on any system that ingests while you work.** In a live pipeline
+   the world moves between snapshot and verification, so raw deltas conflate *your change* with
+   *normal growth and late-arriving restatement* — and the conflation reads as a regression you caused.
+   Two defences, and prefer the second:
+
+   - **Bound the comparison to a settled window** (`WHERE date <= <pre-change>`), and know that even
+     this leaks: platforms restate recent days, so "settled" must mean settled, not merely past.
+   - **⭐ Prefer TIME-INVARIANT proofs**, which hold no matter how much unrelated data lands:
+     an arithmetic identity that closes exactly (`old + recovered == new`, to the cent); the changed
+     object claimed by exactly **one** consumer; the split/dedup population unchanged; a structural
+     argument that your edit *cannot* reach the affected code path (e.g. a per-source `UNION ALL`
+     branch you did not touch).
+
+   > Real case (FU92-421): a 2-day-old baseline flagged **four** sibling flights as regressions
+   > (+$31–44 each) and a whole-warehouse delta of **+$246,616** against an expected +$26,526. All of
+   > it was ordinary ingestion plus late-arriving restatement on *other platforms*. The change was
+   > clean — the measurement was not. The exact identity (`$281.06 + $26,995.72 = $27,276.78`) settled
+   > in one line what the totals could not settle at all.
+
+   **State which kind of proof you have.** "Nothing else moved" is a claim about a *snapshot*;
+   "the arithmetic closes and only one consumer claims it" is a claim about the *change*.
 6. **Re-run the surrounding suite**, not just your new test.
+7. **⭐ A SUCCESS STATUS IS NOT PROOF OF A WRITE.** After any mutation, **re-read the target and diff
+   it** — do not infer success from a `200`, an `OK`, a non-zero rowcount, or an absent exception.
+   Write endpoints reject silently: an unexpected payload shape, an ignored field, a merge-vs-replace
+   mismatch, a permissions filter, an optimistic-concurrency no-op. Treat **"nothing changed"** as a
+   FAILED apply, and say so, rather than reporting the attempt as the outcome.
+
+   The diff must cover **every field, not just the ones you meant to change** — that is what catches a
+   replace-semantics endpoint silently dropping the 34 fields you didn't send. Classify each
+   difference as *intended*, *server-managed* (`_ts`, `_etag`, `updated_at`), or **unexpected**, and
+   stop on any unexpected one.
+
+   > Real case (FU92-421): `application/update` returned **HTTP 200** and wrote **nothing** — the
+   > endpoint is a partial merge expecting changed fields under a `document` key, and a full flat
+   > document was accepted and discarded. Only a full-document diff against the pre-change capture
+   > caught it. Had the run trusted the 200, the ticket would have been closed on an unapplied fix.
+
+   Corollary: **find the write contract in a caller that already works in production**, not by
+   guessing at the payload. The repo you have checked out may not even be the service you are calling.
 
 ---
 
@@ -294,7 +435,7 @@ The gate needs all five:
 | 4 | **Rollback captured** — original DDL/doc saved + a revert script, *before* the mutation |
 | 5 | **Validated non-destructively first** — shadow copy, dry run, `WHERE FALSE` permission probe |
 
-Re-task `devil` here as **deploy adversary**: *"here is the fix and the evidence — argue this should not ship."* Cheapest possible insurance at the highest-consequence moment.
+Re-task `devil` here as **deploy adversary**: *"here is the fix and the evidence — argue this should not ship."* Cheapest possible insurance at the highest-consequence moment. Hold it to the same numeric standard as Phase 1: **measured blast radius + an explicit does-it-fix-the-symptom yes/no**, or a named reason the number can't be obtained. A deploy adversary that returns misgivings has told you nothing you can gate on.
 
 Environment hygiene: assert the account/environment before any mutation (`assert current_account() == '<EXPECTED>'`). Beware lookalike objects — the same document ID can exist in TEST and PROD pointing at different targets.
 
@@ -336,6 +477,9 @@ Also: if a shared asset is touched (one visual serving many dashboards, one view
 |---|---|
 | Theorise before reproducing | The most expensive way to be wrong |
 | Infer the target from matching values | Caused a real wrong-layer deploy + revert |
+| Refute a hypothesis with a group-level aggregate | One healthy member satisfies `MAX`/`SUM`/`COUNT`. A platform reading "current" hid 3 of 4 dead accounts and killed the correct hypothesis |
+| Trust a `200`/`OK` as proof a mutation landed | A partial-merge endpoint returned 200 and wrote nothing. Re-read and diff every field |
+| Compare against a baseline taken hours or days ago | Live ingestion and late restatement masquerade as regressions you caused. Use a settled window, or a time-invariant identity |
 | Run a test whose outcome you didn't predict | You'll rationalise whatever you see |
 | Accept the first fitting documented failure mode | A plausible fit is what stops people looking |
 | Let a member confirm its own assignment every time | Then the layer split bought you nothing |
@@ -370,5 +514,23 @@ verification**, and the **evidence-gated deploy**, from this estate's own incide
 Hardened after the **GP-309** run (2026-07-30): Gate 2 instrument calibration; Gate 3's
 reported-symptom rule, ask-the-reporter step, and consumer-request-state rule; the brief's
 correlated-error warning; symmetric verification of refutations; and the
-`DEFECT FOUND — NOT THE REPORTED ONE` verdict. Stack-specific gotchas from that run live in the
-wiki, not here — this skill stays stack-agnostic.
+`DEFECT FOUND — NOT THE REPORTED ONE` verdict.
+
+Hardened again after the **FU92-421** run (2026-08-10), which found **two unrelated root causes in
+one report** and cost three self-inflicted detours worth encoding:
+
+- **The healthy-aggregate rule** (Phase 1) — a refutation built on `MAX()` grouped one level too
+  coarse killed the *correct* hypothesis, entered the brief, and propagated to all four members. The
+  fix is to bracket at the smallest unit that can fail independently, and to distrust any refutation
+  resting on a roll-up.
+- **The decaying-baseline rule + time-invariant proofs** (Phase 3 step 5) — on a live pipeline, raw
+  before/after deltas invented four regressions that did not exist. An exact arithmetic identity
+  settled in one line what whole-population totals could not settle at all.
+- **"A success status is not proof of a write"** (Phase 3 step 7) — a write endpoint returned `200`
+  and silently discarded the payload; only a full-field diff against the pre-change capture caught it.
+
+That run also re-confirmed two existing rules the hard way: the best-*fitting* documented failure mode
+(FU92-419) was the wrong one, and the negative control — proving the feed *does* emit zero-valued rows
+when live-but-idle — is what separated "never loaded" from "stopped spending".
+
+Stack-specific gotchas from these runs live in the wiki, not here — this skill stays stack-agnostic.
