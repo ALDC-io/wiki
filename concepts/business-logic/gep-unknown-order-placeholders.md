@@ -74,6 +74,32 @@ Deployed via `pbi_ops/cli.py measures create "<workspace>" "Data Model" --table 
 `aldc-launchpad/pbi_ops/_BASE_ACT_SALE_GROS_OC_ROLLBACK_TEST_66151728.txt`. PROD deploy pending Navira
 sign-off (comparison workbook sent to Heather Tabor).
 
+## ⚠ These placeholders also close a CIRCULAR DEPENDENCY (found [[GP-322]], 2026-08-10)
+
+The same `ATTRIBUTION_TYPE = 'No Match'` rows are read into **`WAREHOUSE_SOURCE.SALES_DIM_ORDER`** as
+well as into `SALES_FCT_ORDERLINE` — the dimension appends them as *"unallocated cost order"* rows. But
+`SALES_FCT_COST`'s own ad-cost **allocation denominator** joins that dimension. So:
+
+```
+SALES_FCT_COST ──▶ SALES_DIM_ORDER ──▶ SALES_FCT_COST
+```
+
+Snowflake breaks the cycle by build order, materialising the fact at **06:02:32** and the dimension at
+**06:02:48** — so the allocation divides each day's ad spend by an order list that is **24 hours stale**.
+Result: the allocated ad-cost columns are inflated on the trailing ~3 days of every build (the newest day
+by up to ~27×), which **understates net margin** by the same amount. It self-heals; closed months are fine.
+
+⇒ **Do not "simplify" this dimension arm without reading [[circular-dependency-build-order]] first.** The
+placeholders are still a deliberate and correct cost-completeness mechanism — the defect is not that they
+exist, it is that the dimension carrying them is *also an input to the fact that produces them*. The
+remedy on [[GP-322]] leaves these rows untouched and instead repoints the denominator at
+`SALES_DIM_ORDER_BASE`, which does not contain them.
+
+**Second-order effect worth knowing:** because starved buckets fall through the allocation's
+`ORDER_LINE_COUNT > 0` gate into the No-Match branch, the *count* of `UNK_` rows is itself inflated on
+those trailing days (GP-322 measured ~1,270 extra August rows carrying ~$2,326). So a `UNK_` row count
+taken on a current month is not a stable figure.
+
 ## See Also
 
 - [[GEP]] — the client

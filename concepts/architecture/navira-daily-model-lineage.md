@@ -38,6 +38,29 @@ object a consumer reads before changing it (`[[star-schema-convention]]`, `[[dat
   refresh** (RangeStart `2025-07-01` → RangeEnd `2026-07-01` window; historical fixes need a full-partition
   reprocess, `RefreshType.Full`). See `[[project_navira_consumer_layer_pipeline]]`.
 
+> ### ⚠⚠ A CIRCULAR DEPENDENCY LIVES IN THIS LINEAGE — `SALES_FCT_COST` ↔ `SALES_DIM_ORDER`
+> **Proven [[GP-322]] 2026-08-10.** `WAREHOUSE_SOURCE.SALES_DIM_ORDER` appends rows read back out of
+> `WAREHOUSE.SALES_FCT_COST` (`ATTRIBUTION_TYPE = 'No Match'`, the `UNK_` rows of
+> [[gep-unknown-order-placeholders]]), while the cost fact's ad-cost **allocation denominator** reads
+> that same dimension. A cycle cannot be scheduled, only broken — and the nightly build breaks it in the
+> damaging direction:
+>
+> ```
+> 06:00:01  SALES_DIM_ORDER_BASE   <- allocation's CONSUMER side   T-0 fresh
+> 06:02:32  SALES_FCT_COST         <- the allocation materialises HERE
+> 06:02:48  SALES_DIM_ORDER        <- allocation's DENOMINATOR      T-1 STALE
+> ```
+>
+> ⇒ the allocated ad-cost columns are **wrong on the trailing ~3 days of every single build** (the newest
+> day by up to ~27×), and self-heal as orders land. Closed months are correct. **This inflates ad cost and
+> therefore UNDERSTATES net margin** — `Actual - Margin - Net`, `Net Margin Loaded (USD)` and
+> `MARGIN_NET_CONSOLIDATED` all inherit it. **Anyone reading a current-month figure off this lineage must
+> know this.** Mechanism, detection recipe and remedy: [[circular-dependency-build-order]].
+>
+> ⚠ Note `Net Margin Loaded (USD)` inherits the defect **through the warehouse**
+> (`MARGIN_NET_CONSOLIDATED` subtracts the three fee columns), so a TOM/DAX dependency closure does **not**
+> reveal it. Enumerating measure bodies alone undercounts the affected set by one.
+
 ## Table → source object (verified offline from the TMSL baseline, 2026-07-22)
 `vis` = visible in the client field list (blank = hidden). `IR` = PBI incremental-refresh (source is the
 refresh-policy source expression). All Snowflake objects are in `TEST_DG1_GEP`.
