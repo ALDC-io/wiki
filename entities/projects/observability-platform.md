@@ -101,8 +101,13 @@ Walk this list for every new job.
    never fires, and stays silent. After any label change:
    ```bash
    docker compose up -d obs-jobs && docker compose restart cron
-   docker logs cron --tail 100 | grep "New job registered"   # confirm yours is listed
+   sleep 5 && docker logs cron --tail 30 | grep "New job registered"   # confirm yours is listed
    ```
+   ⚠ Run that grep **immediately** after the restart. `check_eclipse_templates.py` prints its entire
+   report to stdout every 15 minutes, so the cron log floods — within an hour the registration lines
+   are thousands of lines back and `--tail 2000 | grep` returns nothing. That is log volume, not a
+   deregistered job. Ofelia holds the schedule in memory, so **`cron` still showing an uptime longer
+   than the last registration is itself the proof it is still scheduled.**
 4. **Ofelia cron is 6-field with a LEADING SECONDS field** (robfig/cron `WithSeconds`). A 5-field
    expression is parsed seconds-first: `"*/15 * * * *"` fires every 15 **seconds**. Always write
    `"sec min hour dom mon dow"`.
