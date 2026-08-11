@@ -68,7 +68,7 @@ If an expected account does not appear in Windsor's account list, the likely cau
 
 ---
 
-## ⚠ The silent account-drop failure mode (confirmed twice — check this FIRST)
+## ⚠ The silent account-drop failure mode (confirmed once — check this FIRST)
 
 **Windsor accounts disconnect silently, and it surfaces weeks later as "our data stops on date X".** No error, no failed run, no alert. The Eclipse pull keeps succeeding — it just returns fewer accounts.
 
@@ -80,10 +80,41 @@ If an expected account does not appear in Windsor's account list, the likely cau
 
 | Date | Client / platform | Account(s) | Detected by | Lag |
 |---|---|---|---|---|
-| 2026-05-22 | [[fusion92]] Meta — Smile Doctors | 1076840895722327 | client complaint ([[FU92-415]]) | ~3 wks |
 | 2026-07-21 | [[fusion92]] LinkedIn | 509879445, 502845846, 506641008 (+508272220 on 05-31) | client complaint (Juliann, 2026-08-07) | **17 days** |
 
-Same client contact both times, both after weeks of missing data. Progressive decay is normal here — accounts fall out one or a few at a time over months.
+Within LinkedIn this is progressive decay — 4 of 5 accounts fell out across three months, one or a few at a time. That pattern is evidenced *for LinkedIn*; do not generalise it to other platforms without the same evidence.
+
+> **⚠ Retracted 2026-08-10: Smile Doctors (Meta `1076840895722327`, 2026-05-22) was previously listed
+> here as a second confirmed instance. It is not — it is a wound-down account.** See § *Telling a drop
+> from a wind-down* below. [[FU92-415]] assessed it correctly at the time ("campaign lifecycle, not
+> connector issue") and was overridden on no evidence. Two sessions then repeated "confirmed twice"
+> and treated it as an unresolved incident. **One instance was mistaken for a pattern.**
+
+### Telling a drop from a wind-down (do this before calling anything an incident)
+
+Both look identical at the summary grain — an account with no recent data. They are opposite causes
+with opposite owners, and one cheap query separates them:
+
+| | **Dropped from Windsor** | **Wound down** |
+|---|---|---|
+| Row emission | stops **abruptly**, nothing after the cutoff | **declines** over days/weeks |
+| Spend on final days | at or near run-rate | falls to **`$0.00`** |
+| `$0.00` rows near the end | none — no rows at all | **many** — the feed is still reporting |
+| Campaign count | unchanged right up to the cutoff | collapses first |
+| Owner | **client** — re-authorise in Windsor | nobody, it is normal |
+
+The load-bearing signal is that **this feed does emit literal `$0.00` rows for live-but-not-delivering
+campaigns**. So an *absence of rows* means no-load; a *presence of `$0.00` rows* means the instrument
+is still watching and the campaigns genuinely stopped. Worked examples:
+
+- **LinkedIn `509879445` (a real drop):** 10 rows/day at ~$220/day, then nothing. Final day at 55–61%
+  of run-rate — one load caught mid-day, not a taper.
+- **Meta `1076840895722327` Smile Doctors (a wind-down):** ~115 campaigns/day at $6k–$20k through
+  April; 2026-05-01 collapses to 41 campaigns with **40 of 54 rows at `$0.00`**; then 1 row/day of
+  `$0.00` until 05-09. 1,263 zero-spend rows on the account in total.
+
+This is the false-positive class the freshness monitor cannot yet distinguish — tracked in
+[[FU92-424]].
 
 ### Diagnosis runbook (~10 minutes)
 
@@ -134,7 +165,9 @@ Client re-authenticates the platform in Windsor (§ *Granting a Platform Access 
 
 ### Prevention
 
-[[FU92-379]] "Flight Check Data Sync Monitoring" is **now built and deployed** as the account-freshness monitor on the [[observability-platform]] obs-jobs runner (2026-08-10, `observability` commit `bdde728`) — Tier 1 account-dark / Tier 2 feed-dark, daily 19:00 UTC. A per-account freshness check — *"any account that loaded yesterday but not today"* — would have caught the 2026-07-21 LinkedIn drop on 2026-07-22 instead of 2026-08-07. **Both confirmed instances were found by the client, not by us.**
+An account-freshness monitor is **built and deployed** on the [[observability-platform]] obs-jobs runner (2026-08-10, `observability` commit `bdde728`) — Tier 1 account-dark / Tier 2 feed-dark, daily 19:00 UTC. A per-account freshness check — *"any account that loaded yesterday but not today"* — would have caught the 2026-07-21 LinkedIn drop on 2026-07-22 instead of 2026-08-07. **The one confirmed instance was found by the client, not by us.**
+
+> ⚠ **This does NOT close [[FU92-379]]**, despite two sessions claiming it did. FU92-379 is *"Flight Check Data Sync Monitoring"* — about the Flight Check **Azure Function**: invocation logs reporting success while errors were logged, and no alerting when the function fails. The account-freshness monitor addresses neither. FU92-379 remains genuinely unaddressed. Check what a ticket actually says before claiming a piece of work realises it.
 
 Delivery is proven too: the stack runs `OBS_DRY_RUN=false`, and the scheduled run posted real alerts to `#observability-dev` (4 findings, re-posted on the throttle cycle, zero failed POSTs). Deploying it surfaced four separate faults that would each have stopped it running at all; see [[observability-platform]] § *Adding a Plane 3 job* before trusting any similar monitor.
 
