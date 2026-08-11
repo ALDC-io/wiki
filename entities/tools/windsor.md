@@ -136,7 +136,7 @@ Client re-authenticates the platform in Windsor (§ *Granting a Platform Access 
 
 [[FU92-379]] "Flight Check Data Sync Monitoring" is **now built and deployed** as the account-freshness monitor on the [[observability-platform]] obs-jobs runner (2026-08-10, `observability` commit `bdde728`) — Tier 1 account-dark / Tier 2 feed-dark, daily 19:00 UTC. A per-account freshness check — *"any account that loaded yesterday but not today"* — would have caught the 2026-07-21 LinkedIn drop on 2026-07-22 instead of 2026-08-07. **Both confirmed instances were found by the client, not by us.**
 
-⚠ It currently runs with `OBS_DRY_RUN=true`, so it records metrics but **has never posted to Slack** — detection is live, delivery to a human is not yet proven. Deploying it also surfaced four separate faults that would each have stopped it running at all; see [[observability-platform]] § *Adding a Plane 3 job* before trusting any similar monitor.
+Delivery is proven too: the stack runs `OBS_DRY_RUN=false`, and the scheduled run posted real alerts to `#observability-dev` (4 findings, re-posted on the throttle cycle, zero failed POSTs). Deploying it surfaced four separate faults that would each have stopped it running at all; see [[observability-platform]] § *Adding a Plane 3 job* before trusting any similar monitor.
 
 ## See Also
 

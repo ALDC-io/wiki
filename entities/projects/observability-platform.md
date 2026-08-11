@@ -128,6 +128,13 @@ deployed, it is hopeful.
 - Pushgateway retains metrics **indefinitely**. A `job="…"` entry proves the job ran *at some point*,
   not that it ran today — always read `push_time_seconds` before concluding a job is alive.
 
+**Check whether the stack is actually live before promising anything.** `OBS_DRY_RUN` defaults to
+`true` in `docker-compose.yml` (`${OBS_DRY_RUN:-true}`) but **`.env` sets it to `false`** — so this
+stack posts for real, and a new job is live to `#observability-dev` the moment it first runs. Do not
+infer "safe by default" from the compose default. The independent tell: `lib/state.py::_save` skips
+all state writes in dry-run, so an `alert_count` that advances in
+`data/alert_state/alert_state.json` proves the run posted for real.
+
 **Credentials:** `SF_ACCT/SF_USER/SF_PWD/SF_ROLE` are already wired into `obs-jobs` for the GP-199
 monitor — a service account with **plain password auth and no MFA**. A new Snowflake job needs no new
 credentials, and can be run ad-hoc in-container without triggering an MFA push to a phone. Set
