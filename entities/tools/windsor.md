@@ -3,7 +3,7 @@ tags: [entity, tool, windsor, marketing, data-aggregation, fusion92, gep, navira
 aliases: [Windsor, Windsor.ai]
 sources: [CF92/1675001857, CF92/1675919361, clients/GEP/eclipse/templates/windsor/google_ads.json, clients/GEP/eclipse/templates/windsor/meta_ads.json]
 created: 2026-04-18
-updated: 2026-08-07
+updated: 2026-08-10
 ---
 
 # Windsor
@@ -126,9 +126,17 @@ Client re-authenticates the platform in Windsor (§ *Granting a Platform Access 
 
 ⚠ **On resume, verify the backfill actually reaches back to the cutoff date.** The Fusion92 LinkedIn template uses `partition_scheme.window_type = month` with a 60-day `time_to_live` on `partition_date`, so monthly partitions *should* re-pull — but if the pull only covers a recent window, the gap between cutoff and reconnection stays **permanently** missing and flights show a hole rather than a tail. Confirm `MAX(DATE)` per account and spot-check a date inside the gap.
 
+**✅ Answered 2026-08-10: the backfill DOES reach back.** Account `509879445` reconnected 20 days after its 07-21 cutoff and came back with *continuous* daily coverage across the whole gap (07-22 → 08-10, 118 rows). The monthly partition scheme re-pulls as designed. Still verify per account — but the expected outcome is a full heal, so a *hole* after reconnection is a genuine finding, not the norm.
+
+⚠ **Do not read a post-reconnection volume drop as a partial backfill without a control.** The same account went 10 rows/day in July to 2 rows/day in August, which looks exactly like a half-filled partition. It wasn't: four campaign groups ended on 07-31 and one ran on unbroken, and the **never-dropped** sibling account dropped at the same month boundary (5 → 3 campaign groups). An account that never disconnected cannot show a backfill artifact — that comparison is what separates "campaigns cycled" from "the pull is short", and it costs one query.
+
+**Clients may reconnect without telling you.** `509879445` came back ~4.5 h after the instruction email with no reply, while its two siblings stayed dark. Re-measure at the start of each session instead of inheriting the previous session's account list.
+
 ### Prevention
 
-[[FU92-379]] "Flight Check Data Sync Monitoring" (still **To Do**) is the unbuilt alerting for exactly this. A per-account freshness check — *"any account that loaded yesterday but not today"* — would have caught the 2026-07-21 LinkedIn drop on 2026-07-22 instead of 2026-08-07. **Both confirmed instances were found by the client, not by us.** Highest-value preventable item on the Fusion92 backlog.
+[[FU92-379]] "Flight Check Data Sync Monitoring" is **now built and deployed** as the account-freshness monitor on the [[observability-platform]] obs-jobs runner (2026-08-10, `observability` commit `bdde728`) — Tier 1 account-dark / Tier 2 feed-dark, daily 19:00 UTC. A per-account freshness check — *"any account that loaded yesterday but not today"* — would have caught the 2026-07-21 LinkedIn drop on 2026-07-22 instead of 2026-08-07. **Both confirmed instances were found by the client, not by us.**
+
+⚠ It currently runs with `OBS_DRY_RUN=true`, so it records metrics but **has never posted to Slack** — detection is live, delivery to a human is not yet proven. Deploying it also surfaced four separate faults that would each have stopped it running at all; see [[observability-platform]] § *Adding a Plane 3 job* before trusting any similar monitor.
 
 ## See Also
 

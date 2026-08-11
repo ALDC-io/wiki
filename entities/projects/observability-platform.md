@@ -1,11 +1,11 @@
 ---
-tags: [entity, project, observability, monitoring, alerting, platform, aldc]
+tags: [entity, project, observability, monitoring, alerting, platform, aldc, ofelia, cron]
 aliases: [Observability Platform, ALDC Observability, observability-platform, observability project]
 sources:
   - processes/distributed-workflow/active/observability-platform.md
   - C:/Users/PaulRussell/.claude/plans/fancy-inventing-aho.md
 created: 2026-04-24
-updated: 2026-05-22
+updated: 2026-08-10
 ---
 
 # Observability Platform
@@ -81,6 +81,57 @@ Slack:
 ## Repo
 
 `github.com/ALDC-io/observability` — to be created at the start of Week 1 implementation. Local clone path will be `C:/Users/PaulRussell/repos/observability/`. Layout is documented in [[observability-architecture]] § Repo Layout.
+
+## ⚠ Adding a Plane 3 job — four ways it silently never runs
+
+Learned the hard way deploying `check_account_freshness.py` ([[FU92-421]], 2026-08-10). The script
+was committed, correct, and validated read-only against prod — and would still have done **nothing**,
+every night, forever. Four independent faults, none of which surfaces an error anyone would see.
+Walk this list for every new job.
+
+1. **`jobs/Dockerfile` COPYs scripts by name.** There is no `COPY *.py`. A new script that isn't
+   added is simply absent from the image; ofelia execs it and gets *"can't open file"*. Add the
+   `COPY` line.
+2. **`lib/push.py`'s signature is `push(job_name, registry)` — job name FIRST.** Calling
+   `push.push(registry, job=NAME)` raises `TypeError`, which the conventional surrounding
+   `try/except` swallows to stderr. Result: the job looks fine and **zero metrics ever reach
+   Prometheus**. Copy the call from `check_gp199_attribution.py`, don't write it from memory.
+3. **⭐ Ofelia reads job labels ONLY at daemon start. It does not re-scan a running container.**
+   Recreating `obs-jobs` is *not* enough — the job ends up registered **nowhere**: it looks deployed,
+   never fires, and stays silent. After any label change:
+   ```bash
+   docker compose up -d obs-jobs && docker compose restart cron
+   docker logs cron --tail 100 | grep "New job registered"   # confirm yours is listed
+   ```
+4. **Ofelia cron is 6-field with a LEADING SECONDS field** (robfig/cron `WithSeconds`). A 5-field
+   expression is parsed seconds-first: `"*/15 * * * *"` fires every 15 **seconds**. Always write
+   `"sec min hour dom mon dow"`.
+
+**Prove it fires through its scheduled path — don't infer it from a manual `docker exec`.** Install a
+temporary schedule a few minutes out, recreate + restart cron, and watch the job actually start in
+`docker logs cron`; confirm the Pushgateway `push_time_seconds{job="…"}` advances to that run's
+timestamp. Then restore the real schedule. A monitor that has never been observed firing is not
+deployed, it is hopeful.
+
+**Reading the logs:**
+- `docker logs cron --since <dur>` is **unreliable** here — Docker's log timestamps and the ones
+  ofelia prints into the message body disagree, so `--since 24h` can return 0 lines while entries
+  from minutes ago exist. Use `--tail N` instead.
+- Ofelia marks any run with a non-zero exit as `failed: true`. These jobs exit 1 when they find
+  problems, so **"failed" in the cron log does not mean the job crashed.** The discriminator is the
+  Prometheus `*_up` gauge (0 = ran, found problems) vs. an absent/stale metric (= genuinely crashed).
+- Pushgateway retains metrics **indefinitely**. A `job="…"` entry proves the job ran *at some point*,
+  not that it ran today — always read `push_time_seconds` before concluding a job is alive.
+
+**Credentials:** `SF_ACCT/SF_USER/SF_PWD/SF_ROLE` are already wired into `obs-jobs` for the GP-199
+monitor — a service account with **plain password auth and no MFA**. A new Snowflake job needs no new
+credentials, and can be run ad-hoc in-container without triggering an MFA push to a phone. Set
+`SF_AUTHENTICATOR=username_password_mfa` only when running locally as a human.
+
+**Config placement:** put job config in `config/` (mounted read-only at `/app/config`), not in
+`jobs/`. Anything under `jobs/` is baked into the image, so editing an ignore list or enabling a feed
+would need a rebuild. Guard against an empty config being read as healthy — a monitor scanning zero
+feeds reports green forever, which is the exact failure these jobs exist to catch.
 
 ## Phasing
 
