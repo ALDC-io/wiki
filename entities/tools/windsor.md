@@ -169,7 +169,47 @@ The account was never disconnected; its campaigns ended ~06-06 and it emitted a 
 
 Reference implementations: `clients/FUSION_92/snowflake/scripts/_fu92_windsor_accounts.py` (branch `feature/paulrussell/fu92-flight-actuals-diagnosis`); the two-window discriminator above is the 2026-08-11 refinement.
 
-⚠ **Reconnection is invisible to us until the next pull, and that is NOT a fault.** The Eclipse template re-pulls each active partition at most once per `retry_next` (6 h on the Fusion92 Windsor feeds). So Windsor can be serving a reconnected account for hours while the warehouse still shows it dark. Before diagnosing anything, read the partition cooldown — see [[Eclipse]] § *An empty scan result is USUALLY NORMAL*. Do not reach for partition surgery to "force" a pull; it does nothing the next scheduled run does not.
+#### The BRAND-NEW account variant (2026-08-12, [[FU92-421]])
+
+The two-window method needs an **earlier window where the account was provably active in our own
+warehouse**. A newly-connected account has zero rows ever, so that window does not exist and the
+method cannot be applied as written. **Substitute control: the sibling accounts in the same
+window.** If the siblings return rows and the target does not, the instrument was demonstrably
+live and the target's absence is about the target. If the siblings are also absent, conclude
+nothing — that is a window/instrument problem.
+
+Worked example — Tamarack `517914705`, reported reconnected by the client 2026-08-12:
+
+| Window | Target | Siblings |
+|---|---|---|
+| 2026-08-01 → 08-12 | **PRESENT** — 12 rows, $783.86 | 4/4 present |
+| 2026-06-01 → 08-12 | **PRESENT** — 30 rows, $2,009.74, from **07-14** | 4/4 present |
+
+⇒ conclusive PRESENT, owner = nobody, no client action. Absence with live siblings would have
+stayed **AMBIGUOUS** (not-connected vs connected-with-no-delivery) — and per the U-M Ross case
+above, ambiguity is *not* grounds to ask a client to re-authorise.
+
+> **Windsor BACK-SERVES history on reconnect.** Tamarack's data reached back to **07-14**, ~4 weeks
+> before the client reconnected it — so a reconnection is not only a today-forward fix. Force
+> **every** active monthly partition, not just the current one: doing so recovered $2,010.12 where
+> August alone was $783.86. See [[Eclipse]] § *Forcing a pull NOW*.
+
+> **The freshness monitor cannot see this case at all.** It detects *established accounts going
+> dark*; an account that never arrives produces **no row** in `GROUP BY ACCOUNT_ID`, so there is
+> nothing to evaluate — `min_span_days`/`min_rows` gate only alerting, not the listing. "No
+> manifest is required" holds for the silent-drop mode and fails here. Until an expected-accounts
+> manifest exists, a client saying "I connected account X" can only be checked by hand.
+
+⚠ **Reconnection is invisible to us until the next pull, and that is NOT a fault.** The Eclipse template re-pulls each active partition at most once per `retry_next` (6 h on the Fusion92 Windsor feeds). So Windsor can be serving a reconnected account for hours while the warehouse still shows it dark. Before diagnosing anything, read the partition cooldown — see [[Eclipse]] § *An empty scan result is USUALLY NORMAL*.
+
+> **Amended 2026-08-12:** this section previously ended *"Do not reach for partition surgery to
+> force a pull; it does nothing the next scheduled run does not."* That is right about **partition
+> surgery** (delete + rescan) and wrong as a general rule. `work/queue` → `work_queue_agent`
+> forces the pull **without any surgery** — no deletion, only the `in_queue=True` the scheduler
+> sets anyway — and it is legitimately worth doing when a client is waiting and the cooldown has
+> hours to run. It is still not worth doing blind: probe Windsor first (above), because if Windsor
+> is not serving the account yet, no amount of forcing will produce data. Recipe: [[Eclipse]]
+> § *Forcing a pull NOW*.
 
 ### Fix + the backfill trap
 

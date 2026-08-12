@@ -297,9 +297,79 @@ Running a **single template in isolation** through real Eclipse (e.g. validating
 
 - **Target the core_api stage slot.** Point the executor's `targethost` at `aldctestfnapcore1c01-stage` — it carries the [[GP-277]] pick-fix (`85557db`) **and** the 1h visibility hardening (2026-06-11). The prod slot is stale (last deployed 2026-06-07, before the pick-fix), which is why the normal TEST Eclipse fleet doesn't reliably dispatch scoped-agent work. **To unblock the TEST fleet:** promote the validated stage branch to the PROD slot via `func publish` (NOT a slot swap — a swap would move stale code back onto stage and break a running stage backfill). This promote is not gated on [[GP-277]] Fix 2 because the stage build deliberately excludes it (`ee5b553`/`b1cc08c`).
 - **Scoped agent** = an `agent` doc whose `connection_authorized` lists only the target connection (e.g. `gep-amazonads-pp-test` → conn `66627ed9`). `/work/pick` scopes to that, so the executor can only pull that connection's work.
-- **Isolate the queue**: guard the account (`account.scan=false`) to stop new enqueues, purge the connection's queue + reset its partitions' `in_queue=false`, lift the schedule block, then manually scan **only** the target template.
+- **Isolate the queue**: guard the account (`account.scan=false`) to stop new enqueues, purge the connection's queue + reset its partitions' `in_queue=false`, lift the schedule block, then manually scan **only** the target template. ⚠ **Check `work_block` before lifting anything** — see § *Forcing a pull NOW* below; the block is often already `false` and the real gate is the partition cooldown.
 - **Trigger `/work/scan` over HTTPS with `MASTER_CLIENT_ID`/`MASTER_CLIENT_SECRET`** (core_api app settings) — no SSH/CosmosDB needed. Useful when the workstation SSH is fail2ban-blocked. `work_activate` is trickle-limited (creates 1, then 2,4,8…cap 10 per call), so loop the scan to grow the partition set.
 - Tooling: `aldc-launchpad/warehouse_ops/_gp257_{isolate_queue,uk_scan,babysitter,validate}.py`.
+
+## Forcing a pull NOW — cooldown bypass without surgery (established 2026-08-12, [[FU92-421]])
+
+When a client reconnects an ad account and you need the data today rather than at the next
+scheduled pull. **Do these in order — the first two usually mean you can stop.**
+
+**1. Check whether anything is actually blocking, before lifting anything.**
+`POST /v1/account/describe {account_id}` computes the block **live** from `start`/`end` +
+`master_timezone` (`route_account.py:110-137`) and returns `work_block`, `work_block_reason`,
+`work_block_current_time`.
+
+> ⚠ **A `schedule_block`'s `name` field LIES.** Fusion92's reads `"16:00 - 04:00"` while its
+> `start:6300` / `end:14400` = **01:45–04:00 America/Chicago** — a 2h15m small-hours slot, not a
+> 12h evening block. Read `start`/`end`, or just trust `work_block`. A session nearly lifted a
+> block that was already `false`. Semantics: `start <= end` = same-day window; `start > end` =
+> crosses midnight. Disabled blocks are key-mangled (`_schedule_block`, surfaced as
+> `schedule_block_` by `account/list`) — toggle via `account/changeblockstatus`.
+
+**2. Check the partition cooldown — this is usually the real gate.**
+`POST /v1/work/partitionlist {account_id, template_id}`. A partition is eligible only when
+`datetimestamp_last_utc + retry_next < now AND NOT in_queue` (`work_list_instance`,
+`route_work.py:547`). On the Fusion92 Windsor feeds `retry_min == retry_max == 21600` = **6h**,
+so `work/scan` returns `queue_count: 0` and looks broken when it is merely early.
+
+**3. Force it with `work/queue`, NOT a partition delete.**
+`POST /v1/work/queue {account_id, partition_id}` → `work_queue_agent`, which sends the work
+document straight to the connection's queue and **never consults the retry gate**. Its only write
+is `in_queue=True` — exactly what `work_scan` does every cycle. **It deletes nothing**, so prefer
+it to `work_partition_delete_bulk` for a healthy-but-cooling partition. (Keep delete+rescan for
+genuinely *stuck* partitions — see the partition-recovery technique above.) Both Fusion92 LinkedIn
+partitions completed ~60s after enqueue, `in_queue` cleared and `datetimestamp_last_utc` advanced.
+
+> **Enqueue EVERY active partition, not just the current month.** Windsor back-serves a
+> reconnected account's history — Tamarack returned data from 07-14, ~4 weeks before the client
+> reconnected it. Forcing July *and* August recovered $2,010.12; August alone would have been
+> $783.86 and the rest missed permanently. `time_to_live.interval: 60` keeps ~2 monthly partitions
+> active at a time.
+
+**4. Confirm it landed at the consumer layer, not just the raw table** — see below.
+
+⚠ **Route options carry NO underscores** — `work/partitionlist`, `work/queue`, `work/listinstance`,
+`account/describe`, `account/changeblockstatus`. `work/partition_list` returns **HTTP 404** and
+reads like an unimplemented feature when the function exists. Mapping is in
+`core_api/v1/__init__.py` ~680-695 — read it rather than inferring options from function names.
+Auth = `base64(MASTER_CLIENT_ID:MASTER_CLIENT_SECRET)` in a **raw** `Authorization` header, no
+`Bearer` prefix.
+
+### Dynamic-table lag — raw landing is NOT the consumer layer
+
+On Fusion92, `WAREHOUSE_UTILITY.FCT_PLATFORM_SPEND` and `WAREHOUSE.SHARED_DIM_FLIGHT` are
+**dynamic tables** with `target_lag = DOWNSTREAM`, scheduled by the 1-hour-lag tables
+(`FCT_SPEND`, `FCT_FLIGHT`, `SHARED_DIM_*`). A forced pull landed 69 rows / $2,010.12 into
+`LINKEDIN_ADS` while flight `QHQ9G` still returned **0 rows** from
+`DAX_API.DAILY_FLIGHT_METRICS_NO_DAX` — for ~18 minutes that looked like a mapping failure and was
+simply lag. It resolved itself when `data_timestamp` advanced 19:56:55Z → 20:48:07Z, landing exact
+parity (consumer $2,010.12 == raw $2,010.12, delta $0.00).
+
+```sql
+SHOW DYNAMIC TABLES LIKE 'FCT_PLATFORM_SPEND' IN DATABASE PROD_DG1_FUSION_92;
+-- compare data_timestamp against the land time before calling a pull done
+```
+**Do not** `ALTER DYNAMIC TABLE … REFRESH` to hurry it — that rebuilds a ~1M-row fact on the
+shared `COMPUTE_WH` for something the DAG does free within the hour.
+
+⚠ **Two traps on the load-timestamp column `___ALDC___GLOBAL_HISTORY_TIMESTAMP_START___`:**
+(1) `CONVERT_TIMEZONE('UTC', col)` **double-shifts** it — the column is already UTC and agrees with
+`INFORMATION_SCHEMA.LAST_ALTERED`, so read it raw; (2) it records loads that **landed rows**, not
+pulls that **ran** — with `merge_strategy: "add"` a pull finding nothing new writes nothing, so a
+gap between timestamps is **not** evidence of a missed pull. Take cadence from the template's
+`retry_min`/`retry_max`.
 
 **Zombie clog from OOM executor — async reports + crashed executor + short zombie sweep.** Distinct from the `full`-partition zombie below. When an executor OOM-kills mid-backfill, its in-flight `init` schedules are orphaned. If the template has no `zombie_timeout_override`, the zombie sweep uses the short default, so slots stay clogged until manually cleared. Symptom: executor idle ("NO WORK") with N stuck `init` schedules on the connection (age ≫ report time). The connection's own `comment` documents this ("picked up a second time / zombies clogging the queue" → why `max_connection=5`). **Mitigation** (manual): delete the stuck `init` schedules to free the slots; the partitions re-pick from their still-queued messages. **Fix** (two-part): (1) set `zombie_timeout_override` on the template so the sweep aligns with the [[core_api]] visibility timeout — see below; (2) cap executor threads so the container stays within its host's RAM (OOM is the real root cause).
 
