@@ -149,7 +149,27 @@ Query a window **spanning the cutoff** so the three outcomes separate:
 | **Present**, rows after cutoff | Windsor serves it; loss is Eclipse-side | **ALDC** — template / schedule |
 | **Present**, zero rows after cutoff | "Listed but stale" — platform denies insights | **Client** — re-grant platform permission |
 
-Reference implementation with pre-committed predictions: `clients/FUSION_92/snowflake/scripts/_fu92_windsor_accounts.py` (branch `feature/paulrussell/fu92-flight-actuals-diagnosis`).
+⚠⚠ **THE WINDOW MUST SPAN A PERIOD THE ACCOUNT WAS *PROVABLY* ACTIVE — otherwise row 1 of that table is unsafe.** (Established 2026-08-11, [[FU92-421]].) Windsor groups its response by the accounts that **returned rows in the window you asked for**. So an account that is perfectly connected but has had no campaign delivery in that window is **also "absent"** — indistinguishable from a disconnection. Concluding "client must re-grant" from a recent-window probe alone is how you tell a client they failed at something they did correctly.
+
+**Discriminator:** pick the window from *our own warehouse*, not from the calendar — probe a range where Snowflake already holds rows for that account, then a recent range, and compare:
+
+| Earlier window (account proven active) | Recent window | Verdict |
+|---|---|---|
+| **Absent** | Absent | Genuinely **DISCONNECTED** → client re-grants |
+| **Present** | Absent | **CONNECTED, campaigns ended** → no client action; do not ask them to reconnect |
+| Present | Present with rows | Serving normally → loss is Eclipse-side |
+
+Worked example — `508272220` "U-M Ross", dark in our warehouse since 2026-05-31 and listed in FU92-421's client re-auth ask on the strength of a recent-window probe:
+
+- 2026-04-01 → 05-31: **PRESENT**, 61 rows, $25,203.07
+- 2026-05-01 → 06-15: **PRESENT**, 32 rows, through 06-06
+- 2026-06-01 → 07-31: **1 row**, dated 06-06, **$0.00** — while four sibling accounts each returned ~60 rows of real spend in the same window
+
+The account was never disconnected; its campaigns ended ~06-06 and it emitted a single `$0.00` tail row. **We had asked the client to re-authorise an account that never needed it.** Same class as the Smile Doctors false positive (wound-down, not dropped) — see FU92-421's correction comment — but reached by a different route, so the sibling-account comparison in the same window is the control that settles it.
+
+Reference implementations: `clients/FUSION_92/snowflake/scripts/_fu92_windsor_accounts.py` (branch `feature/paulrussell/fu92-flight-actuals-diagnosis`); the two-window discriminator above is the 2026-08-11 refinement.
+
+⚠ **Reconnection is invisible to us until the next pull, and that is NOT a fault.** The Eclipse template re-pulls each active partition at most once per `retry_next` (6 h on the Fusion92 Windsor feeds). So Windsor can be serving a reconnected account for hours while the warehouse still shows it dark. Before diagnosing anything, read the partition cooldown — see [[Eclipse]] § *An empty scan result is USUALLY NORMAL*. Do not reach for partition surgery to "force" a pull; it does nothing the next scheduled run does not.
 
 ### Fix + the backfill trap
 

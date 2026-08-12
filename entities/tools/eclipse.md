@@ -260,9 +260,34 @@ templates (one partition/day) normally carry many. (Established 2026-06-01, ALDC
 
 **Stuck `status:active` partition with a lost queue message → revive by DELETE + scan.** (Established 2026-06-12, Navira Step 3.3.) When an executor dies mid-cycle, a `work_partition` can be left `status:active`, `in_queue:true` but with **no live Azure queue message** (the message was consumed/expired). Such a partition is silently stuck — the executor polls `/work/pick` and gets "NO WORK", and the daily/scheduled activate skips it (it sees `in_queue:true` and assumes it's already queued). It does **not** self-heal. Two dead ends to know:
 - **Hand-crafting a replacement queue message does NOT work** — core_api `/work/pick` validates message provenance, so a manually-enqueued message is consumed without serving work (queue drains back to 0, nothing picked).
-- **`/work/scan` and `/work/activate` skip it** — both only act on `inactive` (or never-generated) partition docs, never on an existing `active` one. (Confirmed: scan returns `success` with no enqueue; activate returns `payload:[]`.)
+- **`/work/scan` and `/work/activate` skip it.** ⚠ **CORRECTED 2026-08-11 ([[FU92-421]]) — the mechanism below was stated backwards here for two months.** The old text said scan "only act[s] on `inactive` (or never-generated) partition docs, never on an existing `active` one." **That is wrong.** `core_api/v1/route_work.py:547` requires `c.status = 'active'` — scan acts **only on ACTIVE partitions**. The real blocker in the incident this note describes was **`in_queue: true`**, not `status: active`. The full predicate is:
+  ```sql
+  c.status = 'active' AND c.account_id = @a AND c.template_id = @t
+  AND ( (NOT IS_DEFINED(c.datetimestamp_last_utc) AND NOT c.in_queue)
+     OR ((c.datetimestamp_last_utc + c.retry_next < @utc_now) AND NOT c.in_queue) )
+  ```
+  `in_queue` is set `True` in `work_queue_agent` (`:796`) and reset `False` **only** in `work_complete` (`:1314`) — so a lost queue message strands the partition permanently behind `NOT c.in_queue`. *That* is the stuck state, and the delete+scan remedy is correct **for it alone**.
+  **Before applying the remedy, read `in_queue`.** `status: active` means only "not yet aged out by TTL" (set once at `work_create:499`; the only transition off it is the TTL block at `work_complete:1246-1264`). It does **not** mean "running" and is **not** a fault signal.
 
   **The fix: delete the `work_partition` doc, then `/work/scan` the template.** Scan regenerates it as a fresh doc (`status:active`, `in_queue:true`, `run_count:null`) **and** enqueues a message with valid provenance → the executor picks it normally. This is the same reason a brand-new backfill works (fresh docs) but a re-pull of existing dates doesn't. Watermark caveat: scan won't backfill a *hole* below the max-landed date for an incremental (`limit_current`) template via the normal forward path — deleting the specific doc(s) is what forces regeneration. Rollback: capture the full doc(s) before delete; merge dedup keeps re-landed data clean (no dup primary-hashes).
+
+⭐ **An empty scan result is USUALLY NORMAL — it is the retry cooldown, not a wedge.** (Established 2026-08-11, [[FU92-421]].) `work/scan` returning `partition_result: [[]]`, `partition_list: []`, `queue_count: 0` with HTTP 200 is the *expected* response when every active partition ran within its `retry_next` window. Do **not** read it as a fault. `retry_next` is pinned to `retry_default`/`retry_min`/`retry_max` on the template — on the Fusion92 Windsor feeds that is `21600` = **6 h**, so each active partition re-pulls at most once per 6 h no matter how often scan fires.
+
+  **Discriminate before acting — read the partition docs, don't guess.** `POST /v1/work/partitionlist` `{account_id, template_id}` (pure SELECT, `route_work.py:1453` — note: `partitionlist`, one word; `work/partition/list` 404s). Then:
+
+  | Observation | Verdict |
+  |---|---|
+  | `in_queue: false`, `datetimestamp_last_utc + retry_next > now` | **Benign cooldown.** Do nothing; it runs itself at `last + retry_next`. |
+  | `in_queue: false`, cooldown elapsed, still not queued | An `init`/zombie schedule gates it (`route_work.py:553-558`); the `*/15` zombie sweep clears it within ~45 min. |
+  | **`in_queue: true`** | The genuine stuck state above. Remedy applies. |
+
+  Also read the live cadence from `POST /v1/task/list` — the task doc's `schedule.cron` + `datetimestamp_next_utc` **is** the answer to "when does the next natural run happen". Do not quote the `*/1 12-14 * * *` in `route_account.py:873`; that is a creation-time default, not deployed truth (Fusion92's real cron is `*/1 10-23,0-2 * * *`). A scan-window gap (e.g. 03:00-09:59 UTC) combined with the 6 h cooldown fully explains apparently irregular run times — Fusion92 LinkedIn's observed 10:1x / 16:2x / 22:3x UTC slots are exactly this, not a schedule.
+
+⚠⚠ **TWO DIFFERENT OPERATIONS ARE BOTH CALLED "DELETE THE PARTITION" — one is unrecoverable.**
+  - `work_partition_delete_bulk` (`route_work.py:1476`) deletes the **Cosmos control doc**. Recoverable; scan regenerates it. This is the remedy above.
+  - `warehouse_capacity_partition_delete` (`route_warehouse.py:1858`) issues `DELETE FROM <schema>.<table> WHERE ___ALDC___GLOBAL_PARTITION_HASH___ = '<md5 of month-start>'` — a **prod row delete**. On Fusion92 LinkedIn's July 2026 partition that is **646 rows / $28,274.33**, and these tables carry `retention_time = 1` day, so Time Travel expires it within 24 h.
+
+  Never issue either from a verbal instruction; name the function. `partition_hash = md5('YYYY-MM-01')` and is independent of the Cosmos doc id (`route_warehouse.py:1874`), so a deleted-and-regenerated doc keeps the same hash — which is why re-landing dedups cleanly via the UPDATE path rather than duplicating.
 
 > **Base-functionality executor only PICKS.** The `agent-dcgeneral:development` image launched with no `SCRIPT_OPTION` logs "agent will contain base functionality only" and runs `/work/pick` in a loop — it does **not** scan or activate. Scan/activate must be triggered separately (HTTPS `/work/scan` with `MASTER_CLIENT_*`, or the server-side daily scheduler). So a persistent scoped picker keeps data fresh only as long as something else enqueues (the daily server-side scan does, for day-windowed templates; month-windowed templates like Meta-via-Windsor can get stuck per above and need the delete+scan unstick).
 
