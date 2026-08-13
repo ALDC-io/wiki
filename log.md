@@ -441,3 +441,35 @@ Also: 11 of 15 `REPORT_COMMON` objects had no repo-managed source and were captu
 blobs): the recon/dry-run/deploy/consumer JSON, the captured DDL and the render screenshots stay in
 `aldc-launchpad/docs/evidence/gp318/`, pinned to commits `2595fd0`, `9dcdb59`, `3fffd1b`. Jira cites
 those commits, not the wiki.
+
+
+---
+
+## 2026-08-13 — GP-318 item 3 (margin identity) closed; enablement-guide pattern captured
+
+**Ingest source:** conversation 2026-08-13, `aldc-launchpad` commit `e936735`, Jira GP-318 comment
+`35981`.
+
+**Pages touched:** [[GP-318]] (item 3 outcome, the reintroduced-defect lesson, the full open tail),
+**new** [[model-enablement-guide]], `index.md`.
+
+Item 3 turned out not to be the defect the ticket described. The pre-registered remedy
+(`COALESCE(SPEND_USD,0)`) was refuted by measurement before any deploy: the NULLs in
+`MARGIN_AFTER_AD_SPEND_USD` are correct because the warehouse holds ad instrumentation for only four
+marketplaces. The real defect was scope in the PBI field list, fixed with additive DAX on both live
+models — **no warehouse write, so the item-3 write approval went unused.**
+
+Two lessons promoted to the wiki because they generalise beyond this ticket: (1) **when a
+decomposition almost closes, suspect the instrument's grain** before positing another cause — the
+"unexplained" ~$2,136 was marketplace-grain filtering failing to see a mixed marketplace; (2) **a fix
+pass can reintroduce the very defect it is fixing** — five new measures went in unguarded alongside
+20 guarded siblings, caught only by asserting the live expression before overwriting it.
+
+New pattern page [[model-enablement-guide]] captures Paul's plan for the designed HTML model guide
+(architecture diagram, table/measure reference generated from TOM, templated pivot cookbook, and an
+explicit boundary section). It is scheduled **after** the GP-318 tail wrap so it does not document a
+moving target, and will be produced for the Daily Sales Model first, then per [[GP-319]] candidate
+design.
+
+**Kept in the repo, not the wiki:** the pre-registration, measurement, probe, apply, verify and
+rollback JSON stay in `aldc-launchpad/docs/evidence/gp318/gp318_item3_*`, pinned to `e936735`.
