@@ -414,3 +414,30 @@ GP-322 comments cite the commit), the evidence's value is that it is anchored to
 it, and the estate rule is that the wiki carries the durable lesson and reusable check, **not per-run
 blobs**. Repo evidence renamed `gp322/FINDINGS.md` -> `docs/evidence/gp322.md` to match convention
 (`gp309.md`, `gp310.md`), with a pointer left in the folder.
+
+---
+
+## 2026-08-12 — ingest(GP-318): Daily Sales Model items 1-2, and three findings bigger than the ticket
+
+New page [[tickets/gep/GP-318]]; index entry added. Session covered GP-318 item 2 (durable Meta fix),
+B16 (orphaned view retired), and three things found on the way that outlive the ticket:
+
+1. **A scoping premise refuted by measurement.** Item 2 named the activity fact; the defect was in
+   `REPORT_COMMON.MARKETING_EFFICIENCY`'s UNION-pivot `0` filler. Tracing the consumer route rather
+   than trusting the boot prompt is what found it — and the defect generalises to any future platform
+   whose start date post-dates the view's floor.
+2. **`main` is not a deploy branch.** Two "would DELETE live platforms" warnings had reached Jira and a
+   commit message; both were artefacts of diffing against `main` while GEP promotes through
+   `GEP/development`. Withdrawn. Same check also disproved the long-standing "CODEOWNERS dead-lock"
+   framing for the GEP path — those branches carry no rulesets.
+3. **A trap documented nine times and never fixed.** `XmlaClient._get_model()` returned `Databases[0]`.
+   Nine boot prompts warned about it and three scripts forked around it, yet it still bit a tenth
+   session. Per-script memory does not compound; a fixed shared helper does. Fixed + 44-site audit.
+
+Also: 11 of 15 `REPORT_COMMON` objects had no repo-managed source and were captured verbatim into
+`clients` `GEP/development`.
+
+**Kept in the repo, not the wiki** (per the estate rule — wiki carries the durable lesson, not per-run
+blobs): the recon/dry-run/deploy/consumer JSON, the captured DDL and the render screenshots stay in
+`aldc-launchpad/docs/evidence/gp318/`, pinned to commits `2595fd0`, `9dcdb59`, `3fffd1b`. Jira cites
+those commits, not the wiki.
