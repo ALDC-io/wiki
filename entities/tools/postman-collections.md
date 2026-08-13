@@ -46,7 +46,7 @@ Paul re-designed the workspace on 2026-04-17 as part of his first core_api local
 |---|---|---|
 | `aldc_base_url` | **Environment** | Changes per deployment target |
 | `x-function-key` | **Environment** (type: `secret`) | Per-env Azure Functions host key. Irrelevant locally (`host.json` sets `authLevel: anonymous` on the HTTP trigger) but still present for env consistency |
-| `client_id`, `client_secret` | **Environment** (type: `secret`) | Source of truth for auth. Currently identical across envs (`FFFFFFFF0000` / `alDc9876!` from `MASTER_CLIENT_*` in `local.settings.json`) but conceptually per-env |
+| `client_id`, `client_secret` | **Environment** (type: `secret`) | Source of truth for auth. Currently identical across envs (`FFFFFFFF0000` / `<REDACTED — core_api MASTER client secret; see vault/infra-credentials.md § MASTER API bearer (default)>` from `MASTER_CLIENT_*` in `local.settings.json`) but conceptually per-env |
 | `bearer_token` | **Collection variable — auto-computed by pre-request script** | Derived from `client_id:client_secret` at send time. **Must not exist as an env var** — see gotcha below |
 | `account_id`, `dataset_id`, `capacity_id` | **Collection variable** (override per folder/request when needed) | Describe *what* you're testing, not *which* env |
 | `f92_function_app_url`, `workflow_*`, `dax_api_master_token` | **Environment** (PROD only, type: `secret`) | Prod-only surface |
@@ -167,7 +167,7 @@ The HTTP trigger is also `authLevel: anonymous`, so function keys are irrelevant
 | `aldc_base_url` | Env | Base URL of core_api (`http://localhost:7071` for LOCAL) |
 | `x-function-key` | Env (secret) | Azure Functions host key. `none-for-local` locally, real key in QA/PROD |
 | `client_id` | Env (secret) | Master client id (`FFFFFFFF0000`) — pairs with `client_secret` |
-| `client_secret` | Env (secret) | Master client secret (`alDc9876!`) — source for the auto-bearer |
+| `client_secret` | Env (secret) | Master client secret (`<REDACTED — core_api MASTER client secret; see vault/infra-credentials.md § MASTER API bearer (default)>`) — source for the auto-bearer |
 | `bearer_token` | **Collection, auto-computed** | Base64 of `client_id:client_secret`. **Never in env.** Set by the collection pre-request script |
 | `account_id` | Collection | Short hex account identifier (e.g. `8425e311`, `5d556742`, `f49f9aa3`) |
 | `dataset_id` | Collection | GUID for a DAX dataset |

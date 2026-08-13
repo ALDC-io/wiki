@@ -112,7 +112,7 @@ curl -s http://localhost:7432/api/health  # sessions should be 1
 
 # 6. Verify memories landed (check leaderboard)
 curl -s https://zeus.aldc.io/api/learnings/leaderboard \
-  -H "X-API-Key: zm_aldc_mgmt_5fa85da311ce24614a52128d7a2e63eb" | \
+  -H "X-API-Key: <REDACTED — Zeus Memory API key; see vault/infra-credentials.md § Zeus Memory / CCE — Learnings API (zeus.aldc.io)>" | \
   python3 -c "import sys,json; d=json.load(sys.stdin); paul=next(u for u in d['leaderboard'] if u['user']=='paul'); print(paul)"
 ```
 

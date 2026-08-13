@@ -1,6 +1,6 @@
 Onboarding doc is updated with Paul's info. Here's what he needs:  
   
-**His Zeus API Key:** `zm_paul_9c1d3e5f7a2b4c6d8e0f1a3b`  
+**His Zeus API Key:** `<REDACTED — Zeus Memory API key; see vault/infra-credentials.md § Zeus Memory / CCE — Learnings API (zeus.aldc.io)>`  
 **Tenant ID:** `c1234567-0000-0000-000a-000000000001`  
   
 **Quick Setup (5 min):**  
@@ -8,7 +8,7 @@ Onboarding doc is updated with Paul's info. Here's what he needs:
   
 
    ZEUS_API_URL=[https://zeus.aldc.io](https://zeus.aldc.io)
-   ZEUS_ALDC_API_KEY=zm_paul_9c1d3e5f7a2b4c6d8e0f1a3b
+   ZEUS_ALDC_API_KEY=<REDACTED — Zeus Memory API key; see vault/infra-credentials.md § Zeus Memory / CCE — Learnings API (zeus.aldc.io)>
    
 
 2. Install auto-updater:  

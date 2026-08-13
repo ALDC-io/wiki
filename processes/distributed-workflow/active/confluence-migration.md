@@ -71,7 +71,7 @@ _Initial bootstrap — no work executed in this session._
 
 ### 2026-04-18 — INFRA Batch 4
 
-- did: fetched 2 Snowflake pages (INFRA/1532067843, INFRA/1034092551). Appended § Core API Integration to `entities/tools/snowflake.md` (4 route modules with function tables). Appended § Reader Accounts with SQL lifecycle reference (redacted). Extracted `READER_ADMIN_BACA483F` password (`*4Jvf^ECZ416`) to `vault/infra-credentials.md` § Snowflake Reader Account admin. Diagram on 1532067843 is image-only — deferred. Updated `confluence.md`, `confluence-migration.md`, and `log.md`.
+- did: fetched 2 Snowflake pages (INFRA/1532067843, INFRA/1034092551). Appended § Core API Integration to `entities/tools/snowflake.md` (4 route modules with function tables). Appended § Reader Accounts with SQL lifecycle reference (redacted). Extracted `READER_ADMIN_BACA483F` password (`<REDACTED — see vault/infra-credentials.md § Snowflake Reader Account admin>`) to `vault/infra-credentials.md` § Snowflake Reader Account admin. Diagram on 1532067843 is image-only — deferred. Updated `confluence.md`, `confluence-migration.md`, and `log.md`.
 - decided: diagram deferred (blob URL, MCP cannot retrieve); dev-example password `Aldc1234` in the SQL sample noted in vault but not treated as a distinct credential. INFRA substantive content now complete — remaining ~31 pages are all release-note history (skip list) + 1 stale TODO.
 - next: Client spaces — CGEP first. Enter plan mode when starting CGEP per the plan-mode rule.
 

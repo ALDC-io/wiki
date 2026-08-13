@@ -201,7 +201,7 @@ Source of truth: `.env.template`. Populate as `.env.local` for dev or `compose_t
 | Var | Purpose |
 |---|---|
 | `api_url` | Base URL for [[core_api]] (e.g. `https://aldcqafnapcore1c01.azurewebsites.net/v1/`). **Must end with `/`.** |
-| `api_token` | Bearer token for core_api — sent as raw `Authorization: <token>` (not `Bearer <token>`; see `coreAPI.tsx:16`). In practice the **shared master bearer** `RkZGRkZGRkYwMDAwOmFsRGM5ODc2IQ==` (base64 of `FFFFFFFF0000:alDc9876!`) works across dev/test/qa/prod. |
+| `api_token` | Bearer token for core_api — sent as raw `Authorization: <token>` (not `Bearer <token>`; see `coreAPI.tsx:16`). In practice the **shared master bearer** `<REDACTED — core_api MASTER bearer; see vault/infra-credentials.md § MASTER API bearer (default)>` (base64 of `FFFFFFFF0000:<REDACTED — see vault/infra-credentials.md § MASTER API bearer (default)>`) works across dev/test/qa/prod. |
 | `STAC_NAME`, `STAC_KEY` | Legacy Azure Storage keys — no references in current source code; likely dead |
 | `NEXTAUTH_URL` | Full URL of this app (e.g. `https://dax.fusion92.eclipse.aldc.io`) — drives cookie prefix (`__Secure-` only on HTTPS) and cookie domain |
 | `NEXTAUTH_SECRET` | JWT signing secret — **must match the parent Eclipse portal** for session cookie interop |

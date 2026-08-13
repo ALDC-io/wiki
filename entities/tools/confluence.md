@@ -153,7 +153,7 @@ Credential extraction to `vault/infra-credentials.md`: NextCloud users (9 intern
 | ALDC Snowflake ecosystem / integration (INFRA/1532067843) | [[snowflake]] § Core API integration (new section); diagram image-only → deferred |
 | Snowflake Reader Accounts (INFRA/1034092551) | [[snowflake]] § Reader Accounts (new section); `READER_ADMIN_BACA483F` password → `vault/infra-credentials.md` § Snowflake Reader Account admin |
 
-Credential extraction to `vault/infra-credentials.md`: Snowflake reader account admin (AH87540, `READER_ADMIN_BACA483F`, password `*4Jvf^ECZ416`).
+Credential extraction to `vault/infra-credentials.md`: Snowflake reader account admin (AH87540, `READER_ADMIN_BACA483F`, password `<REDACTED — see vault/infra-credentials.md § Snowflake Reader Account admin>`).
 
 **INFRA space progress:** 27 of ~58 pages handled (23 ingested + 4 skipped). ~31 remaining = ~30 release-note skips + 1 stale action TODO. **INFRA substantive content: MIGRATION COMPLETE.**
 

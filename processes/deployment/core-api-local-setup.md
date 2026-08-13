@@ -129,7 +129,7 @@ Fastest way to prove the whole stack is up end-to-end — works before you touch
 
 ```bash
 # Base64 of MASTER_CLIENT_ID:MASTER_CLIENT_SECRET from local.settings.json
-BEARER="RkZGRkZGRkYwMDAwOmFsRGM5ODc2IQ=="
+BEARER="<REDACTED — core_api MASTER bearer; see vault/infra-credentials.md § MASTER API bearer (default)>"
 
 curl -s -X POST \
   -H "Authorization: $BEARER" \

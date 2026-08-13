@@ -373,7 +373,7 @@ Default target for processes 3 and 4 is the deployed **QA** environment (`aldcqa
 - **Docker + Docker Compose** — optional; only for `compose_test.yaml` or image-build flows.
 - **Credentials from Dashlane / `vault/credentials.md`**: `DAX_API_MASTER_TOKEN`, `F92_NETSUITE_SYNC_TOKEN`, `F92_NETSUITE_PUBLISHERS_TOKEN`, `DIOS_API_KEY`, `NEXTAUTH_SECRET` (must match parent Eclipse), plus `NETSUITE_PRIVATE_KEY` (PEM sandbox) and `MICROSOFT_ADS_CLIENT_SECRET` if running the backend.
 
-> **`api_token` is the shared master bearer.** Value `RkZGRkZGRkYwMDAwOmFsRGM5ODc2IQ==` (base64 of `FFFFFFFF0000:alDc9876!`). Same across all core_api environments — you only need to change `api_url` to switch envs.
+> **`api_token` is the shared master bearer.** Value `<REDACTED — core_api MASTER bearer; see vault/infra-credentials.md § MASTER API bearer (default)>` (base64 of `FFFFFFFF0000:<REDACTED — see vault/infra-credentials.md § MASTER API bearer (default)>`). Same across all core_api environments — you only need to change `api_url` to switch envs.
 
 ### 6.3 Auth model — parent-portal session cookie
 
@@ -413,7 +413,7 @@ ECLIPSE_URL=http://localhost:3000
 
 # core_api — shared master bearer across dev/test/qa/prod; switch env by swapping api_url alone
 api_url=https://aldcqafnapcore1c01.azurewebsites.net/v1/
-api_token=RkZGRkZGRkYwMDAwOmFsRGM5ODc2IQ==
+api_token=<REDACTED — core_api MASTER bearer; see vault/infra-credentials.md § MASTER API bearer (default)>
 
 # Fusion account the app binds to (TEST/PROD = 0fc00e34, QA = f49f9aa3)
 account_id="0fc00e34"

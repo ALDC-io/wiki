@@ -80,7 +80,7 @@ NextcloudFileHandler is a write/move/delete handler — its job is managing file
 /Client_Tenants/ALDC_QA/TEST_FILES/MARKETPLACE_NAME_TEST/MARKETPLACE_NAME_prefect_test_file.csv
 ```
 
-fa$tR0cket$!
+<REDACTED — NextCloud password for paul.russell@aldc.io; see vault/infra-credentials.md § NextCloud (ALDC Cloud) user credentials>
 
 
 save_block.py
@@ -102,7 +102,7 @@ async def save_block():
 
         user="paul.russell@aldc.io",
 
-        password="fa$tR0cket$!",
+        password="<REDACTED — NextCloud password for paul.russell@aldc.io; see vault/infra-credentials.md § NextCloud (ALDC Cloud) user credentials>",
 
         path="/Client_Tenants/ALDC_QA/TEST_FILES/MARKETPLACE_NAME_TEST/MARKETPLACE_NAME_prefect_test_file.csv",
 
@@ -119,7 +119,7 @@ asyncio.run(save_block())
 
   set NEXTCLOUD_HOST='cloud.aldc.io'
   set NEXTCLOUD_USER='paul.russell@aldc.io'
-  set NEXTCLOUD_PASSWORD='fa$tR0cket$!'
+  set NEXTCLOUD_PASSWORD='<REDACTED — NextCloud password for paul.russell@aldc.io; see vault/infra-credentials.md § NextCloud (ALDC Cloud) user credentials>'
   set NEXTCLOUD_TEST_CSV_PATH='/Client_Tenants/ALDC_QA/TEST_FILES/MARKETPLACE_NAME_TEST/MARKETPLACE_NAME_prefect_test_file.csv'
 
 

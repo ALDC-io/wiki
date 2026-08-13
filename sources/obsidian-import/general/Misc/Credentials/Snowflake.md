@@ -30,7 +30,7 @@ $Reymysterio1a$ - confirmed 2026-05-21
 
 github:
 russell94paul
-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
+<REDACTED — GitHub PAT (russell94paul); rotate, do not reuse>
 
 
 Claude Code:
