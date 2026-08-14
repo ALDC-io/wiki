@@ -19,7 +19,7 @@ be produced **at least four times**, so it is a pattern rather than a one-off:
 
 | # | Subject | When | Depth |
 |---|---|---|---|
-| 1 | **Navira Daily Sales Model** (`66151728`) | after the [[GP-318]] tail wrap | full |
+| 1 | **Navira Daily Sales Model** (`66151728`) | ✅ **built 2026-08-13** | full |
 | 2..n | **Marketing model — one per candidate design** | [[GP-319]] Phase 1/2 | thin, comparative (see §Sizing) |
 | final | **Marketing model — the chosen design** | [[GP-319]] Phase 3 | full |
 
@@ -129,6 +129,24 @@ Do not start from scratch:
   the guide is scheduled after the tail wrap, not alongside it.
 - **Client-shareable subset only** — curated, labelled artifacts, never raw internal dumps.
 - **No client comms without Paul's explicit go**, this guide included.
+
+## What the first build actually taught
+
+Produced for the Daily Sales Model on 2026-08-13 from `pbi_ops/_gp318_guide_extract.py` →
+`_guide_reach_matrix.py` → `_build_guide.py`.
+
+- ⭐ **The architecture diagram was the wrong figure.** A picture of 21 tables says less than the
+  field list. The load-bearing figure is a **reach map**: which dimensions can slice which fact, and
+  what happens when one cannot. That is the single thing a field list cannot show and every
+  [[GP-318]] defect came from.
+- ⭐ **Do not infer the reach map — measure it.** The first draft built it from the relationship
+  graph and asserted two falsehoods: an edge that does not exist, and reach derived from *direct*
+  relationships only, which understates transitive routes. See [[answerability-guard]] §Detecting.
+- ⭐ **Do not invent measure descriptions.** 70 of 122 visible measures had none. The guide prints
+  "not documented" and counts the gap in the page, so it gets fixed in the **model** — where the
+  descriptions also become Power BI tooltips — rather than papered over in a document.
+- The boundary section writes itself once the guards exist: it is generated from the deployed guard
+  expressions, so the document cannot claim an enforcement the model does not have.
 
 ## Related
 

@@ -473,3 +473,26 @@ design.
 
 **Kept in the repo, not the wiki:** the pre-registration, measurement, probe, apply, verify and
 rollback JSON stay in `aldc-launchpad/docs/evidence/gp318/gp318_item3_*`, pinned to `e936735`.
+
+
+## 2026-08-13 — GP-318 tail: guards on both models, the sales side, B11/B12, and the guide
+
+Ingested from the aldc-launchpad session of 2026-08-13 (commits `0a2a172` → `018f8c1`, Jira GP-318
+comments `35984` and `35988`).
+
+**New page:** [[answerability-guard]] — the reusable pattern behind the crux defect of [[GP-318]],
+which appeared **four times on four tables across two models**. Written as a pattern rather than
+ticket history because it is a property of star schemas, not of Navira.
+
+**Updated:** [[GP-318]] (the day's work + the four defects the non-destructive pass caught),
+[[model-enablement-guide]] (first build done; the diagram was the wrong figure, the reach map is the
+right one).
+
+⭐ **The lesson worth carrying:** four defects were caught by running the candidate *before* the
+apply, and a fifth — a transitive closure that treated a guard helper as a fact reference and
+double-wrapped 30 marketing measures — was deployed and caught only by replaying a second battery
+afterwards. All five looked correct until measured. The batteries now encode each one as a failing
+test.
+
+**Kept in the repo, not the wiki:** every survey, candidate, apply, live and rollback artifact stays
+in `aldc-launchpad/docs/evidence/gp318/`, pinned to the commits above.
