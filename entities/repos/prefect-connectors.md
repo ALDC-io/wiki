@@ -1,14 +1,25 @@
 ---
 tags: [entity, repo, prefect-connectors, aldc, prefect, data-plane]
 aliases: [prefect-connectors, prefect connectors repo]
-sources: [GP-247 session 2026-05-01, GP-218 work pool setup 2026-05-02, entities/repos/connector.md, entities/tools/prefect.md]
+sources: [GP-247 session 2026-05-01, GP-218 work pool setup 2026-05-02, entities/repos/connector.md, entities/tools/prefect.md, prefect-connectors docs/KNOWN_ISSUES.md issues 22-26 (branch development @ 62556f1, 2026-08-14), prefect-connectors docs/MIGRATION_HANDBOOK.md]
 created: 2026-05-01
-updated: 2026-05-29
+updated: 2026-08-14
 ---
 
 # prefect-connectors
 
+> **Contradiction — the SHELVED banner below is stale as of 2026-08-13/14.** The migration workstream
+> is **active again** (hackathon, six contributors, [[orchestrator]] unshelved and now hosted here,
+> `docs/MIGRATION_HANDBOOK.md` shipped as its single reference). Client-facing connector *delivery*
+> may still route through [[Eclipse]] — that has not been re-decided in the wiki — but "do not treat
+> this as the current path" is no longer true of the repo itself. Left in place rather than deleted
+> until Paul confirms which half still holds.
+>
+> <details><summary>Superseded 2026-05-28 banner</summary>
+>
 > ⚠️ **SHELVED — 2026-05-28.** The Prefect migration is on hold; this repo is **not** the live connector runtime. New connectors are built in the legacy **[[connector]]** repo on the **[[Eclipse]]** pipeline. Do not treat this as the current path. Live work + full context: [[processes/distributed-workflow/active/navira/README|Navira workstream]]. Retained as historical reference.
+>
+> </details>
 
 ALDC's Prefect v3 connector runtime. Forked from the `operation-fiasco` branch of [[connector]] on 2026-05-01 (GP-247). Houses Prefect flow definitions that pull data from source APIs/DBs → Azure Blob Storage → Snowflake, replacing the legacy BaseConnector / Eclipse agent architecture.
 
@@ -366,11 +377,190 @@ QA work pool `azure-aci-qa` memory bumped 1 GB → 2 GB. Seller_cloud and shopif
 3. **GP-274 SP-API debug** — check marketplace config in deployment file, test with date range known to have orders, check SP-API permission scopes on the credential block
 4. **GP-272 VNet design** — Azure VNet integration for ACI so workers can reach `gep.api.sellercloud.com`
 
+### Sessions 2026-08-13/14 — pre-hackathon repair; exchangeratesapi proven end to end
+
+Six contributors were due on 2026-08-14. Two overnight sessions cleared the defects that would have
+stopped every one of them. **424 tests passing** (from 338), all guards mutation-verified.
+
+> **Contradiction — corrects the 2026-05-29 status table above.** `exchangeratesapi / GP-271` was
+> recorded as **SUCCEEDED / Done**. It was not. It was writing **48 fragmented tables per landing
+> schema** and passing a parity check that compared the wrong things. Both defects were real and both
+> were invisible to the pipeline's own green verdict. Treat the 2026-05-29 row as *"the pipeline
+> reported success"*, not *"the connector worked"*.
+
+#### The measurement that reframed it
+
+`exchangeratesapi` **was never broken** — every wrong reading was the *comparison*. Live Snowflake,
+window 2026-08-12..14:
+
+| | prod | QA |
+|---|---|---|
+| distinct business keys | **4,381** | **4,381** |
+| distinct `BASE` | 13 | 1 → now 13 |
+| raw rows | 21,309 | 106,600 |
+| duplication | 4.86× | 16.11× → 1.51× |
+
+Production keeps ~3.3 intraday rate restatements per key; QA pulls each date once. Deduped on the
+**business key** the two sides are identical. `base_currencies` was also `["USD"]` and is now the
+measured 13.
+
+#### Defects fixed
+
+| # | Defect | Runs in |
+|---|---|---|
+| 1 | **Worktree paths** — `worktree_path` stored with a hardcoded `.sessions/` prefix while the dir lives under the suffixed `SESSIONS_DIR`. Broke every pipeline at stage 6 for anyone setting initials | orchestrator |
+| 2 | **Watchdog** — `_run_watchdog` never checked `_enabled`, so the "disabled" agent re-dispatched work every 30 min all night. Now gated **and** capped per stage | orchestrator |
+| 3 | **PR base branch** — `gh pr create` had no `--base`, so PRs targeted `main`: 146 files / +7.5k for a one-line change. Now defaults to `development` | orchestrator |
+| 4 | **merge-gate** auto-advanced on `tests_pass`, which says nothing about a merge. Now a condition gate on `check_branch_merged` | orchestrator |
+| 5 | **`retry-stage` was unroutable** — route regex used `(\w+)`; `\w` excludes hyphens | orchestrator |
+| 6 | **TruffleHog false positive** silently skipped the Docker publish → see [[github-actions]] | CI |
+| 7 | **Parity logic**, extensively → see [[orchestrator]] | orchestrator |
+| 8 | **The dtype dialect gap** — the real fragmentation cause → see [[schema-dialect-drift]] | **ACI image** |
+
+⚠ **Fix #8 ships in the image; #1–#5 and #7 ship in the process.** Orchestrator-side fixes take
+effect on restart; connector-side fixes need merge → CI rebuild → new run. Getting this backwards
+costs an 18-minute pipeline run for nothing.
+
+#### Result
+
+`pipe_36e22e24` **succeeded, 17/17 stages**, parity `PASS`, parity_score 100.0, schema PASS,
+distinct rows 4,381 vs 4,381 on the primary key, **fragments 48 → 1**, $1.50 for the whole pipeline.
+Read the PASS accurately — the duplication budget is *relative* to prod's own 4.86×, so PASS means
+"no worse than prod", not "clean" ([[orchestrator]] has the four rules).
+
+#### Still open
+
+1. **The parity window can shrink to hide a QA coverage gap** — `pf_min/pf_max` seeded from QA's own
+   MIN/MAX; the `clipped` annotation only fires in the harmless direction
+2. **`truncate_landing_schema` exists but is wired into no pipeline stage** — five verified guards,
+   never run against live Snowflake
+3. **`backfill_runs > 1` duplicates rows** (10.57× at 8 runs vs prod's 4.86×) — `MergeStrategy.Insert`
+   re-appends on re-pull; green was reached at `backfill_runs: 1`. ⚠ **Now known to be at least
+   three compounding causes, not one** — see issues **22, 24 and 26** in the 2026-08-14 afternoon section below;
+   any observed duplication factor is a *product*, which is why 10.57× never traced to a single mechanism
+4. **Orphaned landing schemas** `__PR`, `__PR2`, `__PR3` (48 fragments each) need a retention sweep.
+   Any sweep must **exact-match** the suffix — `__PR` is a prefix of `__PR2` — and must never run
+   from the pipeline that just wrote the data
+5. **`MergeStrategy.Insert` is probably wrong for exchange_rates** — `amazon_sellercentral` and most
+   of `amazon_ads` use `Version`. Changes write semantics, so it needs its own evidence
+
+#### Branch protection (measured, `development`)
+
+`required_approving_review_count: 1` · `enforce_admins: false` · `require_code_owner: false` ·
+contexts `["quality-gate / quality-gate"]`. A **solo author cannot merge** — GitHub will not let an
+author approve their own PR — which is why every merge that night used `--admin`. **This is correct
+configuration for a repo about to take six contributors; do not lower it.** The fix is social: the
+team approves each other's PRs. `enforce_admins: false` is already the escape hatch.
+
+### Session 2026-08-14 (afternoon) — five defects recorded, two corrections
+
+Verified against `ALDC-io/prefect-connectors` branch `development`, HEAD `62556f1`. All five are
+written up as **issues 22–26 in `docs/KNOWN_ISSUES.md`**; the repo is the source of truth, this is
+the index. None is fixed unless the row says so.
+
+| # | Defect | Layer |
+|---|---|---|
+| 22 | `MergeStrategy.Version` inserts every staged row **three times** | connector (image) |
+| 23 | A stage that completes without queueing its successor is **unrecoverable from the UI** | orchestrator |
+| 24 | `partition_key` never reaches `_upload_data`, so every partition hashes identically | connector (image) |
+| 25 | The parity **coverage** check is inert by default and still reports PASS | orchestrator |
+| 26 | `self.responses` is never cleared between partition iterations | connector (image) |
+
+#### 22 — `MergeStrategy.Version` triple-inserts
+
+`connector/lib/warehouse/lib.py` issues three INSERT statements at `:927-939`, `:942-954` and
+`:957-969` that are **byte-identical** — proven by programmatic diff, not by reading. Each is an
+anti-join whose whole correctness rests on excluding rows from the *current* `SESSION_ID`; but the
+rows they insert **carry that same session id** (`lib.py:115`), so statements 2 and 3 cannot see
+statement 1's output and re-insert it. **Every staged row lands 3×.**
+
+The `CURRENT_` view (`lib.py:606-616`) does **not** hide this — its `RANK()` ties all three copies at
+rank 1, so all three are "current". `Version` is **21 of 25** deployment uses in the repo, which
+makes this the widest-blast-radius defect on the list.
+
+#### 23 — a `pending` stage is a dead pipeline
+
+If a stage completes without queueing its successor, the pipeline is stuck in a state **no UI control
+can leave**:
+
+- The UI renders an Approve control only for `status === 'dispatched'`
+  (`orchestrator/static/index.html:1085-1086`). A `pending` stage gets **no control of any kind**.
+- The `parity_score_min` auto-policy lives inside `_dispatch_gate_stage` (`server.py:858-871`) — it is
+  unreachable until a gate has been dispatched.
+- `recover_stale_pipelines` resets only `dispatched` stages, so a `pending` one is invisible to it.
+
+**Half fixed.** `parity-check`'s `auto_advance` was flipped to `True` in commit `bf67f66`, but
+**fifteen** stage definitions still carry `auto_advance: False` and **thirteen of them are not
+gates** — `uat-parity`, `prod-robustness`, `canary-monitor`, `enable-schedule` and others across
+`connector-promotion`, `connector-canary` and `connector-activation`. Each is a latent stall.
+
+#### 24 — every partition hashes to the same value
+
+`partition_key` is never passed to `_upload_data` — the `FIXME` sits at
+`connector/base_connector.py:829-830` and **all three call sites** (`:738`, `:752`, `:776`) omit it.
+So `partition_hash` is `md5("")` for **every date**. Under `MergeStrategy.Insert` the tombstone
+filter then selects the whole table's history instead of the one partition being rewritten.
+
+⚠ **Code-established mechanism, NOT yet measured against the warehouse.** The read of the code is
+solid; whether and how it fires in production is unconfirmed. Do not quote it as an observed effect.
+
+#### 25 — a coverage check that cannot fail
+
+Nothing in the shipped pipeline supplies an **intended window** to the parity coverage check. With no
+intended window it returns `NOT_COMPARABLE`, that result is filed under `advisories` rather than
+`inconclusive`, and **the run still reports PASS**. A check structurally incapable of producing a
+failing answer will report success forever — see [[vacuous-verification]]. Closely related to open
+item 1 above (the window seeded from QA's own MIN/MAX), but a distinct defect: this one never
+compares at all.
+
+#### 26 — `self.responses` accumulates across partitions
+
+`self.responses` is never cleared between partition iterations (`base_connector.py:309-311`, `:422`),
+while `run_workflow` re-calls `run()` once per partition (`:745-756`) and connectors
+`return self.responses`. **Verified in-process**: three successive calls returned lengths **1, 2, 3**.
+
+⭐ **This compounds with 22 and 24.** Any observed duplication factor is the **product of at least two
+causes** — which is precisely why the measured **10.57×** has never traced cleanly to a single
+mechanism, and why a fix for any one of them will not make the number go to 1.
+
+#### Two corrections to previously-recorded belief
+
+> **Correction 1 — `recover_stale_pipelines` is not agent-gated.** It was previously understood to be
+> gated on the pipeline agent toggle. It is **not**, and it also runs **unconditionally at server
+> startup** (`orchestrator/server.py:2403`). It still cannot recover a stalled pipeline — but for a
+> different reason than recorded: it resets only `dispatched` stages, so a `pending` stage is
+> invisible to it (defect 23), not because it never ran.
+
+> **Correction 2 — the `az role assignment create` failure is a shell bug.**
+> `az role assignment create --scope /subscriptions/...` fails from **Git Bash on Windows** with a
+> misleading **`MissingSubscription`** error. The cause is **MSYS path conversion** mangling the
+> leading-slash scope into a Windows path. It is **not a permissions problem** and **not a Claude Code
+> permission-classifier block** — both of which it was previously blamed on. Fix: run it from
+> **PowerShell**, or set `MSYS_NO_PATHCONV=1`. This is the same mechanism already recorded above for
+> `az quota` (2026-05-29); it generalises to **every `az` call carrying a leading-slash resource
+> scope**. See [[Azure]] § Pitfalls.
+
+#### Operational facts
+
+- **`auto_advance` is copied onto the pipeline record at `create_pipeline` time**
+  (`orchestrator/pipelines.py:1288`). A pipeline created *before* a fix keeps the **old** value —
+  an orchestrator restart does **not** retrofit it. Fixing a stage definition only helps pipelines
+  created afterwards; existing ones must be recreated.
+- **The `connector-migration` pipeline has 18 stages.** The section comment above `PIPELINE_DEFS`
+  says "10" and is **stale** — as are the 15/16 figures recorded elsewhere on this page and on
+  [[orchestrator]]. Count the definition, don't trust the comment.
+- **`docs/MIGRATION_HANDBOOK.md` is now the single reference for this workstream.** Start there
+  before this page for anything operational.
+
 ## See Also
 
 - [[connector]] — legacy data-plane repo (still live, do NOT archive)
-- [[orchestrator]] — pipeline engine documentation (14 engine modules, hardening status)
+- [[vacuous-verification]] — the verification lesson from this session (agent verdicts, and the inert coverage check)
+- [[orchestrator]] — pipeline engine, **parity harness rules**, and operational gotchas
+- [[schema-dialect-drift]] — the fragmentation root cause, its three occurrences, and the virgin-schema test
+- [[github-actions]] — the silent publish-skip that let a stale image run for 77 days
 - [[Prefect]] — orchestration infrastructure, Azure resources, Work Pool config
 - [[connector-development-standards]] — canonical Prefect connector pattern
+- [[GP-277]] — the [[core_api]] sibling of the dtype defect
 - [[phase-0-prefect-foundation]] — Phase 0 sprint results and roadmap
 - [[azure-environments]] — subscription map

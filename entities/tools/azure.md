@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, azure, cloud, infrastructure, hosting]
 aliases: [Azure, Microsoft Azure]
-sources: [daily/2026-04-17.md]
+sources: [daily/2026-04-17.md, prefect-connectors session 2026-08-14 (az CLI MSYS path-conversion correction)]
 created: 2026-04-17
-updated: 2026-06-12
+updated: 2026-08-14
 ---
 
 # Azure
@@ -92,6 +92,13 @@ Paul's current state (as of 2026-04-17):
 - **Production 1 vs Production 2**: don't get tripped up — Production 2 is the live one. Production 1 is effectively dead
 - **Domain → service mapping**: when browsing resources, use the domain name shown in the resource config to figure out which logical service a given web app represents (especially for the two Eclipse web apps)
 - **Deployment slots = two halves to swap**: for Eclipse, forgetting to swap either the frontend or backend leaves the pair out of sync
+- ⚠ **`az ... --scope /subscriptions/...` fails from Git Bash on Windows with a misleading
+  `MissingSubscription`** (measured on `az role assignment create`, 2026-08-14). **MSYS path
+  conversion** rewrites the leading-slash scope into a Windows path before `az` ever sees it. It is
+  **not a permissions problem** and **not a Claude Code permission-classifier block** — it was
+  previously blamed on both. Fix: run it from **PowerShell**, or set `MSYS_NO_PATHCONV=1`. Applies to
+  every `az` call carrying a leading-slash resource scope; the same mechanism was recorded earlier
+  against `az quota` (see [[prefect-connectors]])
 - **`aldcprod*` naming ≠ Production 2 subscription for Prefect**: Prefect's resource groups (`aldcprodrsgpconnector1c`, `aldcprodrsgpprefectworkers1c`) live in the **QA subscription**, not Production 2. The `prod` prefix here refers to the logical Prefect instance, not the Azure subscription. Check the actual subscription before assuming from the name
 
 ## See Also

@@ -3,6 +3,7 @@
 Append-only chronological record of all wiki operations (ingest, query, lint).
 
 | Timestamp | Operation | Summary |
+| 2026-08-13 | azure-nonprod-cost-reduction | **Azure cost pass across Test 1 + Quality 1, triggered by an Azure "payment past due" email John Moran (CEO) couldn't see inside — he asked "anyone know anything about Test 1?".** Answered what it is, granted him Reader, cut spend **~$620→~$280/mo (~$341/mo, ~$4,100/yr)**, nothing decommissioned. Five changes: App Service `aldctestapspportal1c01` **×2→×1** ($117), **log level→`Warning`** on `aldctestfnapcore1c01`+`aldcqafnapcore1c01` ($130), Front Door `aldc-portal-afd` deleted ($50), `pg-aldc-superset-qa` deleted ($24), Launchpad/Superset footprint deleted ($20). **⚠ the $130 is the one PROJECTED figure — quoted to John by email today, verify on the September bill.** **One change broke prod-adjacent kit and was rolled back:** P1v2→**S1** halves RAM 3.5→1.75 GB and `eclipse-test.aldc.io` returned an instant **503** (~30 min down) — the downgrade was justified by a *cross-environment price comparison* ("Quality runs the same apps on S1") without checking the app's memory need; **a price comparison is not evidence a workload fits.** Redone as instance-**count** (every App Service instance runs all apps on the plan → per-instance memory unchanged; measured 65%→65–66%, zero downtime). Other gotchas: **`rg-aldc-launchpad` exists in BOTH subscriptions** and Test 1's holds *only* `aldc-vault-test` (deleting by RG name would have destroyed it); the two Quality vaults are **not** Launchpad artifacts (held `snowflake-prod-admin`, `snowflake-admin-nonprod`, `lectric--amazon-spapi--*`, `eclipse-postgres-test`, `gep-prefect--*--oauth`) — preserved; **an empty App Insights result ≠ a zero** (platform metric `FunctionExecutionCount` proved `aldctestfnapf921c01`'s daily 07:00 Microsoft-Ads token refresh had fired 30/30 days — NOT-RECORDED, not ZERO); Log Analytics is **94% Information-level `AppTraces` from one app per sub** (38.2 GB/30d @ ~$3.45/GB, reconciles exactly) fixed with `AzureFunctionsJobHost__logging__logLevel__default=Warning` + `Host.Results=Information` (no code deploy; trace rate 740/5min→1, AppRequests + warnings still flowing); Front Door has **no pause** and `az afd profile delete` **rejects `--yes`** (use REST DELETE); a **stopped Postgres flexible server force-restarts after 7 days** (pause, not saving). **Test 1 is not purely test** — `aldctestfnapf921c01` runs live Fusion92 NetSuite/publishers/notifications + the daily Ads token refresh. **Quality 1 has no custom domains at all**; its Launchpad half was dormant (`func-aldc-portal-qa` 0 execs/30d while Running = a true zero). Whether both Test and Quality are needed (~$120/mo) is **unresolved and is a Vlad/Mike process question** — deployment history did not discriminate, and daemon/dispatcher execution counts prove polling, not human use. Open: **Sean O'Grady departed, account disabled, still Owner ×4 + Entra Global Admin**; **Azure billing ownership unresolved** (Entra Billing Admin ≠ PAYG Azure billing; John+Lori hold it, likely tied to Sean's account — if the sub is disabled it takes eclipse-test *and* live Fusion92 plumbing down). Pages touched: concepts/architecture/azure-nonprod-cost-reduction.md (**new**), concepts/architecture/azure-environments.md (full Test 1/Quality 1 inventory, Owner/UAA matrix, Entra role lists, **contradiction flagged**: the documented "QA subscription" ID *is* Quality 1), index.md, log.md. Email to John **sent** (reply-all, Outlook web — the M365 MCP write tools are permission-blocked in-session, drafted via browser automation instead). |
 | 2026-08-12 | fu92-421-tamarack-reconnect-forced-pull | **[[FU92-421]] follow-up — client (Juliann) reconnected LinkedIn `517914705` "Tamarack Realty" and asked us to confirm it was flowing. Answered end-to-end, forced the pull, verified at the consumer layer with exact parity.** Warehouse showed **zero rows**, and the freshness monitor could not have told us — an account that never arrives produces **no row in `GROUP BY ACCOUNT_ID`**, so there is nothing to evaluate (`min_span_days`/`min_rows` gate only *alerting*, not the listing). Windsor probed directly: **PRESENT in both windows** (08-01..08-12 12 rows/$783.86; 06-01..08-12 30 rows/$2,009.74 back to **07-14**) with **4/4 sibling accounts** returning rows as the instrument-liveness control — the substitute for the two-window discriminator, which cannot be applied to a brand-new account with no warehouse-proven-active window. Real gate was the **6h partition cooldown** (`retry_min==retry_max==21600`, last land 16:09Z, eligible 22:09Z), **not** the schedule block: `account/describe` computed `work_block=false` live, and the block's `name` ("16:00 - 04:00") **lies** — `start:6300`/`end:14400` = 01:45–04:00 America/Chicago. Forced via **`work/queue` → `work_queue_agent`** on *both* active partitions (2026-07-01 + 2026-08-01) — no deletion, no block lift, only the `in_queue=True` the scheduler sets anyway; both completed in ~60s. Landed **69 rows / $2,010.12, 07-14..08-12**, correctly mapped to flight **QHQ9G** "Q3 Realty – LinkedIn" (campaign group `1186188086`, all 3 orders). **Consumer layer lagged 18 min** — `FCT_PLATFORM_SPEND`/`SHARED_DIM_FLIGHT` are **dynamic tables** (`target_lag=DOWNSTREAM`, 1h-lag parents) whose `data_timestamp` predated the land; it looked exactly like a mapping failure and was not. Resolved at 20:51Z: **consumer $2,010.12 == raw $2,010.12, delta $0.00**. Side findings: **502845846 + 506641008 recovered on their own** with backfill **22/22 days, no hole** (control = 506641008 flat at 4 rows/day, proving 502845846's 5→2 dip is campaign lifecycle) → FU92-421's client blocker is cleared; **508272220 U-M Ross struck from the re-auth ask for the second time** (1 row, $0.00, 06-06 vs siblings' 60–73 rows of real spend — connected, campaigns ended); **7IHPM's staleness is recurring mapping maintenance, not a defect** (post-boost campaign groups run ~1-week bursts; strict test for raw rows after 08-03 = **0**, but each new boost carries a NEW `campaign_group_id` that must be added to `SHARED_DIM_FLIGHT` or actuals stay flat — GMX2U shape). **Amended a wiki claim that was too strong:** "do not force a pull, it does nothing the next scheduled run does not" is right about partition *surgery*, wrong as a general rule. Pages touched: entities/tools/eclipse.md (+§ *Forcing a pull NOW* — work_block check, cooldown, `work/queue` recipe, no-underscore routes, dynamic-table lag, load-timestamp traps), entities/tools/windsor.md (+brand-new-account variant, back-serves-history, monitor blind spot, amended force-a-pull note), log.md. Skills hardened: `vigil` (**fifth kind of quiet: UNREPRESENTED** + blind-spot enumeration), `inquest` (materialised-layer freshness before reading a consumer-layer zero as failure). Draft client reply held at `aldc-launchpad/docs/drafts/fu92-421-tamarack-reply.md` — **unsent, Paul sends**. |
 | 2026-08-10 | fu92-420-v5-usage-audit-rewrite | **[[FU92-420]] — DIOS usage audit rewritten for v5; the page's whole answer was superseded and is now replaced.** The v4 headline *"essentially no real usage"* was rejected by **Lori Beck (ALDC EI Lead, not Fusion92 — the old page mislabelled her)** and she was right: the counts were correct, the **unit** was wrong. Counting audience folders answers "how much was produced", not "is anyone using this". Re-measured by **function**, off a per-request counter (`Connected to Nextcloud!`, emitted once per request by `create_file_handler()`) and **calibrated against an independent Nginx proxy log — exact agreement on 21 of 22 overlapping days**: **LOOK 10,987** (~83/working day, 44+ projects) vs **CONVERT 5** vs **RELEASE 3**, 2026-02-10→08-10 → *their team is in the tool every working day and nobody is converting*, ~2,000 reads per conversion. Reads are **human-driven, machine-proxied** (zero calls on all four Saturdays, 97% in working hours, inter-arrival CV 8.2; UA is the DIOS backend so **no per-user attribution is possible**). **Withdrawn:** the `14,709` warehouse figure was **void** — the app writes `audience_name` (`flight_metadata.json:907`) while the sync model declares only `dios_audience_name` (`schema.py:266,274`) with no `extra="allow"`, so Pydantic drops it; the column could never have been non-zero and was created six weeks *after* the last campaign conversion (fix = ~1-line `validation_alias`, **not ticketed**). Also withdrawn: the whole FU92-336/December section (over-read one comparison test into a standing workflow, and the dates run backwards) — **consequence: the `_all` flat folders revert to "producer not established"**. **114 is a FLOOR** (re-conversion deletes and replaces output; floor ≥123 runs, one audience ≥5 runs behind one folder; 2025's true count **NOT RETAINED**). Three definitions of "real" now published **with their overlap** (26/38/7/13) instead of used interchangeably. **New lesson, and it bit the shipped PDF: removing prose does not remove its generated footnotes** — cutting the December section left three `client_footnote` strings still asserting its claim *and* pointing at "the section above", contradicting another footnote on the same page; the internal `basis` fields were already correct, which is exactly why nobody noticed. Caught in a grounding sweep after the pack reached Lori; fixed at `build_inventory_pack.py:1048` and re-rendered, **zero figures changed** (all 6 CSVs byte-identical, 3 footnote strings + 1 HTML line). **Mar–Jul 2026 is a REAL zero, not an outage** (1,590–2,155 req/month through it) — never report it as service-down. Ticket moved to **QA**. Pages touched: tickets/fusion92/FU92-420.md (rewritten), index.md, log.md. |
 | 2026-07-24 | gp298-dashboard-comparison-columns | **[[GP-298]] — standardized trend-comparison columns across NAVIRA brand dashboards (eclipse-2.1, PROD).** Lori asked to drop Prev%/YoY% on Buy Box % + Return Rate % in the Sales table and limit the Units table to Quantity. Delivered as a **data-only** edit to shared `explorer_visual` `options` in prod Cosmos `aldcprodcsdb1c01`/`core` (account `da8904db`), no app code. Three visuals: `1807e81d` Sales → `comparison_measures=[Gross]` (30 dashboards); `c00bc2d2` "Units by SKU with RR%" → `show_previous_period=true` + `comparison_measures=[Gross (Quantity)]` (31); `34fc12de` "Units by SKU" older variant → `comparison_measures=[Gross (Quantity)]` (7). **Three lessons captured on [[dashboard]]:** (1) `explorer_visual` docs are **shared** across many dashboards — one edit is inherently global, no per-dashboard override without cloning; always map blast radius first (the "Brinno-only" ask hit 30–31 dashboards). (2) The ticket named the **wrong visual** for Units (`34fc12de`); Brinno actually renders `c00bc2d2` — verify the target by the dashboard's `layout` component `visual_id`, not the name, and cross-check rendered columns vs `options.measures`. (3) The browser **caches the column layout** — change is live in Cosmos but needs a **hard reload (Ctrl+Shift+R)** to show; a plain reload isn't enough. Mechanism verified in `core_api/api/visuals` (schema.py:160, deps.py:139-141, existing pct-change tests). Validated at the rendered layer (`eclipse.analyticlabs.io`) on Brinno + Pearlie White with before/after screenshots. Scripts/evidence: `aldc-launchpad/eclipse_ops/_gp298_*.py`, `docs/evidence/gp298/`; PR #3 → `main`; rollback snapshot covers all 3 visuals. Pages touched: entities/tools/dashboard.md, tickets/gep/GP-298.md (new), index.md, log.md. |
@@ -496,3 +497,109 @@ test.
 
 **Kept in the repo, not the wiki:** every survey, candidate, apply, live and rollback artifact stays
 in `aldc-launchpad/docs/evidence/gp318/`, pinned to the commits above.
+
+## 2026-08-14 — ingest: Prefect hackathon prep (sessions 1–2), the durable lessons
+
+Ingested from the [[prefect-connectors]] sessions of 2026-08-13/14 (PRs #30–#34 and #28, branch
+`development` at `12ca54a`). Written as reusable gotchas rather than session history — six
+contributors arrive on the repo the same day.
+
+**New page:** [[schema-dialect-drift]] — a writer declares a column type in one vocabulary and the
+warehouse reports it back in another, so any code comparing the two forks a new versioned table on
+every write. Made a pattern page rather than ticket history because it has now bitten **two
+independent codebases** ([[prefect-connectors]] `_normalize_dtype`, and [[core_api]] Fix B on
+[[GP-277]] — which chose the *opposite* remedy, tolerate-and-widen, and neither fix knew about the
+other). Contradiction flagged on the page.
+
+**Updated:** [[github-actions]] (the silent publish-skip failure mode + verification rules),
+[[orchestrator]] (parity-harness rules, gotchas, and the **UNSHELVED** banner — the connector
+pipeline is live again and the orchestrator has moved into [[prefect-connectors]]),
+[[prefect-connectors]] (the two sessions, 7 defects, the measurement that reframed them, 5 open
+items, measured branch protection), [[connector-development-standards]] (the two write-path traps),
+[[GP-277]] (cross-link to the recurrence). Both `index.md` and `log.md` touched.
+
+⭐ **The lesson worth carrying:** *a mismatch you can measure is not evidence that you found every
+mismatch.* Fragmentation was "fixed" twice by engineers who had each **correctly diagnosed the
+mechanism** and each shipped an incomplete map — 11 weeks apart. A measured cause feels like *the*
+cause. What finally settled it was not better reading but a number: run into a **virgin landing
+schema and count fragments** (48 = broken, 1 = fixed). Two sibling lessons in the same family — a
+**mutation test can itself be vacuous** (removing the dtype folding left all 58 tests green, because
+the only dtype test covered columns whose mapping already worked), and `trigger_and_wait` **swallows
+exceptions**, so sentinel-exception assertions test nothing and pass unconditionally.
+
+⚠ **Two corrections to previously-recorded state.** `exchangeratesapi/GP-271` was logged
+SUCCEEDED/Done on 2026-05-29 while writing 48 fragmented tables and passing a parity check that
+compared the wrong things — the pipeline's green verdict was not the connector working. And the
+orchestrator's 2026-05-28 SHELVED banner is now wrong on both counts: unshelved, and in a different
+repo.
+
+**Read the reference PASS accurately:** the duplication budget is *relative* to production's own
+4.86×, so PASS means "QA is no worse than prod", not "QA is clean" — it passed still carrying 1.51×
+in-window duplication.
+
+**Kept in the repo, not the wiki:** pipeline run state, parity reports and landing-schema evidence
+stay in `prefect-connectors` (`orchestrator/data-pr/pipelines.json`, `pipe_36e22e24`) and in the PRs
+above.
+
+## 2026-08-14 (session 3) — ingest: five connector-migration defects, and the vacuous-verdict lesson
+
+Ingested from the [[prefect-connectors]] migration session of 2026-08-14, verified against branch
+`development` at HEAD `62556f1`. The defects themselves are recorded as **issues 22–26 in the repo's
+`docs/KNOWN_ISSUES.md`** — the repo is the source of truth, the wiki carries the mechanism and the
+lesson. `docs/MIGRATION_HANDBOOK.md` is now the single reference for this workstream.
+
+**New page:** [[vacuous-verification]] — *a verification pass can return a result that is
+structurally perfect and completely empty.* Five defect claims went to independent verifier agents
+with a structured output schema; **three came back `CONFIRMED` with `reasoning` literally the string
+`"test"`** and evidence `"a"`/`"b"`, and one hit the schema retry cap and errored. The agents had
+genuinely done the work — 18–36 tool calls, 60–90k tokens each — the **final structured emission**
+degenerated. Re-run with a **free-text return** plus an explicit *"if you write the word 'test' here
+you have failed the task"*, the same five claims produced substantive verdicts including a
+programmatic byte-diff and an in-process repro. ⭐ **A schema-constrained agent return is not
+self-validating; check that the CONTENT of a verdict is substantive before trusting the verdict
+field** — and note that token spend does not certify it, because the spend was honest in every
+degenerate case. Made a pattern page rather than session history because this is the fifth ALDC
+mechanism to fail the same way: the green `claude / review` check, the vacuous mutation test
+([[schema-dialect-drift]]), the guard battery comparing a value to itself ([[answerability-guard]]),
+`trigger_and_wait` swallowing a sentinel exception, and a skipped publish job that still reports a
+conclusion ([[github-actions]]).
+
+**The five defects** (mechanism on the pages, not just titles): **#22** `MergeStrategy.Version`
+issues three **byte-identical** INSERTs (proven by programmatic diff) whose anti-join must exclude
+the current `SESSION_ID` while the rows it inserts carry that same id — every staged row lands **3×**,
+and the `CURRENT_` view's `RANK()` ties all three copies at rank 1 rather than hiding it; **21 of 25**
+deployment uses. **#23** a stage that completes without queueing its successor sits `pending`, which
+the UI renders no control for, the `parity_score_min` policy cannot reach, and
+`recover_stale_pipelines` does not touch — **half fixed** (`bf67f66`), with 15 stage definitions still
+`auto_advance: False` and **13 of those not gates**. **#24** `partition_key` never reaches
+`_upload_data`, so `partition_hash` is `md5("")` for every date and the `Insert` tombstone filter
+selects the whole table's history — ⚠ **code-established, not yet measured against the warehouse**.
+**#25** the parity **coverage check is inert by default** (no intended window → `NOT_COMPARABLE` →
+filed under `advisories` → run still **PASS**). **#26** `self.responses` is never cleared between
+partition iterations — verified in-process at lengths **1, 2, 3**. ⭐ **22 + 24 + 26 compound: any
+observed duplication factor is the product of at least two causes**, which is why the measured
+**10.57×** has never traced to a single mechanism and why fixing one will not take it to 1.
+
+⚠ **Two corrections to previously-recorded belief.** `recover_stale_pipelines` is **not** gated on
+the pipeline agent toggle and runs **unconditionally at server startup** (`server.py:2403`) — it
+still cannot recover a stalled pipeline, but for a different reason than recorded (it resets only
+`dispatched` stages). And `az role assignment create --scope /subscriptions/...` failing from Git
+Bash with `MissingSubscription` is **MSYS path conversion**, **not** a permissions problem and
+**not** a Claude Code permission-classifier block — both of which it had been blamed on; run it from
+PowerShell or set `MSYS_NO_PATHCONV=1`.
+
+**Operational facts persisted:** `auto_advance` is copied onto the pipeline record at
+`create_pipeline` time (`pipelines.py:1288`), so a pipeline created before a fix keeps the old value
+and **a restart does not retrofit it** — the one exception to "orchestrator-side fixes take effect on
+restart". And `connector-migration` has **18 stages**; the code comment above `PIPELINE_DEFS` says
+"10" and the wiki said 15/16 — all stale.
+
+**Updated:** [[prefect-connectors]] (the five defects with mechanism + evidence, both corrections,
+the operational facts; the 2026-05-28 SHELVED banner **flagged as a contradiction** and collapsed
+rather than deleted — the repo is active again, whether client delivery still routes through
+[[Eclipse]] has not been re-decided), [[orchestrator]] (new stall-recovery section, the inert
+coverage check as parity rule 5, the `auto_advance` snapshot caveat, stage-count warning),
+[[connector-development-standards]] (`Version` triple-inserts, so *neither* merge strategy is
+currently duplication-free; the two `BaseConnector` write-path traps), [[github-actions]] (the
+skipped publish job as one instance of the wider vacuous-verdict shape), [[Azure]] (the MSYS
+path-conversion pitfall). Both `index.md` and `log.md` touched.

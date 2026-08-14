@@ -1,9 +1,9 @@
 ---
 tags: [pattern, connector, prefect, migration, development-standards]
 aliases: [Connector Development Standards, ALDC Connector Pattern]
-sources: [entities/tools/prefect.md, entities/repos/connector.md, connector/accounts/ALDC_QA/deployments/exchange_rates.py]
+sources: [entities/tools/prefect.md, entities/repos/connector.md, connector/accounts/ALDC_QA/deployments/exchange_rates.py, prefect-connectors connector/lib/warehouse/lib.py + connector/base_connector.py (branch development @ 62556f1, 2026-08-14)]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-08-14
 ---
 
 # Connector Development Standards
@@ -54,6 +54,49 @@ For each legacy `BaseConnector`-style connector:
 | Incremental with unique keys | `PartitionSchemeKey` | `MergeSchemeMerge` |
 
 Use `PartitionSchemeFull` for connectors where source data is a complete snapshot on every pull (e.g., Nextcloud CSV). Use `PartitionSchemeDate` for date-range APIs where data is additive and keyed on date + dimensions.
+
+> ⚠ **`MergeStrategy.Insert` is not idempotent.** Re-pulling a date under `Insert` appends a second
+> copy — the primary key is enforced *per table*, and the re-pulled rows are identical apart from
+> their metadata columns, so nothing dedupes. Measured on `exchange_rates` 2026-08-14:
+> `backfill_runs: 1` → parity PASS; `backfill_runs: 8` → **10.57× duplication**. Either use
+> `MergeStrategy.Version` (idempotent on the key — what `amazon_sellercentral` and most of
+> `amazon_ads` use) or guarantee partitions never overlap. Switching strategy **changes write
+> semantics**, so it needs its own evidence, not a swap-and-hope.
+>
+> ⚠ **`MergeStrategy.Version` is not a safe escape from `Insert` — it triple-inserts** (measured
+> 2026-08-14, [[prefect-connectors]] `docs/KNOWN_ISSUES.md` #22). `connector/lib/warehouse/lib.py`
+> issues three **byte-identical** INSERT statements (`:927-939`, `:942-954`, `:957-969` — proven by
+> programmatic diff). Each is an anti-join that must exclude the *current* `SESSION_ID`, but the rows
+> it inserts carry that same session id (`lib.py:115`), so statements 2 and 3 cannot see statement
+> 1's rows and re-insert them. **Every staged row lands 3×**, and the `CURRENT_` view
+> (`lib.py:606-616`) does not hide it — its `RANK()` ties all three copies at rank 1. `Version` is
+> **21 of 25** deployment uses. Until this is fixed, *neither* strategy is duplication-free.
+>
+> ⚠ **Declared column types must fold Snowflake's alias table before comparison**, or every partition
+> forks a new versioned table. `_get_column_list` emits `int -> "bigint"` and
+> `datetime -> "datetime"`; Snowflake reports `NUMBER` and `TIMESTAMP_NTZ`. Any connector with a
+> `DATE` column forks unconditionally. See **[[schema-dialect-drift]]** — including the only test
+> that settles it (virgin-schema fragment count: 48 = broken, 1 = fixed).
+
+### Two more write-path traps in `BaseConnector` (2026-08-14)
+
+Both are **code-established** against `development` @ `62556f1`. Neither is fixed.
+
+**`partition_key` never reaches `_upload_data`.** The `FIXME` sits at
+`connector/base_connector.py:829-830` and all three call sites (`:738`, `:752`, `:776`) omit the
+argument — so `partition_hash` is `md5("")` for **every date**. Under `MergeStrategy.Insert` the
+tombstone filter then selects the whole table's history instead of the single partition being
+rewritten. ⚠ *Not yet measured against the warehouse* — treat the real-world firing as unconfirmed.
+
+**`self.responses` accumulates across partitions.** It is never cleared (`base_connector.py:309-311`,
+`:422`) while `run_workflow` re-calls `run()` once per partition (`:745-756`) and connectors
+`return self.responses`. **Verified in-process:** three successive calls returned lengths **1, 2, 3**.
+
+⭐ **These compound.** With three independent duplication sources live at once, an observed
+duplication factor is a **product**, not a diagnosis — the measured 10.57× on `exchange_rates` never
+traced to any single mechanism, and fixing one of them will not take it to 1. Establish the
+counting basis before quoting a factor; see [[vacuous-verification]] for the sibling failure of
+trusting a verdict that never compared anything.
 
 ## Prefect Deployment Structure
 
@@ -129,3 +172,7 @@ Operational token refresh runbook: [[connector-token-refresh]].
 - [[trade-desk]] — Trade Desk My Reports connector spec
 - [[google-oauth-python]] — shared Google OAuth pattern (`google-auth-oauthlib`)
 - [[connector-token-refresh]] — operational token refresh runbook
+- [[schema-dialect-drift]] — declared vs stored type spellings; why a `DATE` column forks a new table every partition
+- [[orchestrator]] — the parity harness that grades a migrated connector, and how to read its PASS
+- [[vacuous-verification]] — a verdict is a claim about work; only its content is evidence of work
+- [[prefect-connectors]] — the repo these standards apply to
