@@ -603,3 +603,13 @@ coverage check as parity rule 5, the `auto_advance` snapshot caveat, stage-count
 currently duplication-free; the two `BaseConnector` write-path traps), [[github-actions]] (the
 skipped publish job as one instance of the wider vacuous-verdict shape), [[Azure]] (the MSYS
 path-conversion pitfall). Both `index.md` and `log.md` touched.
+
+## 2026-08-17 — GP-318 sweep re-verification (ingest)
+
+Re-verified WF-A1 and L3-F1 on `66151728`; both CONFIRMED. Extended the method to all four
+`__* Answerable` guards: **70 confirmed holes, not 7**. Read-only Snowflake answered the entity-scoping
+census (24 source objects: 3 UNSCOPED-FOREIGN live, 2 SCOPED-AT-MODEL only, 1 MIS-TAGGED, 16
+NOT-VISIBLE). Four published claims corrected — **B3 refuted** (Lectric already out of `Order Line`,
+$32.50 residual), **B19 re-diagnosed** (mis-tagging at source, its proposed entity filter would have
+changed nothing), B20 "2 of 37" -> 3, and WF-A1's reason (propagation not adjacency). Two fixes
+rehearsed green (20/20, 21/21), neither applied. Pages: [[GP-318]], [[answerability-guard]].
