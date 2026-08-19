@@ -1,9 +1,9 @@
 ---
 tags: [concept, architecture, azure, environments, infrastructure]
 aliases: [Azure environments, Azure subscription model, ALDC environments]
-sources: [daily/2026-04-17.md]
+sources: [daily/2026-04-17.md, session 2026-08-13 (Azure CLI inventory)]
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-08-13
 ---
 
 # Azure Environments
@@ -57,21 +57,39 @@ In **Production 2**, browse resources and identify services by domain name:
 
 ## What lives where (QA / test / dev)
 
-**QA subscription** — Prefect sandbox + Quality 1 content mixed in. Core resources:
+**Quality 1** — subscription ID `efe036d8-0ca0-4b41-b794-f90543a11061`. Core resources:
 
-- Function app: `aldcqafnapcore1c01`
+- Web apps: `aldcqawbapportal1c01` (portal) / `aldcqanode1c01` (node) — **no custom domains**
+- Function apps: `aldcqafnapcore1c01`, `aldcqafnapdispatch1c01`, `aldcqafnaptaskdaemon`,
+  `aldcqafnapf921c01` (Fusion92)
 - Storage: `aldcqastaccore1c01` (core) / `aldcqastacqueue1c01` (queue)
 - CosmosDB: `aldcqacsdb1c01`
-- Resource group: `aldcqarsgp1c`
-- Subscription ID: `efe036d8-0ca0-4b41-b794-f90543a11061`
+- Resource group: `aldcqarsgp1c` (+ `rg-aldc-launchpad`, `aldcqarsgpswsp1c01`)
+
+> **Contradiction (flagged 2026-08-13, unresolved):** the table above lists "Quality 1" and "QA"
+> as two separate subscriptions, but the subscription ID previously documented under
+> "QA subscription" (`efe036d8-…`) **is Quality 1**. Only four subscriptions are visible to Paul
+> in the tenant: Production 2, Test 1, Quality 1, Development 2. Either "QA" is an alias for
+> Quality 1, or it is a subscription Paul cannot see. Needs confirming with Vlad or Brayden.
 
 **TEST 1 / test values** — shared-with-clients staging. Core resources:
 
+- Web apps: `aldctestwbapportal1c01` → **`eclipse-test.aldc.io`** (Python 3.11) /
+  `aldctestnode1c01` → **`eclipse2-test.aldc.io`** (Node 20 LTS)
+- Function apps: `aldctestfnapcore1c01` + `aldctestfnapcore1c03` (core_api `v1`),
+  `aldctestfnaptrigger1c01` (`task_daemon`), `aldctestfnapqueuetrigger1c01` +
+  `aldctestfnapqueuetrigger1e01` (`dispatcher`), `aldctestfnapf921c01` (Fusion92)
 - Storage: `aldcteststaccore1c01` / `aldcteststacqueue1c01`
 - CosmosDB: `aldctestcsdb1c01`
-- Resource group: `aldctestrsgp1c`
+- Postgres: `aldctestpgdbportal1c01` (holds the eclipse-test `app_user` login store)
+- Key Vault: `aldc-vault-test` — **lives in `rg-aldc-launchpad`, NOT `aldctestrsgp1c`**
+- Resource group: `aldctestrsgp1c` (+ `rg-aldc-launchpad`, `aldctestrsgp1e`)
 - Subscription ID: `6969113c-ad7c-47da-8684-4795c635c959`
-- Test function app name still needs to be confirmed
+
+> **Not purely a test environment:** `aldctestfnapf921c01` runs **live Fusion92 client
+> integrations** — NetSuite PO sync, publishers feed, notifications, and a Microsoft Ads token
+> refresh on a daily 07:00 timer (verified firing 30/30 days). Disabling this subscription would
+> break production client plumbing, not just testing. See [[azure-nonprod-cost-reduction]].
 
 **Dev** — legacy function app `aldcdevfnap02core` (older core version)
 
@@ -90,15 +108,39 @@ aldc <env> <type> <role> <instance>
 
 Typical type codes: `fnap` = function app, `staccore` = storage account (core), `stacqueue` = storage account (queue), `csdb` = Cosmos DB, `rsgp` = resource group, `fnapf92` = function app (fusion92-specific).
 
-## Access (Paul, as of 2026-04-17)
+## Access (Paul, as of 2026-08-13)
 
 | Access | Status |
 |--------|--------|
 | Eclipse production | ✅ Granted 2026-04-17 |
 | Production 2 read/dev | ✅ (implied by Eclipse prod access) |
-| Azure owner permissions | ❌ Pending — Brayden to reach out to Sean |
+| Azure owner permissions | ✅ **Owner on all four subscriptions** (verified 2026-08-13) |
 | Local connection env file | ❌ Pending — Brayden to provide |
 | [[Cloudflare]] | ✅ Granted 2026-04-17 by Brayden |
+
+### Who can grant subscription access (verified 2026-08-13)
+
+Owner / User Access Administrator at subscription scope:
+
+| Principal | Test 1 | Quality 1 | Production 2 | Development 2 |
+|---|---|---|---|---|
+| Vlad Ryzhkov | Owner | Owner | Owner | Owner |
+| Paul Russell | Owner | Owner | Owner | Owner |
+| Brayden Marshall (`@prod.aldc.io`) | Owner | — | Owner | — |
+| **Sean O'Grady** | Owner | Owner | Owner | Owner |
+
+> **⚠ Sean O'Grady has left the company.** His account is **disabled**
+> (`accountEnabled: false`) but retains **Owner on all four subscriptions** and
+> **Global Administrator** in Entra. Stale standing privilege — see
+> [[azure-nonprod-cost-reduction]] open items. Lori Beck and Mike Stuart hold **no**
+> subscription roles.
+
+**Billing is a separate plane.** Subscription Owner does not grant billing access. Entra
+directory roles as of 2026-08-13 — *Global Administrator*: Sean (disabled), John Moran, Brayden,
+Lori Beck, Mike Stuart; *Billing Administrator*: John Moran, Lori Beck. Entra Billing Admin
+covers M365 billing, **not** Pay-As-You-Go Azure billing (tied to a separate Account
+Administrator identity). A Global Admin can self-elevate to root-scope Azure access via
+Entra ID → Properties → *Access management for Azure resources* → Yes.
 
 ## On-prem counterparts
 
@@ -110,6 +152,7 @@ Not everything is on Azure. Relevant on-prem servers referenced from the same me
 ## See Also
 
 - [[Azure]] — tool page with resource-level detail
+- [[azure-nonprod-cost-reduction]] — 2026-08 cost pass on Test 1 + Quality 1; gotchas, open items
 - [[eclipse-azure-deployment]] — how code flows from GitHub → staging slot → prod
 - [[CosmosDB]] — environment-scoped instances live in these subscriptions
 - [[Prefect]] — QA subscription is its current home
