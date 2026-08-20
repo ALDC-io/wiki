@@ -634,3 +634,39 @@ in-flight month presented as complete.
 overwriting it but set the *description* unconditionally, destroying 693 chars of GP-317 guidance —
 found by an agent 25 minutes later, not by review. **Guarding one field and not the other is guarding
 nothing.** Pages: [[GP-318]], [[feedback_assert_before_overwrite]].
+
+---
+
+## 2026-08-20 — three connectors unblocked by one fix, and a QA gate that can only see one connector
+
+**windsorai landed its first row ever.** Ten prior attempts, zero completions. The chain resolved in
+one session: its 2026-08-15 blocker (merge arity, `0ae8cf0`) had already been fixed but never
+re-run, so triggering it produced a **different** error — which is the finding. `MergeUpdate` was
+emitting `STAGE.<col>` for seven metadata columns the staging table was never created with, because
+`match_or_create_schema` appends them to `session.fields` *after* `load_staging_data` has already
+built the staging table from that same list. An ordering fault, not a typo.
+
+⭐ **Blast radius predicted the evidence, and that is what confirms a diagnosis.** Only two of seven
+merge branches call `MergeUpdate` — exactly the three deployments that had never completed, while six
+SellerCloud flows on other branches completed normally over the same window. Fix: PR #50, `4db9556`.
+Verified at the **consumer layer** — 20 rows under one session id, not merely a COMPLETED run state.
+
+⭐ **`verify-qa-success` can validate exactly one connector in the estate.** Ran `connector-promotion`
+against `amazon_ads` and `amazon_sellercentral`; both stopped at stage 2 with
+`Deployment 'smoke-test-<connector>' not found`. **37 deployments exist; one is a `smoke-test-*`.**
+The connectors are deployed and fine — the *verification convention* was only ever implemented once.
+The correct verdict is `UNMEASURED`, and the stage reports it as `failed`, collapsing "broken" into
+"could not check". A ticket can therefore sit in a Jira QA column for ~11 weeks while the check that
+would move it is structurally incapable of running.
+
+**Four premises measured and overturned this session**, all of them documented claims adopted without
+checking: PROD was the *resumed* environment not the suspended one; `conductor` is a personal repo,
+not ALDC; `aldc-launchpad`'s CLAUDE.md charter describes a platform the repo is not; and a documented
+data publish time was wrong by ~10 hours, with a loader schedule chosen from it.
+
+**Also:** an agent that ran 81 days logging 234 escalations and **0 fixes** is being deleted rather
+than repaired — its 8-pattern substring classifier matched none of the five live failure classes. The
+returned agent-team research report reaches the same verdict independently and adds the external
+evidence: single-agent beat multi-agent across all 12 repositories in one program-repair study.
+
+Pages: [[prefect-connectors]], [[orchestrator]], [[schema-dialect-drift]], [[vacuous-verification]].

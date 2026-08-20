@@ -3,7 +3,7 @@ tags: [entity, repo, prefect-connectors, aldc, prefect, data-plane]
 aliases: [prefect-connectors, prefect connectors repo]
 sources: [GP-247 session 2026-05-01, GP-218 work pool setup 2026-05-02, entities/repos/connector.md, entities/tools/prefect.md, prefect-connectors docs/KNOWN_ISSUES.md issues 22-26 (branch development @ 62556f1, 2026-08-14), prefect-connectors docs/MIGRATION_HANDBOOK.md]
 created: 2026-05-01
-updated: 2026-08-14
+updated: 2026-08-20
 ---
 
 # prefect-connectors
@@ -78,6 +78,42 @@ The legacy [[connector]] repo continues running on-prem Docker agents for all un
 | CI + Docker publish | `.github/workflows/ci.yml` | Calls quality gate, then builds+pushes to GHCR on merge (GP-217) |
 
 ## Known issues / gotchas
+
+### `MergeUpdate` read seven columns the staging table never had (FIXED — 2026-08-20)
+Three deployments had **never completed a single run**: `windsorai`, `SellerCloud Vendor`,
+`SellerCloud Warehouse`. Live error:
+
+```
+000904 (42000): invalid identifier 'STAGE.___ALDC___GLOBAL_SESSION_ID___'
+```
+
+**An ordering fault, not a typo.** `load_staging_data` creates `STAGE.STG_<session>` from
+`session.fields` holding data columns only. `merge_staging_table` then calls
+`match_or_create_schema`, whose loop appends the seven metadata columns to that *same list* — that
+append is the fix for the 48-fragment defect (see [[schema-dialect-drift]]) and is correct.
+`build_column_list(..., MergeUpdate)` then renders over the now-longer list and emits `STAGE.<col>`
+for columns the staging table was never created with.
+
+`MergeSelect` already solved this: it takes `insert_values` and renders a metadata column as its
+literal. `MergeUpdate` accepted no such parameter, so it had no way to. Fixed by giving it one.
+
+⭐ **Blast radius predicted the evidence, which is the confirmation.** Only two of seven merge
+branches call `MergeUpdate` — `Add and merge_history == False`, `Full and merge_history == False`.
+That is exactly the failure set: windsorai on `Add`, SellerCloud Vendor and Warehouse on `Full`,
+while SellerCloud Companies, Customer, Manufacturer, Product, Purchase Orders and RMA — on other
+branches — completed normally over the same window.
+
+**Assign the literal, do not drop the column.** Dropping it also compiles, and silently leaves
+updated rows carrying the session id and history flags of whichever run last *inserted* them.
+
+Fix: PR #50, merged `4db9556`. Test asserts the invariant (no STAGE reference to an unstaged column)
+rather than pinning the rendered SQL; RED before (2 failed), GREEN after (4 passed), full suite 721.
+Verified at the consumer layer: windsorai landed **20 rows under one session id**, its first ever.
+
+**Sequencing that matters:** windsorai's *previous* blocker was the merge-arity defect fixed in
+`0ae8cf0` (2026-08-15). It was never re-run after that fix, so the error had silently *advanced*
+from arity to this one. **A changed error signature between two runs is evidence a fix landed** —
+diff the failure signature before assuming nothing happened.
 
 ### Windows entrypoint path (FIXED — 2026-05-01)
 `account.py:build_deployments()` derived entrypoint paths from local file paths. On Windows this generated backslashes (`connector\accounts\...`) that Linux ACI containers couldn't resolve. Fixed: `build_deployments()` normalizes `\\` → `/` after `ato_deployment()`.

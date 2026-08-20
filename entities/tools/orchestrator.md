@@ -3,7 +3,7 @@ tags: [tool, platform, aldc-launchpad, prefect-connectors, automation, orchestra
 aliases: [Session Orchestrator, Claude Code Orchestrator, Pipeline Executor, parity harness]
 sources: [prefect-connectors/orchestrator/stage_scripts/snowflake_ops.py, prefect-connectors/orchestrator/server.py, prefect-connectors/orchestrator/pipelines.py, prefect-connectors/orchestrator/static/index.html, prefect-connectors docs/KNOWN_ISSUES.md issues 23+25 (branch development @ 62556f1)]
 created: 2026-05-15
-updated: 2026-08-14
+updated: 2026-08-20
 ---
 
 # Session Orchestrator
@@ -295,6 +295,39 @@ gates** — `uat-parity`, `prod-robustness`, `canary-monitor`, `enable-schedule`
 (`orchestrator/pipelines.py:1288`). A pipeline created before the fix keeps the **old** value, and an
 orchestrator **restart does not retrofit it** — the usual "restart picks up orchestrator-side fixes"
 rule does **not** apply to this field. Recreate the pipeline.
+
+## ⭐ `verify-qa-success` can validate exactly one connector (2026-08-20)
+
+**The QA gate in `connector-promotion` requires a `smoke-test-<connector>` deployment. One exists in
+the entire estate.**
+
+Measured by running the pipeline against two connectors and enumerating every Prefect deployment:
+
+```
+amazon_ads            → stage 2 FAILED: Deployment 'smoke-test-amazon_ads' not found
+amazon_sellercentral  → stage 2 FAILED: Deployment 'smoke-test-amazon_sellercentral' not found
+```
+
+**37 deployments exist. Exactly one is a `smoke-test-*`: `smoke-test-exchange-rates`** (and it is
+`PAUSED`). So `verify-qa-success` can pass for `exchange-rates` and for no other connector. The
+connectors themselves are deployed and fine — `amazon_ads - GEP` exists — it is the *verification
+convention* that was only ever implemented once.
+
+**The verdict is `UNMEASURED`, not `FAILED`, and the stage collapses the two.** "This connector is
+broken" and "I could not check this connector" are different facts; reporting both as `failed` is the
+same defect class as [[vacuous-verification]]. Anything reading a red `verify-qa-success` as evidence
+about the connector is reading an instrument failure.
+
+**Consequence for tickets.** A ticket can sit in a Jira `QA` column indefinitely while the check that
+would move it out is structurally incapable of running. Column position is an activity signal;
+nothing measured whether QA had ever happened. (Observed on the `amazon_ads` lane, ~11 weeks.)
+
+**Fix shape:** check the connector's *actual* deployment for a completed run **plus rows landed under
+that run's session id**, rather than requiring a parallel `smoke-test-*` deployment. That works for
+all 37 and is what the GreenContract spec defines as `A6`/`A7`/`A8`.
+
+**What did work:** `continue_on_failure: false` held. The pipeline stopped at stage 2 rather than
+promoting an unvalidated connector to UAT. The gate behaved correctly; only its instrument was blind.
 
 ## Gotchas
 
