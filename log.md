@@ -613,3 +613,24 @@ NOT-VISIBLE). Four published claims corrected — **B3 refuted** (Lectric alread
 $32.50 residual), **B19 re-diagnosed** (mis-tagging at source, its proposed entity filter would have
 changed nothing), B20 "2 of 37" -> 3, and WF-A1's reason (propagation not adjacency). Two fixes
 rehearsed green (20/20, 21/21), neither applied. Pages: [[GP-318]], [[answerability-guard]].
+
+## 2026-08-20 — GP-318: first applies to the client's live surface (ingest)
+
+Three fixes APPLIED to dataset `66151728` (TEST; PROD untouched), each with verbatim rollback captured
+first: **B21 guards** closing all 70 holes (12/12 green), **B26/B27** ending 17 months of a literal
+`$0.00`, **L3-F1** blanking a -$673,820.96 organic figure on the cross-channel pool. Warehouse view
+`MARKETING_EFFICIENCY_GOOGLE_PRODUCT_DAILY` deployed at delta 0.00 and deliberately bound to nothing.
+
+⛔ **Not signed off** — query-layer only; both render routes are closed (`ExportTo` needs Premium
+capacity this workspace lacks) and 38 of the 70 guarded measures have no bound visual at all.
+
+Five register entries corrected — **B32 was 5,046 rows/~$225,781, not 48 cosmetic ones, with the cause
+wrong for 99%, so the filed remedy would have fixed 1% and read as a fix**; B24 ROAS 5.30x not 18.79x;
+B2 live not closed; B10 closed not open; B25 one definition not two. Three new defects: a **fourth
+frozen feed** (Sponsored Display, 75 days), a 0% margin percentage against real negative margins, an
+in-flight month presented as complete.
+
+⭐ **And a tenth self-inflicted defect:** the B26 apply asserted the live *expression* before
+overwriting it but set the *description* unconditionally, destroying 693 chars of GP-317 guidance —
+found by an agent 25 minutes later, not by review. **Guarding one field and not the other is guarding
+nothing.** Pages: [[GP-318]], [[feedback_assert_before_overwrite]].
