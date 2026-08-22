@@ -16,6 +16,12 @@ named five places it expected to be wrong; this one carries the attack and the v
 See [[agent-factory]] for the running project log and [[orchestrator]] for what the gates found in
 the build plane. **Every claim here is tiered** — `MEASURED` · `DOCUMENTED` · `REPORTED` ·
 `REASONED` · `BET` — and an untiered sentence in this document is a defect.
+
+**Contents** — §1 purpose · §2 invariants · §3 the four planes · §4 object model · §5 the isolation
+ladder · §6 capability and credentials · §7 certification and the AgentSpec · §8 the control plane ·
+§9 the contract · §10 the corpus · §11 session orchestration · §12 the readout · §13 teams ·
+§14 build order · §15 deliberately not built · §16 where this is most likely wrong · §17 open
+research · §18 what the deep-research pass settled · §19 operational gotchas
 ---
 
 ## 1. What this is for
@@ -207,6 +213,81 @@ Most findings are **corrections**: read it, fix it, spent. A **design consequenc
 until it is built or deliberately refused. The ledger could not tell those apart, so design
 findings were filed, admired and never acted on. `CHANGES` is now mandatory when the kind is a
 design one, and `design_debt()` is the list that must shrink. `MEASURED`
+---
+
+## 5. The isolation ladder — tier by what the task touches, not by what the agent is
+
+**The load-bearing idea in this spec**, and the one most likely to be wrong (§16).
+
+> An agent's isolation tier is chosen by **what its task touches**, declared up front in the
+> AgentSpec, and **enforced by the DECIDE plane** — not chosen by what kind of agent it is.
+
+| Tier | Environment | May touch | Use for |
+|---|---|---|---|
+| **T0** | git worktree, operator machine *(built)* | repo files only. **No network egress, no DB verbs** | code edits, docs, specs, tests |
+| **T1** | container, egress allowlist, **read-only** warehouse role | repo + `SELECT` on real data | analysis, reconciliation, *"is this number right"* |
+| **T2** | container + **ephemeral clone schema**, dropped on exit | repo + full DDL/DML **inside the clone only** | building views, migrations, backfills |
+
+Three consequences, and they are the argument:
+
+1. **T2 removes the file-conflict cap for data work.** Two agents in two clone schemas conflict on
+   nothing, so the 3-lane ceiling (§11.5) applies to T0 code lanes and does not generalise.
+   `DERIVED` — and see §5.4, where this is attacked.
+2. **The dangerous verb is contained by construction, not by prompt.** *"Do not touch prod"* in a
+   prompt is a **request**; a role with no grant on prod is a **control**. This is the thing generic
+   agent frameworks miss: isolating a filesystem does nothing when the risk is DDL on a shared
+   warehouse. `REASONED`
+3. **Promotion out of a clone is an APPROVE-plane act.** The estate's evidence-gated rule already
+   says: prove the target, validate at the consumer's layer, prove no regression, capture a
+   rollback. Against a clone that becomes a **clone→real diff, mechanically producible from a T2
+   run** rather than assembled by hand. `REASONED`
+
+### 5.1 The tier is enforced, and a refusal is an audit event
+
+An agent that asks for a verb its tier does not carry is **refused**, and the refusal is recorded
+where the operator can reach it (§11.4). That is not only safety — it is the only way gate
+`refuses` ever gets something real to record, and **0 of 22 gate events have ever been a refusal**.
+`MEASURED`
+
+Enforcement lives in the launcher: the sandbox is **constructed from the spec**, so a tier is not a
+field an agent can talk its way past. A tier declared in a spec that nothing reads is the `--model`
+defect again (§11.2) — so **the ladder needs a test per tier asserting the constraint reaches the
+process**, not a test asserting the field is set.
+
+### 5.2 What is actually built today
+
+**Nothing.** `MEASURED` — agents run as the operator, on the operator's Windows machine, with the
+operator's credentials, and there is no dry-run gate, no row-count diff and no rollback capture.
+T0's isolation is a git worktree, which isolates *files* and nothing else: a T0 agent today can
+reach the network and hold every credential the operator holds. **T0 as specified above does not
+exist either.**
+---
+
+## 6. Capability and credentials — the plane the generic sandbox literature does not address
+
+**Credentials are the whole job.** A data agent needs warehouse, API and vault access by
+definition, so every sandbox story that assumes *"no network, no secrets"* answers a different
+question than this one. The tier ladder in §5 is only a control if the credential attached to each
+tier is a *different principal with different grants* — otherwise T1 and T2 are the same tier
+wearing different labels.
+
+### 6.1 The three rules
+
+1. **The operator's credential is never the agent's credential.** Today it is. `MEASURED`
+2. **Per-secret grant stays human** (I6). No tier self-serves a credential; a tier *requests*, a
+   human *grants*, and both the grant and the refusal are recorded.
+3. **A grant is scoped and expires.** A credential that outlives the run it was issued for is a
+   standing grant with extra steps.
+
+### 6.2 What this buys that a prompt cannot
+
+The estate's blast-radius problem is not the filesystem. `git revert` does not undo a `CREATE OR
+REPLACE` that stripped ownership and a share grant, and it does not un-invoice a client against a
+number that silently changed. A role with no grant on production is the only version of *"do not
+touch prod"* that is a control rather than a request.
+
+**And it is measurable in a way a prompt is not:** a refused verb produces an audit event; a prompt
+that worked and a prompt that was ignored look identical.
 ---
 
 ## 7. Certification — the grader is a separate principal, and the agent is a versioned artefact
@@ -891,3 +972,139 @@ one is a design.
 disagreed on how agnostic and how soon, and the resolution is that they were answering different
 questions — *interface shape* is cheap now and expensive to retrofit; *running a search* is not yet
 safe. Adopt both positions. `REPORTED`
+---
+
+## 16. Where this is most likely wrong — attack these first
+
+A design document that does not say where it expects to be wrong is a document nobody can check.
+Ordered by *how much of the spec collapses if it is wrong*.
+
+| # | The claim at risk | If it is wrong |
+|---:|---|---|
+| **1** | **T2 is cheap.** A clone is metadata; *validating* against one is compute, and a clone of a share may not behave like the real thing | §5.1 collapses, the ceiling stays at 3, and data work gets no more parallelism than code work |
+| **2** | **"Data work does not conflict."** Asserted, not measured. Two agents building two views can conflict on a shared dimension, a naming convention, or the same `REPORT_COMMON` object | the conflict graph needs *different edges*, not fewer — and §11.5's ceiling generalises after all |
+| **3** | **Four planes may be three.** PROVE and APPROVE do not separate cleanly when the evidence a human needs is produced by the thing being judged | §3.1's defence is the argument; if it fails, APPROVE is a rubber stamp with extra ceremony |
+| **4** | **The blueprint is written by the graded party.** A target floor and an artefact hash narrow it; only an evaluator-pinned per-connector target closes it, and nobody has written one | §7 is a boundary against an *accidental* softening, not a determined one |
+| **5** | **The lane model may be the wrong abstraction entirely** — worktree-on-one-machine as a dead end rather than a stepping stone | most of §5 survives (the ladder is about *what is touched*), most of §3's deployment story does not |
+| **6** | **T1/T2 assume containers on Windows via WSL2**, unmeasured here, with start-up cost a guess | Phase 3 slips, and the ladder needs a different substrate |
+| **7** | **The 15-dimension version hash may be unachievable.** Hashing something unstable makes every run a new version and the registry useless | certification becomes per-run rather than per-agent, which is a weaker but still honest claim |
+| **8** | **Three attempts** is a policy default recorded as `ASSUMED`, and *"same failure"* for an LLM agent has no mature standard definition | the cap still bounds cost; it just may not bound the *right* thing |
+
+### 16.1 Two risks that are not on that list because they are certainties
+
+- **The published artifact will go stale again.** It is a separate surface that only changes when
+  someone republishes it. The guard exists (`--check`, plus a test); the failure mode is nobody
+  running it, which is why it is in the suite rather than in a runbook.
+- **A gate will ship a false PASS.** One already did — the evaluator-isolation probe grepped
+  `factory/*.py` for `EVALUATOR_URL` and matched **its own source**, because those strings were in
+  the regex doing the searching. A self-matching probe producing a false green is the exact defect
+  the programme exists to stop, reproduced inside the instrument. The mitigation is not vigilance;
+  it is I3 and I9 — **every probe must have been watched refusing something.**
+---
+
+## 17. Open research — what is still unanswered, and why each matters
+
+Nine research prompts exist. **Six have answers** (R1 eval harness, R2 topology, R3 control plane,
+R4 agnostic optimiser ×2, R5 build velocity, R6 automation and alerting). **Three are written and
+not dispatched.**
+
+| # | Question | Blocks |
+|---|---|---|
+| **R7** | A session manager for agent teams: what to adopt, what to build | §11 — whether the accidental orchestrator should be replaced |
+| **R8** | An agent factory for *data engineering*, not software engineering | §5, §9.4 — the isolation ladder and the downstream oracle |
+| **R9** | Does a game-styled supervision UI make an operator more accurate, or slower and more confident? | §12.3 — whether GTA mode ships at all |
+
+⚠ **R7, R8 and R9 answers do not exist anywhere on disk**, and for a while that was
+indistinguishable from a broken upload path (§11.4). The path works; nothing was ever uploaded.
+
+### 17.1 Three follow-ups, cheaper than re-running
+
+None needs a new prompt — each carries its own thread's context.
+
+1. **R3 thread** — the false-`succeeded` correction: our verdict is computed from a last-write-wins
+   status field in a bespoke engine, **not Prefect**. What is the correct design for a terminal
+   verdict computed from append-only history, and what negative control proves a false `succeeded`
+   is impossible?
+2. **R2 thread** — our build plane is not Prefect, so your prescription's retry limits, concurrency
+   reservation and zombie handling are not available primitives. What must we build, what does it
+   cost, and **does it change your recommendation — including whether to move the build plane onto
+   Prefect rather than reimplement its primitives?** *(Gate `r2-followup`: the highest-value
+   unasked question on the board.)*
+3. **R1 thread** — one-liner: the `COMPLETED`-over-failures defect is not Prefect but a
+   last-write-wins status field. Does anything else in your answer depend on that misattribution?
+
+### 17.2 ⛔ A constraint asserted in a research prompt is a hypothesis like any other
+
+`R6-automation-and-alerting.md` asserted, as a constraint, *"there is currently no runner budget or
+appetite for one."* **That is false.** The same GitHub org runs three Actions workflows in
+[[prefect-connectors]] (`ci.yml`, `quality-gate.yml`, `branch-sync.yml`); `agent-factory` merely has
+no `.github/workflows` directory — **an absence, not a constraint.**
+
+R6 explicitly deferred *"a full CI on every push"* on the strength of that sentence and ranked a
+nightly scheduled gate-diff first instead. **So R6's ordering optimises against a world that was
+described to it, not the one that exists**, and CI-on-push is very likely the correct first move.
+Filed as finding **F7**, and it is the F1 pattern — an unverified premise carried into research —
+committed by the author of a prompt whose own Method note warns against it. `MEASURED`
+
+### 17.3 What the answered passes could not settle
+
+Declared gaps are worth more than confident answers, so they are kept:
+
+| Question | Gap |
+|---|---|
+| When to freeze a measurement-derived backlog | no studies found; inferred from agile theory |
+| Drift across multiple generated surfaces | no direct analogue in the literature |
+| Handoffs between agent sessions | little published; analogy to human handoffs |
+| Alert thresholds for agent work | no AI-specific guidance on where to set them |
+| **Multi-agent repo standards** | **no widely adopted standard exists** — blog posts and academic prototypes only |
+| Recovering from a failed pre-close check | tooling is just emerging |
+
+> The fifth row is the one to remember. **There is no consensus practice for what this programme is
+> about to do**, so its own measurements are the best evidence available and should be recorded as
+> they accumulate — which is what `docs/findings.d/` and the readiness gates are for.
+
+### 17.4 Filenames are claims
+
+Two research answers arrived with their contents swapped. `scripts/file_answers.py` classifies by
+**content** and refuses when uncertain; it has twice been caught by its own dry run, once about to
+overwrite a second run of a prompt. `MEASURED`
+---
+
+## 19. Operational gotchas — every one of these cost a session
+
+Not trivia. Each is an instance of the same failure family: **a step that succeeded at doing
+something other than what was asked, with nothing to say so.** They belong in the spec because the
+spec's own controls are built out of these primitives. `MEASURED`, all of them.
+
+| Gotcha | Why it is the same defect |
+|---|---|
+| **`pytest` addopts is already `-q`.** Passing `-q` again makes `-qq`, which suppresses the summary line | a probe parsing that line was blinded by a config it had not read |
+| **`setx VAR "value"` from bash stores the quote characters too** | it broke `$AGENT_FACTORY_EVALUATOR` while the gate still read PASS, because the gate only checks the variable is non-empty. Use `[Environment]::SetEnvironmentVariable(…,'User')` and **read the value back** — *"SUCCESS: Specified value was saved"* is not evidence of **what** was saved |
+| **`git checkout <path>` is a silent no-op on an untracked file** | back up before mutating a new file, or the revert does nothing and the mutant ships |
+| **A long-running Python server holds the modules it imported** | `local_tracker.py --serve` re-measured faithfully against a 23-gate list for hours. `importlib.reload` alone is not enough either — `from x import y` binds by value, so the reload must **rebind** the names |
+| **A restarted server serves the code it started with** | the tracker was launched 12 seconds *before* the transcript fix was committed. Restart after any change; confirm exactly one listener |
+| **`getBoundingClientRect()` on a WRAPPED inline element returns the union of its line boxes** | it overlaps whatever precedes it on the first line. Compare `getClientRects()` per line box |
+| **`claude -p` cannot test transcript suppression** | print mode never suppresses, so the obvious test is non-discriminating. The gate is `CLAUDE_CODE_FORCE_SESSION_PERSISTENCE` in the shipped binary |
+| **`~/.claude/skills/` is not worktree-isolated** | an edit there is live for every session immediately and will not roll back with the branch |
+| **`impeccable`'s detector silently degrades to 1 finding instead of 313** without four npm packages | now pinned, and recorded with the other machine-local state |
+| **A closed lane holds its claim for 4 hours with nothing to reap it** | which is the `reaper` gate the same lane is building |
+| **The board reads 9 from the main checkout and 10 from a lane worktree at the same commit** | `CONNECTORS` resolves relative to the checkout. Neither is wrong. **State the cwd with any before/after claim** |
+
+### 19.1 Rendering the readout — six refusals, then a different route
+
+`claude-in-chrome` refused for the sixth session running, so the published figure had shipped five
+defects with a human finding every one. Every inspectable link is healthy — extension installed and
+enabled, service worker alive, account matches, native messaging host registered with the right
+extension id and spawnable, no enterprise policy — and `list_connected_browsers` still returns
+`[]`. The failure sits in the extension's own service-worker pairing state, the one place not
+inspectable from outside.
+
+**The fix was to stop waiting.** `scripts/render_pass.py` drives the *installed* Chrome through
+Playwright — no extension, no account, no pairing. First run found four real defects, including the
+figure that declared a category it never drew (§12), a page that scrolled sideways at 700px because
+a `max-width` override dropped `minmax(0,1fr)` to a bare `1fr` (which is `minmax(auto,1fr)`), two
+`<text>` elements clipped by their viewBox under `overflow:hidden` — one by 373px — and a subtitle
+reading *"Thirteen gates"* while the generator emitted 30.
+
+> **A static check proves the file parses, not that a visual painted.** That is gate `rendered`,
+> and it is the same rule as §9.4's *a query-layer check is not a render check*, one layer up.

@@ -297,6 +297,15 @@ edit there is live for every session immediately and will not roll back with the
 packages — now pinned, and recorded with the other machine-local state in
 `docs/evidence/machine-local-state-2026-08-22.md`.
 
+## The spec
+
+The buildable specification now lives at [[agent-factory-spec|Agent Factory — Design Spec v1]]:
+the four planes, the isolation ladder (tier by what a task touches, not by what the agent is), the
+AgentSpec, the certification boundary, the five build phases with the readiness gates as their exit
+criteria, and — the point of the exercise — where the design is most likely wrong. It supersedes
+`docs/specs/architecture-v0.md`, which called itself a strawman and named five places it expected
+to be attacked.
+
 ## See Also
 
-[[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]
+[[agent-factory-spec]] · [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]
