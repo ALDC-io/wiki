@@ -724,3 +724,65 @@ Updated [[agent-factory]] (first real three-lane run; three launcher defects tha
 success; ledger moved to `docs/findings.d/` with a KIND/CHANGES/STATUS taxonomy; two gates that
 cannot pass; board number depends on cwd) and [[vacuous-verification]] (four new members plus the
 inverse — a gate that cannot PASS).
+
+## 2026-08-22 — agent-factory: the design spec, and five deep-research passes that moved it
+
+Wrote the buildable spec for `ALDC-io/agent-factory`, superseding its own `docs/specs/architecture-v0.md`
+— which called itself *"a strawman to be attacked"* and named five places it expected to be wrong.
+Three pages, section-numbered continuously: [[agent-factory-spec]] (the spine),
+[[agent-factory-isolation-ladder]] (§5–§6) and [[agent-factory-certification]] (§7, §9–§10).
+
+Five research passes ran against the repo at `feat/readiness-generator`. **Five of the strawman's
+eight open risks are now settled — two of them against the design — and four new ones arrived.**
+
+What changed the design rather than the wording:
+
+- ⭐ **"Clone schema" must be "clone database".** ALDC's warehouse DDL is schema-qualified and
+  database-*un*qualified, so a schema clone leaves the hard-coded `WAREHOUSE.` prefix pointing at the
+  real schema — **a sandbox that is a no-op and reads as isolation.**
+- ⛔ **"Data work does not conflict" loses — seven edges**, and the ceiling that replaces the file cap
+  is a *compute* cap: `min(file-conflict independent set, warehouse concurrency budget)` ≈ 2–3.
+  **T2 may not raise 3 at all** without buying compute. The cheap design (one shared warehouse, because
+  the bill is the 60-second resume minimum) and the parallel design are in direct tension.
+- ⛔ **The GreenContract's "independent" instruments are not independent.** A9's requested scope,
+  A10's per-key counts and A12's tenant list are all restatements of the landing in the positive
+  calibration case, and `Probes.source()` is a stub — so **A10, the only claimed independent oracle,
+  will report UNMEASURABLE on the first live run.** The check ran against its own reflection.
+- ⛔ **Two gates can be satisfied without measuring anything.** `refuses` counts any all-time event
+  containing "reject", so boot-time drills would let it **certify itself**; `version` is grep-on-source,
+  so a comment naming the dimensions turns it green. Both are the self-matching-probe defect already
+  caught once — reproduced in the two gates beside the fixed one. (`version` also covers **6 of 15**,
+  not 0.)
+- ✅ **Containers on Windows are not required** — a kernel-level egress fence keyed on a separate
+  account SID, no WSL2, no container. An open risk struck; replaced by *"the runtime is alpha and
+  unproven on this machine — one afternoon settles it"*.
+- ⭐ **The agent should hold no credential at all.** A broker outside the sandbox holds it and injects
+  it on egress — three products converged on that shape, and it is configuration before it is code.
+  Its refusal log is where gate `refuses` finally gets an *organic* refusal, against the standing 0 of 22.
+- ✅ **The lane model is a stepping stone whose successor is already shipped** — six of nine `factory/`
+  modules re-implement harness features, and all three launcher defects are artefacts of generating
+  PowerShell instead of using the supported surface. **The fix is not three fixes; it is deleting the
+  launcher.**
+- ⭐ **`verdict(history)` is the highest-value single item on the board** — a pure function over the
+  append-only log with five negative controls, including replaying the run that reads `succeeded`
+  over 115 failures. No new dependency, and it produces the first genuine refusal.
+- **Certification must expire by time, not hash** (models have no dated snapshot id — the alias *is*
+  the id), report `pass^k` not `pass@1`, and gain `policy: {uri, digest}` — SLSA's Verification
+  Summary Attestation names the exact field the design is missing, because the blueprint is
+  simultaneously subject and policy.
+- ⭐ **MR8 is a better argument for T2 than parallelism ever was**: the tenancy filter has never been
+  proved to *do* anything, and only an unfiltered pull inside a clone can prove it.
+
+> **Contradiction flagged:** three docstrings and the spec cite **41.7%** as the conflict rate
+> justifying worktree isolation. That is the *cross-agent* rate, and cross-agent pairs were 0.5% of
+> the study's co-active pairs. The estate's case is **intra-agent: 19.8%**. Recorded rather than
+> silently corrected — the paper should be read before the number is changed anywhere.
+
+⚠ **Honest limit on the whole pass, recorded in §18.2 rather than buried:** all five passes ran behind
+a domain-allowlisting egress proxy that blocked most vendor documentation, so roughly a third of the
+vendor claims are tiered `DOCUMENTED*` — reached through a search index and **never read in context**
+— and one pair came back self-contradictory. §18.3 is the re-verification list. The failure mode was
+a *silent research gap, not an error*, which is exactly what the spec warns will happen to a T1 agent.
+
+Pages: [[agent-factory-spec]] (new), [[agent-factory-isolation-ladder]] (new),
+[[agent-factory-certification]] (new), [[agent-factory]], [[index]].

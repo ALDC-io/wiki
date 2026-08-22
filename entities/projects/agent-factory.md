@@ -297,15 +297,45 @@ edit there is live for every session immediately and will not roll back with the
 packages — now pinned, and recorded with the other machine-local state in
 `docs/evidence/machine-local-state-2026-08-22.md`.
 
-## The spec
+## The spec (2026-08-22)
 
-The buildable specification now lives at [[agent-factory-spec|Agent Factory — Design Spec v1]]:
-the four planes, the isolation ladder (tier by what a task touches, not by what the agent is), the
-AgentSpec, the certification boundary, the five build phases with the readiness gates as their exit
-criteria, and — the point of the exercise — where the design is most likely wrong. It supersedes
-`docs/specs/architecture-v0.md`, which called itself a strawman and named five places it expected
-to be attacked.
+The buildable specification now lives across three pages, section-numbered continuously:
+**[[agent-factory-spec|Agent Factory — Design Spec v1]]** (the spine — four planes, ten invariants,
+the object model, the control plane, session orchestration, the readout, the team catalogue, five
+build phases whose exit criteria are the readiness gates, and where the design is most likely
+wrong), **[[agent-factory-isolation-ladder]]** (§5–§6) and **[[agent-factory-certification]]**
+(§7, §9–§10). It supersedes `docs/specs/architecture-v0.md`, which called itself a strawman and
+named five places it expected to be attacked.
+
+**Five deep-research passes settled five of those and found four more.** The ones that changed the
+design, not the wording:
+
+- ⭐ **"Clone schema" must be "clone database".** ALDC's warehouse DDL is schema-qualified and
+  database-*un*qualified, so a schema clone leaves the hard-coded `WAREHOUSE.` prefix pointing at
+  the real schema — **a sandbox that is a no-op and reads as isolation.**
+- ⛔ **T2 does not raise the 3-lane ceiling.** Seven conflict edges survive a clone; the replacement
+  is a *compute* cap. And the cheap design — one shared warehouse, because the bill is the
+  60-second resume minimum, not storage — is in direct tension with the parallel one.
+- ⛔ **The contract's "independent" instruments are not independent.** A9/A10/A12's external inputs
+  are restatements of the landing, and `Probes.source()` is a stub — **A10 will report
+  `UNMEASURABLE` on the first live run.** The check ran against its own reflection.
+- ⛔ **`refuses` and `version` can both be satisfied without measuring anything** — one by a
+  deliberate drill, one by a comment. The self-matching-probe defect, reproduced in the two gates
+  beside the fixed one. (`version` covers **6 of 15**, not 0.)
+- ⭐ **The agent should hold no credential at all** — a broker outside the sandbox injects it on
+  egress. Configuration before code, and its refusal log is where `refuses` gets its first *organic*
+  refusal.
+- ✅ **Containers on Windows are not required**, and **the lane model's successor is already
+  shipped** — six of nine `factory/` modules re-implement harness features, and the three launcher
+  defects are artefacts of generating PowerShell instead of using the supported surface.
+- ⭐ **`verdict(history)` with five negative controls is the highest-value item on the board.**
+
+> **Contradiction:** the **41.7%** conflict rate cited in three docstrings is the *cross-agent* rate;
+> the estate's case is **intra-agent, 19.8%**. Read the paper before changing the number anywhere.
+
+⚠ The research ran behind an egress proxy that blocked most vendor documentation — roughly a third
+of its vendor claims were never read in context. The re-verification list is §18.3.
 
 ## See Also
 
-[[agent-factory-spec]] · [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]
+[[agent-factory-spec]] · [[agent-factory-isolation-ladder]] · [[agent-factory-certification]] · [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]
