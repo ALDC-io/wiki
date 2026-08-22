@@ -670,3 +670,28 @@ returned agent-team research report reaches the same verdict independently and a
 evidence: single-agent beat multi-agent across all 12 repositories in one program-repair study.
 
 Pages: [[prefect-connectors]], [[orchestrator]], [[schema-dialect-drift]], [[vacuous-verification]].
+
+
+## 2026-08-21 — agent-factory: readiness measured, research synthesised, the verdict mechanism found
+
+Created [[agent-factory]] and added the false-`succeeded` mechanism to [[orchestrator]].
+
+The build plane reports `succeeded` over 115 stage failures because the terminal verdict reads
+`pipeline["stages"][i]["status"]`, which is last-attempt-wins — `trigger-run` failed 100 times,
+succeeded on the last, and contributed nothing to `any_failed`. Not Prefect: `pipelines.py` does not
+import it. An external research pass diagnosed it as Prefect's final-state rules and I carried that
+into a later prompt without walking the route; Paul's clarification that Prefect is the *data*
+scheduler is what surfaced it. Verifying took one grep.
+
+The retry cap has the same shape — `MAX_RECOVERIES_PER_STAGE = 2` is defined and enforced in
+`pipeline_agent.py`, on a path that logged none of the 1,004 restarts.
+
+Four research passes converged without being asked: fix the control plane before optimising
+anything, and build **one** worker agent rather than the three-agent team. Six of seven contract
+design decisions graded SOUND; calibrating on a single run graded FOLKLORE.
+
+23 readiness gates, 3 passing, all generated from repo state — including one that shipped a false
+PASS by matching its own source code, which is the defect the programme exists to stop reproduced
+inside the instrument.
+
+Pages: [[agent-factory]], [[orchestrator]], [[prefect-connectors]].

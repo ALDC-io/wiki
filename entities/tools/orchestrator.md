@@ -3,7 +3,7 @@ tags: [tool, platform, aldc-launchpad, prefect-connectors, automation, orchestra
 aliases: [Session Orchestrator, Claude Code Orchestrator, Pipeline Executor, parity harness]
 sources: [prefect-connectors/orchestrator/stage_scripts/snowflake_ops.py, prefect-connectors/orchestrator/server.py, prefect-connectors/orchestrator/pipelines.py, prefect-connectors/orchestrator/static/index.html, prefect-connectors docs/KNOWN_ISSUES.md issues 23+25 (branch development @ 62556f1)]
 created: 2026-05-15
-updated: 2026-08-20
+updated: 2026-08-21
 ---
 
 # Session Orchestrator
@@ -328,6 +328,60 @@ all 37 and is what the GreenContract spec defines as `A6`/`A7`/`A8`.
 
 **What did work:** `continue_on_failure: false` held. The pipeline stopped at stage 2 rather than
 promoting an unvalidated connector to UAT. The gate behaved correctly; only its instrument was blind.
+
+## ⭐ The false `succeeded` is a last-write-wins status field (2026-08-21)
+
+**A run can report `succeeded` over 115 recorded stage failures, and the verdict is not lying — it
+is answering a different question than the one everyone reads it as.**
+
+`orchestrator/pipelines.py:1669-1678`, and again at `:1771-1777`:
+
+```python
+all_done   = all(s["status"] in ("completed","failed","skipped") for s in pipeline["stages"])
+any_failed = any(s["status"] == "failed" and not s.get("continue_on_failure")
+                 for s in pipeline["stages"])
+final_status = "failed" if any_failed else "succeeded"
+```
+
+`pipeline["stages"][i]["status"]` is **last-attempt-wins**. In `pipe_4ba17e16`, `trigger-run`
+recorded 115 starts, 100 failures and 10 completions — and its last event was a completion, so its
+stored status reads `completed`, contributes nothing to `any_failed`, and the run closed
+`succeeded`. The 100 failures live only in the append-only audit log, which this computation never
+consults.
+
+⛔ **Do not attribute this to Prefect.** An external research pass diagnosed it as Prefect's
+final-state rules (failures captured as returned state rather than propagated). It is not:
+`orchestrator/pipelines.py` **does not import Prefect at all**. Prefect 3 is the *run* plane and
+moves data; the orchestrator is the *build* plane and runs the migration pipeline on its own
+engine. The two conflate easily and the wrong attribution changes the fix — a Prefect idiom
+(`return_state`, `raise_on_failure`) repairs nothing here.
+
+**The fix that follows:** a terminal verdict must be computed from the append-only history, not from
+current state. Distinguish `EXECUTION_TERMINATED` (the orchestrator stopped) from `CONTRACT_PASS`
+(the work is correct); `completed` may legitimately mean the former and must never be evidence of
+the latter.
+
+**Same file, line 1766** — a restart resets `failed` → `running` before re-dispatching, so a restart
+that never terminates leaves the record at `running` over a log ending in `stage_failed`. That is
+`pipe_29b8edf6`.
+
+⚠ **An unresolved residual, recorded rather than smoothed.** In the same run, `deploy-prefect`'s
+last recorded event is `stage_failed` and it carries no `continue_on_failure`, yet the run still
+closed `succeeded`. Its stored stage statuses are no longer in `pipelines.json`, so **the audit log
+cannot explain its own verdict.** That is itself an argument for computing verdicts from history.
+
+**The retry cap exists — on the path that did not run.** `MAX_RECOVERIES_PER_STAGE = 2` is defined
+*and enforced* at `engine/pipeline_agent.py:422`. `restart_from_stage` and `retry_stage` in
+`pipelines.py` — the path that logged all 1,004 restarts across 14 runs, worst case 352 in one run —
+compare no count to any ceiling, and `server.py:1741` pops `_retry_count` entirely.
+
+Measured across all 14 recorded runs: **1,001 `stage_failed` against 165 `stage_completed`**, 3 runs
+reaching a terminal event, 4 sitting at `stage_started` forever, **22 gate approvals and zero
+refusals**, 5 of 7 gates with `gate_check=None`, and cost recorded only on `stage_completed` so
+failures contribute $0.00 and true spend is unrecoverable.
+
+See [[agent-factory]] for the readiness gates that measure all of this, and
+`agent-factory/docs/evidence/false-succeeded-mechanism.md` for the full writeup.
 
 ## Gotchas
 
