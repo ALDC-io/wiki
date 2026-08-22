@@ -3,7 +3,7 @@ tags: [pattern, verification, evidence, agents, review, quality, claude-code]
 aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
 sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md]
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-22
 ---
 
 # Vacuous Verification
@@ -90,6 +90,34 @@ success forever. That is a vacuous verification with no agent involved at all.
   the check may be structurally incapable of producing one.
 - **Ask whether the instrument was live in the window measured.** A zero from an instrument you have
   not proved can see is not a measurement — the analysis-side statement of the same rule.
+
+## 2026-08-22 — four more, and the inverse (agent-factory lane run)
+
+All four returned success, or a number, while doing nothing or the wrong thing. See
+[[agent-factory]].
+
+- **A flag built into a dead variable.** Every lane launcher printed the model it intended
+  (`Bound the loop · opus`) and ran a bare `claude`: the `--model` string was assigned to a
+  variable nothing read. Nothing failed — the work happened, just not on the model requested, and
+  the *cheap* lane was the expensive one. Advertised ≠ wired.
+- **A detector that degrades instead of failing.** `impeccable`'s 59-rule engine falls back to
+  regex-only without four npm packages and reports **1 finding where the real engine reports
+  313**. A fresh run concludes the page is clean. The instrument was never proved able to see.
+- **A Win32 call that succeeds on the wrong handle.** `GetConsoleWindow()` under Windows Terminal
+  returns a hidden pseudo-console; `FlashWindowEx` on it is a no-op **that returns success**.
+- **A non-discriminating test.** `claude -p` was used to verify a transcript fix; it passed — and
+  so did the control with the fix removed, because print mode never suppresses transcripts. A test
+  both arms pass is not evidence. The result was discarded rather than reported.
+
+⭐ **The inverse also exists: a gate that cannot PASS.** `finishes` requires every recorded run to
+be terminal, and four are stuck forever; `succeeds` is an all-time ratio needing 837 net
+successes and permanently carries one capped incident. Neither can go green however good the agent
+gets, so the board reports failure at work already done. A gate that cannot refuse is decoration;
+a gate that cannot pass is a wall. Both have stopped measuring.
+
+And a measurement with no stated basis: the same readiness board reads **9 from the main checkout
+and 10 from a lane worktree at the same commit**, because paths resolve relative to cwd. Neither
+is wrong — the number simply does not mean anything until you say where it was taken.
 
 ## See Also
 

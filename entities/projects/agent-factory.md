@@ -226,8 +226,76 @@ an ETA divided by a moving denominator flatters. It will project once the total 
 
 `factory/lanes.py` groups gates into five parallel lanes **by file locality, not the dependency
 graph**: 16 gates are startable, and two sessions editing `orchestrator/pipelines.py` simply
-conflict. `docs/findings.md` is the ledger between lanes — corrected premises only, four mandatory
+conflict. `docs/findings.d/` is the ledger between lanes (was `docs/findings.md` until 2026-08-22) — corrected premises only, four mandatory
 fields, and closing a lane with `NOTHING TO REPORT` is itself an entry so silence means checked.
+
+## 2026-08-22 — the first real three-lane run, and three defects in the launcher itself
+
+Three lanes (`control-plane` on opus, `certify`, `artifact`) ran end to end for the first time.
+**The claim → work → finish loop completed for real**, which the pre-flight boot prompt listed as
+unproven. All four branches pushed (`lane/*` in agent-factory, plus `lane/control-plane` in
+[[prefect-connectors]], where the control primitives actually live: cap, bounded, concurrency,
+reaper, from-history, with **39 negative controls and a mutation harness proving each is
+load-bearing**).
+
+⭐ **The launcher was wrong in three ways, and none of them failed.** This is the same family as
+[[vacuous-verification]] — the work happened, it was just not the work anyone asked for:
+
+1. **Every lane ran the wrong model.** `--model` was built into a variable that nothing read
+   (`inner = f"claude --model {lane.model} ..."`, dead since the launch path moved to a `.ps1`).
+   The banner printed the intended model, so `control-plane` announced opus and ran the session
+   default, and `grain` announced haiku and ran something dearer. A label, not a setting.
+2. **Transcript saving was off.** Lanes inherited `CLAUDE_CODE_CHILD_SESSION` from the session
+   that started the tracker, so an hour's work would have been unresumable with no record.
+   ⚠ `claude -p` **cannot test this** — print mode never suppresses, so the obvious test is
+   non-discriminating. The gate is `tor()` in the shipped binary:
+   `CLAUDE_CODE_FORCE_SESSION_PERSISTENCE` short-circuits suppression unconditionally.
+3. **All three lanes had the same name** — they inherit the parent's session name, so a peer
+   listing showed three identical rows and a question from one lane could only be answered by
+   messaging all three and letting two ignore it. Fixed via `CLAUDE_CODE_SESSION_NAME`.
+
+**A restarted server serves the code it started with.** The tracker was launched 12 seconds
+*before* the transcript fix was committed and served pre-fix code for hours. Restart after any
+change; confirm exactly one listener.
+
+### The ledger became a directory
+
+`docs/findings.md` is no longer the write target — **`docs/findings.d/`** is, one file per
+finding. Three lanes appended to the single file from three isolated worktrees, each correctly
+read F10 as the last id, and each took the next number: **three F11s and three F12s**, and a merge
+that would have silently destroyed two of each. Worktree isolation is the feature, so the ledger
+could not be one mutable file. Ids remain (they are how `[[F20]]` resolves) but are now a naming
+convention allocated in per-lane blocks, not a lock on a shared file.
+
+Findings also gained **KIND / CHANGES / STATUS**. Most findings are corrections — read it, fix it,
+spent. A *design consequence* is not spent until it is built or deliberately refused, and the
+ledger could not tell those apart, so they were filed, admired and never acted on. `CHANGES` is
+mandatory when the kind is a design one; `design_debt()` is the list that should shrink.
+
+### ⚠ Two gates cannot pass, and the board's number has no basis without a cwd
+
+- **`finishes`** requires `len(fin) == len(runs)` all-time. Four runs sit at `stage_started`
+  forever and new runs raise both sides, so a perfect agent still reads FAIL. The reaper only
+  helps if it **backfills terminal events for those four**.
+- **`succeeds`** is an all-time ratio needing **837 net successful stages**, permanently carrying
+  the 2026-08-14 incident that has since been capped. It answers "has this ever been reliable"
+  while being read as "is it reliable now".
+- **The board reads 9 from the main checkout and 10 from a lane worktree at the same commit.**
+  `CONNECTORS` is `FACTORY.parent/"prefect-connectors"`, so a worktree sees an unmerged lane
+  branch; the `ticket` gate resolves to a `.worktrees/aldc-launchpad/` that does not exist and
+  goes UNMEASURABLE. Neither run is wrong. **State the cwd with any before/after claim.**
+
+A gate that cannot pass is the mirror of a gate that cannot refuse: it stops measuring and starts
+reporting failure at work already done.
+
+### Also earned
+
+A closed lane leaves its claim held for **4 hours** with nothing to reap it — which is the
+`reaper` gate the same lane is building. `~/.claude/skills/` is **not** worktree-isolated, so an
+edit there is live for every session immediately and will not roll back with the branch. And
+`impeccable`'s detector **silently degrades to 1 finding instead of 313** without four npm
+packages — now pinned, and recorded with the other machine-local state in
+`docs/evidence/machine-local-state-2026-08-22.md`.
 
 ## See Also
 

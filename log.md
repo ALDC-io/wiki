@@ -717,3 +717,10 @@ Also: velocity is now measured from git and **refuses to give an ETA** while sco
 than completion (gates +1.25/h, gate set +2.65/h, remaining 12 → 21).
 
 Pages: [[agent-factory]], [[orchestrator]], [[prefect-connectors]].
+
+## 2026-08-22 — agent-factory: first three-lane run
+
+Updated [[agent-factory]] (first real three-lane run; three launcher defects that all returned
+success; ledger moved to `docs/findings.d/` with a KIND/CHANGES/STATUS taxonomy; two gates that
+cannot pass; board number depends on cwd) and [[vacuous-verification]] (four new members plus the
+inverse — a gate that cannot PASS).
