@@ -347,6 +347,8 @@ intact:
 | the browser probe for the cap | derived the engine's real **message** (because the known lesson was about a message) and **invented the status** — the half the guard actually branched on |
 | `mutate_control_plane.py` | its verdict depended on `-q` inherited from a **different repository two directories up**; pytest walks upward for rootdir config |
 | both mutation harnesses | a mutation anchor is a **copy of production source**, so a refactor disarms it silently — and one harness was still quoting a load-bearing count from a run that predated the change it was meant to certify |
+| a test named for a behaviour | `test_the_skipped_handles_survive_for_the_next_sweep` asserted only that the handles were still on the record — which a record **nothing will ever read again** satisfies identically. No sweep read them. **The promise was in the name, not the body** |
+| an `except`-clause guard | it checked that an `except ControlRefused` clause **exists**, not that it comes first. `ControlRefused` subclasses `ValueError`, so a broad clause first makes it dead code with the clause visibly present — the original defect, reborn, guard green |
 
 The rule that falls out: **if a check would still pass with the function body deleted, it is not
 measuring the function.** Extract a named seam and call it. And **take the whole answer from the

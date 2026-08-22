@@ -749,3 +749,12 @@ count was already quoted in a commit message.
 
 No ticket (NONE-BY-DECISION, re-verified; no Atlassian tool in session). Nothing deployed;
 branches `lane/control-plane` in both repos are **committed but unpushed**.
+
+**Round two of the same session's review** added two more members to that table, and the
+first is the sharpest: a **termination budget that deferred nothing**. Handles the budget
+skipped sat on a `failed` stage that no sweep reads — while the per-handle detail, the
+constant's docstring and a test *named* `..._survive_for_the_next_sweep` all promised a
+retry. The test asserted only that the handles were still stored. ⭐ **The headline error
+string stayed honest ("may STILL BE RUNNING and holding quota"), which makes it worse: a
+promised automatic recovery is the thing that stops someone acting.** Fixed with a real
+retry pass whose seven negative controls assert the *drain*, not the storage.
