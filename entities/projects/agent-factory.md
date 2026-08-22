@@ -3,7 +3,7 @@ tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, re
 aliases: [Agent Factory, GreenContract, Zeus Pantheon Suite, readiness gates]
 sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, prefect-connectors/orchestrator/data/audits]
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 ---
 
 # Agent Factory
@@ -48,12 +48,20 @@ assertion that quietly stopped being made, and that is indistinguishable from a 
 ## Readiness gates — the measurement that replaced a checkbox grid
 
 `python -m factory.readiness` scores one question: *can an agent team run a connector migration
-unattended?* **23 gates, 3 passing** as of 2026-08-21, in four phases — can the loop run, is it
-bounded, can it tell success from failure, can its output be certified.
+unattended?* **30 gates, 9 passing** as of 2026-08-22 (was 23/3 the day before), in four phases —
+can the loop run, is it bounded, can it tell success from failure, can its output be certified.
 
 Every gate is measured from a file at run time and names the path it came from. Three surfaces, one
 measurement: the terminal command, `scripts/local_tracker.py --serve` (re-measures on every browser
-refresh), and section 10 of the published artifact via `scripts/build_tracker.py`.
+refresh, and since 2026-08-22 has a **reload button** that re-imports the probe modules — a running
+server otherwise holds the code it started with and will re-measure faithfully against a stale gate
+list), and section 10 of the published artifact via `scripts/build_tracker.py`.
+
+⚠ **The published artifact is a fourth, separate surface and it goes stale silently.** It read
+`3 of 23` while the repo was at `9 of 30`, because a published artifact only changes when someone
+republishes it. `scripts/build_tracker.py --check` detects the drift and
+`tests/test_tracker_is_current.py` now fails the suite on it — before that, the guard existed and
+nobody ran it, which is the same shape as an eval nobody watches fail.
 
 ⛔ **A gate shipped a false PASS and it is worth remembering how.** The evaluator-isolation probe
 grepped `factory/*.py` for `EVALUATOR_URL` and friends — and **matched its own source**, because
@@ -135,6 +143,91 @@ requested" — that is the A9 hole exactly.
   caught by its own dry run, once about to overwrite a second run of a prompt.
 - **Nothing here has touched the live warehouse.** Every number is replayed from recorded evidence.
   No Snowflake or Prefect credential has been requested or used.
+- **`setx VAR "value"` from bash stores the quote characters too.** It broke `$AGENT_FACTORY_EVALUATOR`
+  while the gate still read PASS, because the gate only checks the variable is non-empty. Use
+  `[Environment]::SetEnvironmentVariable(...,'User')` and always read the value back — *SUCCESS:
+  Specified value was saved* is not evidence of **what** was saved.
+- **`git checkout <path>` is a silent no-op on an untracked file.** Back up before mutating a new
+  file, or the revert does nothing and the mutant ships.
+- **A long-running Python server holds the modules it imported.** `local_tracker.py --serve`
+  re-measured on every refresh against a 23-gate list for hours. `importlib.reload` alone is not
+  enough either — `from x import y` binds by value, so the reload must **rebind** the names or it
+  is a no-op that looks like it worked.
+- **`getBoundingClientRect()` on a WRAPPED inline element returns the union of its line boxes**, so
+  it overlaps whatever precedes it on the first line. Compare `getClientRects()` per line box.
+- **The audit log the loop gates measure stopped on 2026-05-28.** Nothing has run in the
+  orchestrator since, and it is not currently running. "3 of 14 runs finished" is true of a history
+  three months old, and the gates do not say so.
+
+## Evaluator isolation — the grader is a separate principal (2026-08-22)
+
+Gate `isolated` was the only one with a queue behind it (`isolated -> certified -> tenancy`). It
+now passes, and **not by moving `evals/`** — R3 retired that plan in as many words: *"moving only
+the files to another directory changes nothing; moving ownership/credentials out of the agent's
+capability set does."*
+
+The design, in one sentence that is really a statement about `factory/evaluator.py`: **the agent
+supplies `{artifact_uri, artifact_sha256, run_id}` and nothing else.** Not the corpus, not the
+manifest, not the assertion set, not the evaluator. Those are resolved by the service from its own
+configuration on every request, and the client has nowhere to put them — `Submission` has three
+fields and the service refuses a body carrying a fourth.
+
+| | |
+|---|---|
+| `factory/evaluator.py` | `EvaluatorClient` — three verbs, no writer, **no local fallback** |
+| `evaluator_service/` | the separate principal; write-once verdict store outside the repo |
+| `factory/certify.py --remote` | certification routed through the service |
+
+Four refusals were **watched happening** and then mutation-tested: a weakened blueprint, a smuggled
+`corpus_path`, a swapped artefact (sha mismatch), and a replaced verdict. Three mutants introduced,
+three caught.
+
+⛔ **Do not read the green gate as "the agent cannot cheat."** The deployment is loopback under one
+uid — R3's rank 5, *"mostly theatre"*. The *design* is rank 1; the gap is a managed identity the
+agent sandbox does not hold, which is a **deployment change, not a code change**.
+
+⚠ **The real remaining hole:** the contract is parameterised by a blueprint the graded party
+writes. An agent that softens its own blueprint softens its own grading, process boundary or not.
+A four-rule target floor and the artefact hash narrow it; a per-connector target pinned by the
+evaluator would close it, and nobody has written one.
+
+## Rendering the readout — six refusals, then a different route (2026-08-22)
+
+`claude-in-chrome` refused for the sixth session running, so the published figure had shipped five
+defects with a human finding every one. Every inspectable link is healthy — extension installed and
+enabled, service worker alive, account matches, native messaging host registered with the right
+extension id and spawnable, no enterprise policy — and `list_connected_browsers` still returns
+`[]`. The failure sits in the extension's own service-worker pairing state, the one place not
+inspectable from outside.
+
+**The fix was to stop waiting.** `scripts/render_pass.py` drives the *installed* Chrome through
+Playwright — no extension, no claude.ai account, no pairing. First run found four real defects:
+
+1. ⭐ **The figure declared a category it never drew.** Caption said 115 attempts, legend carried an
+   amber *"5 started, no outcome recorded"*, and 110 bars painted — none amber. The dropped
+   category was the **unmeasured** one, in a figure arguing that unmeasured outcomes get dropped.
+   The 5 cannot be interleaved: pairing starts to terminals locates **24** unterminated starts, not
+   5, so their position is unrecoverable and they are drawn past a divider, in no order.
+2. **The page scrolled sideways at 700px.** `.body-grid` uses `minmax(0,1fr)` on desktop; the
+   `max-width:940px` override dropped the guard to a bare `1fr` — which is `minmax(auto,1fr)`.
+3. **Two `<text>` elements clipped** by their viewBox under `overflow:hidden`, one by 373px.
+4. The tracker subtitle read *"Thirteen gates"* while the generator emitted 30.
+
+## Measuring the build itself (2026-08-22)
+
+`factory/schedule.py` reads velocity out of the artifact's own git history — every commit carries a
+generated `n of N gates pass` headline and a date, so progress is already an append-only log.
+
+⭐ **It refuses to give a completion date, and names its criterion.** Over 6.4h gates passed went
+1 → 9 (1.25/h) while the gate *set* went 13 → 30 (2.65/h). **Remaining grew 12 → 21.** More work is
+being discovered than completed — the correct shape while the system is still being measured — but
+an ETA divided by a moving denominator flatters. It will project once the total holds still for
+24h. "Ahead or behind" reports NOT-SET, because no target was ever stated.
+
+`factory/lanes.py` groups gates into five parallel lanes **by file locality, not the dependency
+graph**: 16 gates are startable, and two sessions editing `orchestrator/pipelines.py` simply
+conflict. `docs/findings.md` is the ledger between lanes — corrected premises only, four mandatory
+fields, and closing a lane with `NOTHING TO REPORT` is itself an entry so silence means checked.
 
 ## See Also
 

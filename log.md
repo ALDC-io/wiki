@@ -695,3 +695,25 @@ PASS by matching its own source code, which is the defect the programme exists t
 inside the instrument.
 
 Pages: [[agent-factory]], [[orchestrator]], [[prefect-connectors]].
+
+## 2026-08-22 — agent factory: the evaluator became a principal, and the readout got rendered
+
+Readiness **3 of 30 → 9 of 30**; the board went 7 blocked → 5, and `certified` — the only gate
+queued behind `isolated` — is now startable.
+
+The evaluator runs as its own service: the agent submits `{artifact_uri, artifact_sha256, run_id}`
+and nothing else, and four refusals were watched happening then mutation-tested. The deployment is
+loopback, which R3 ranks 5 and calls "mostly theatre" — the design is rank 1 and the gap is a
+managed identity, not code. Said plainly in the gate evidence so a green cannot be read as "the
+agent cannot cheat".
+
+`claude-in-chrome` refused a sixth time, so the render pass now drives the installed Chrome through
+Playwright instead. It immediately found four defects in the published figure, the worst being a
+legend that declared an amber "5 started, no outcome recorded" against a strip containing no amber
+bars — the figure dropping the unmeasured category, in a figure about dropping the unmeasured
+category.
+
+Also: velocity is now measured from git and **refuses to give an ETA** while scope grows faster
+than completion (gates +1.25/h, gate set +2.65/h, remaining 12 → 21).
+
+Pages: [[agent-factory]], [[orchestrator]], [[prefect-connectors]].
