@@ -1,7 +1,7 @@
 ---
 tags: [architecture, spec, agent-factory, evaluation, greencontract, sandbox, control-plane, research]
 aliases: [Agent Factory Spec, Agent Factory v1, Zeus Pantheon Suite spec, isolation ladder, AgentSpec]
-sources: [github.com/ALDC-io/agent-factory@feat/readiness-generator, agent-factory/docs/specs/architecture-v0.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/BRAIN-DUMP.md, agent-factory/factory/readiness.py, agent-factory/factory/connector_contract.py]
+sources: [github.com/ALDC-io/agent-factory@feat/readiness-generator, agent-factory/docs/specs/architecture-v0.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/BRAIN-DUMP.md, agent-factory/factory/readiness.py, agent-factory/factory/connector_contract.py, sources/agent-factory-design-research-2026-08-22/]
 created: 2026-08-22
 updated: 2026-08-22
 ---
@@ -1157,6 +1157,13 @@ Consequences, and they are the reason this section exists:
 
 > **The estate's own standing rule applies to this entire section: an object named by a handoff is a
 > hypothesis, not a finding.** These passes are handoffs.
+
+### 18.4 The raw reports are kept, because this spec quotes conclusions and not evidence trails
+
+`sources/agent-factory-design-research-2026-08-22/` holds all five reports verbatim plus the shared
+brief they were given. Each carries its source URLs, the tier assigned to every claim, its own
+blocked-host list, and its own account of what it could not settle. **When §18.3 says re-verify,
+that is where the trail starts.**
 ---
 
 ## 19. Operational gotchas — every one of these cost a session

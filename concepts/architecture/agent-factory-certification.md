@@ -1,7 +1,7 @@
 ---
 tags: [architecture, spec, agent-factory, evaluation, greencontract, attestation, slsa, metamorphic-testing, research]
 aliases: [GreenContract v2, AgentSpec, evaluator as principal, metamorphic relations, eval corpus]
-sources: [github.com/ALDC-io/agent-factory@feat/readiness-generator, agent-factory/factory/connector_contract.py, agent-factory/docs/evidence/evaluator-isolation-2026-08-22.md, agent-factory/docs/evidence/phase-a-windsorai.md, slsa.dev]
+sources: [github.com/ALDC-io/agent-factory@feat/readiness-generator, agent-factory/factory/connector_contract.py, agent-factory/docs/evidence/evaluator-isolation-2026-08-22.md, agent-factory/docs/evidence/phase-a-windsorai.md, slsa.dev, sources/agent-factory-design-research-2026-08-22/RC-attestation-and-versioning.md, sources/agent-factory-design-research-2026-08-22/RE-data-oracle.md]
 created: 2026-08-22
 updated: 2026-08-22
 ---

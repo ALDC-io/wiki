@@ -1,7 +1,7 @@
 ---
 tags: [architecture, spec, agent-factory, sandbox, snowflake, credentials, security, research]
 aliases: [isolation ladder, T0 T1 T2, agent sandbox tiers, credential broker, ephemeral clone]
-sources: [github.com/ALDC-io/agent-factory@feat/readiness-generator, agent-factory/docs/specs/architecture-v0.md, code.claude.com/docs/en/sandboxing, github.com/anthropic-experimental/sandbox-runtime, docs.snowflake.com/en/user-guide/object-clone]
+sources: [github.com/ALDC-io/agent-factory@feat/readiness-generator, agent-factory/docs/specs/architecture-v0.md, code.claude.com/docs/en/sandboxing, github.com/anthropic-experimental/sandbox-runtime, docs.snowflake.com/en/user-guide/object-clone, sources/agent-factory-design-research-2026-08-22/RA-data-sandbox.md, sources/agent-factory-design-research-2026-08-22/RB-credential-boundary.md]
 created: 2026-08-22
 updated: 2026-08-22
 ---
