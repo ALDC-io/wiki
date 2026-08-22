@@ -297,6 +297,72 @@ edit there is live for every session immediately and will not roll back with the
 packages — now pinned, and recorded with the other machine-local state in
 `docs/evidence/machine-local-state-2026-08-22.md`.
 
+## 2026-08-22, control-plane lane — the gate count did not move, and that was the finding
+
+All six control-plane gates already read PASS. **Three of them were passing over the defect
+they are named for**, and the session's whole value was making them honest: 15 of 30 before,
+15 of 30 after.
+
+### `reaper` — "either finished or killed" killed only the record
+
+`reap_expired_leases` marked the stage failed, freed the slot and reconciled the run. The
+Prefect flow run and its **ACI container survive the orchestrator**, and the reaped stage's own
+error string handed that half to a person — *"if this stage launches cloud work, check whether
+it is still running."* The record was never the thing holding the shared 10-core quota, which is
+what ten orphaned containers took on 2026-08-13.
+
+Two things had to exist first. **A durable handle**: the flow run id lived in a local variable on
+a thread-pool thread, so in the exact case that produces orphans — the process dies — the only
+handle on a running container died with it. **A terminator that fails closed**: ownership is
+unprovable from a container name (`<flow>-<run-uuid>`, no operator suffix), so unproven ownership
+is NOT_ATTEMPTED, never a delete. A leaked container is recoverable; a colleague's live backfill
+deleted mid-merge is not.
+
+⚠ The verdict vocabulary is the contract's four, and **NOT_RECORDED does not mean "it launched
+nothing"** — it means we cannot tell, and every stage dispatched before this date is in that
+state.
+
+### `cap` — the refusal was invisible at the surface a human watches
+
+The override existed only in `server.py`. Tracing why found worse: `api()` in the dashboard has
+**no `res.ok` check anywhere**, so a 400 arrived as `{error: …}`, the caller read
+`result.dispatched || 0`, and a refused retry rendered as a **green success toast**. The route
+past was Delete Pipeline — the 2026-08-14 workaround that destroyed the evidence along with the
+loop.
+
+⭐ And an independent review found the fix was still not enough: `ControlRefused` subclasses
+`ValueError`, and `_handle_post_pipeline_restart`'s `except ValueError` answers **404**, which
+tells the browser the pipeline does not exist. Now **409** with the control named in the body, so
+no client parses prose.
+
+## ⭐ The lesson worth carrying out of this lane
+
+**A grep is not an instrument, and a probe is only as honest as the half it did not supply
+itself.** Four separate instruments in this repo reported green over systems with the defect
+intact:
+
+| instrument | how it lied |
+|---|---|
+| the `reaper` gate's wiring checks | `"cloud_reaper" in source` was satisfied by a **surviving import** after the registration call was deleted; an ordering guard compared **string positions**; a count of `_report_run(ctx,` counted **call sites** while the callee did nothing |
+| the browser probe for the cap | derived the engine's real **message** (because the known lesson was about a message) and **invented the status** — the half the guard actually branched on |
+| `mutate_control_plane.py` | its verdict depended on `-q` inherited from a **different repository two directories up**; pytest walks upward for rootdir config |
+| both mutation harnesses | a mutation anchor is a **copy of production source**, so a refactor disarms it silently — and one harness was still quoting a load-bearing count from a run that predated the change it was meant to certify |
+
+The rule that falls out: **if a check would still pass with the function body deleted, it is not
+measuring the function.** Extract a named seam and call it. And **take the whole answer from the
+thing that answers** — anything a probe hands itself is a premise.
+
+### What is NOT done
+
+- **Nothing has run.** No control has been watched refusing during a live migration; the
+  orchestrator has not run since 2026-05-28.
+- **No container has ever been deleted by this code.** There is no Azure subscription in the
+  suite, so three `az`/Prefect functions are untested by construction.
+- ⚠ **Cloud termination is ARMED BY DEFAULT against the production resource group**
+  `aldcprodrsgpprefectworkers1c`, with an env-var kill switch as the only brake. The argument for
+  it is written down and sound — a default-off switch is off during the incident — but nobody has
+  made that call out loud.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]

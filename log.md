@@ -724,3 +724,28 @@ Updated [[agent-factory]] (first real three-lane run; three launcher defects tha
 success; ledger moved to `docs/findings.d/` with a KIND/CHANGES/STATUS taxonomy; two gates that
 cannot pass; board number depends on cwd) and [[vacuous-verification]] (four new members plus the
 inverse — a gate that cannot PASS).
+
+## 2026-08-22 (later) — agent-factory control-plane lane, second session
+
+Ingested into [[agent-factory]]: the control-plane lane's second pass, where **the readiness
+count did not move (15 of 30 → 15 of 30) and that was the finding** — three of the six gates
+were passing over the defect they are named for.
+
+- `reaper` ("is dispatched work either finished or killed?") killed only the pipeline **record**;
+  the Prefect flow run and its ACI container survived the orchestrator, and the reaped stage's
+  error string handed that half to a human. Now a durable external handle recorded at every
+  `create_flow_run`, plus a terminator that **fails closed on unprovable ownership**.
+- `cap`'s override was reachable only by curl, and a refused retry rendered as a **green success
+  toast** — the dashboard's `api()` has no `res.ok` check. An independent review then found the
+  route answered **404** for a control refusal, so the fix itself was still unreachable. Now 409
+  with the control named in the body.
+
+⭐ The durable lesson, added to [[vacuous-verification]]'s family: **four separate instruments in
+this repo reported green over systems with the defect intact** — a wiring check satisfied by a
+surviving import, a browser probe that measured the message and invented the status, a mutation
+harness whose verdict depended on `addopts = "-q"` inherited from a different repository two
+directories up, and a mutation anchor left stale by a refactor while its "all N load-bearing"
+count was already quoted in a commit message.
+
+No ticket (NONE-BY-DECISION, re-verified; no Atlassian tool in session). Nothing deployed;
+branches `lane/control-plane` in both repos are **committed but unpushed**.
