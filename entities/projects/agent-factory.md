@@ -3,7 +3,7 @@ tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, re
 aliases: [Agent Factory, GreenContract, Zeus Pantheon Suite, readiness gates]
 sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, prefect-connectors/orchestrator/data/audits]
 created: 2026-08-21
-updated: 2026-08-22
+updated: 2026-08-23
 ---
 
 # Agent Factory
@@ -364,6 +364,87 @@ thing that answers** — anything a probe hands itself is a premise.
   `aldcprodrsgpprefectworkers1c`, with an env-var kill switch as the only brake. The argument for
   it is written down and sound — a default-off switch is off during the incident — but nobody has
   made that call out loud.
+
+## 2026-08-23 — the cost was always measurable, and a test was writing to production
+
+Three lessons, all reusable outside this repo.
+
+### ⭐ A Claude Code session's cost is recoverable from its own transcript, retroactively
+
+`terminal-configuration.md` said *"nothing currently records what a lane spent."* That was true of
+**our code**, not of the substrate. Every assistant message in
+`~/.claude/projects/<slug>/<session>.jsonl` carries a `usage` block, so **input/output/cache tokens,
+the model actually used, and wall-clock are all recoverable — including for work that ran before
+anyone thought to instrument it.** No agent has to be asked to report its own spend, which also
+means it cannot misreport it.
+
+The join is the directory slug, and it is the part that silently breaks: **each of `:` `\` `/` `.`
+in a path becomes one dash.**
+
+```
+C:\Users\p\repos\agent-factory\.worktrees\control-plane
+  -> C--Users-p-repos-agent-factory--worktrees-control-plane
+```
+
+Get it wrong and every lane reports NOT-RECORDED, because the directory is simply never found —
+a measurement gap that reads as a finding about the work. `factory/runs.py::slug` holds the rule.
+
+First measurement (2026-08-23), the first time per-lane cost could be asked at all:
+
+| Lane | Output | Cache read | Wall | Model | Commits |
+|---|---|---|---|---|---|
+| control-plane | 1.23M | 322M | 22.8 h | opus-5 | 25 |
+| artifact | 227k | 55M | 19.4 h | sonnet-5 | 5 |
+| certify | 236k | 55M | 1.7 h | sonnet-5 | 4 |
+
+One opus lane spent ~5x either sonnet lane's output for ~5x the commits. **One observation, not a
+law** — but the model-per-lane table in the terminal spec was reasoning until this existed.
+
+### A completed unit of work must leave a record, and the record cannot live where the work did
+
+`finish()` asserted, pushed, announced and then **deleted the claim** — the entire trace. An hour
+later a lane that ran nineteen hours and a lane that never launched read identically. The obvious
+fallback, the bus, was rooted at `parent.parent/.data`, which inside a git worktree is *that
+worktree's* `.data`: per-lane, invisible to every other lane, one event in the whole estate.
+
+**A ledger with one copy per worker is not a ledger.** It has to resolve to a shared root — here,
+the primary worktree from `git worktree list`. Same failure mode as the findings ledger that had to
+become `findings.d/`.
+
+And the basis vocabulary that came with it, which is the [[vacuous-verification]] discipline applied
+to history: **RECORDED** (written as it happened) / **RECONSTRUCTED** (derived afterwards from git
+and transcripts — can say what something cost, cannot say whether it *finished*) / **NOT-RECORDED**
+(nothing ran, or nothing survived). A lane that never launched reports NOT-RECORDED, never `0`.
+
+### ⚠ Adding a write path turned the existing test suite into a production writer
+
+The sharpest one. `finish()` was wired to append to the new ledger. `tests/test_bus_and_finish.py`
+already called `finish.finish("certify", ...)` against a fixture — so **every suite run began
+appending real rows to the real ledger.** Twelve landed before anyone looked, and the UI duly
+rendered *"certify — FINISHED, 12 recorded runs"* for a lane that had run once, the day before,
+before the ledger existed.
+
+**A fabricated history in the instrument built to stop history being lost is worse than a wrong
+number**, because it is indistinguishable from evidence.
+
+The generalisable rule: **when production code starts writing a record, audit what the existing
+suite already calls before assuming the suite is read-only.** Fixed structurally — an autouse
+`conftest.py` redirect so a test added later cannot forget, with an explicit opt-out fixture for
+the live assertions, because a live check pointed at a tmp directory passes trivially and a check
+that cannot fail is not a check.
+
+### Two smaller ones, both about handoffs
+
+- **An instruction conditional on access the reader does not have is not an instruction.** A
+  research prompt said *"read R2, R3, R5 and R7 first **if you have them**"* — and named the
+  *prompt* files, not the answers. The researcher had neither, answered on the prompt's summary
+  tables, and its own verdict was that the comparison against the real system was not grounded. A
+  whole research pass was spent. The fix is to **ship the sources with the question**, and to state
+  that where the pack and the prompt disagree, the pack wins.
+- **"Not answered yet" hides more than two states.** A prompt written and never sent waits on
+  *you*; one in flight waits on the *researcher*; and one that was sent and came back unusable is a
+  third that most trackers cannot express at all — filing the bad answer reads as ANSWERED, not
+  filing it reads as never-sent, and both are false. Same shape as folding UNMEASURABLE into FAIL.
 
 ## See Also
 

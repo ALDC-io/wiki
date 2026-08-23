@@ -793,3 +793,43 @@ NOT-MEASURED distinction arriving as a test-runner default.
 
 Related: [[agent-factory]], [[prefect-connectors]], [[orchestrator]],
 [[vacuous-verification]].
+
+## 2026-08-23 (later) — agent-factory: the run ledger, and a test writing to production
+
+**⭐ A Claude Code session's cost was always measurable, and nobody had looked.** The terminal
+spec said *"nothing currently records what a lane spent"* — true of our code, not of the
+substrate. Every assistant message in `~/.claude/projects/<slug>/<session>.jsonl` carries a
+`usage` block, so tokens, cache traffic, model and wall-clock are recoverable **retroactively**,
+for work that ran before anyone instrumented anything. No agent is asked to report its own spend,
+so none can misreport it. The join is the slug and it is what silently breaks: each of `:` `\` `/`
+`.` becomes one dash. First measurement — control-plane 1.23M output / 322M cache-read / 22.8h on
+opus for 25 commits, against ~227k / 55M / 19.4h on sonnet for 5. One observation, not a law.
+
+**A finished lane left no trace at all.** `finish()` asserts, pushes, announces, then *deletes the
+claim*. The bus that should have been the fallback roots at `parent.parent/.data` — inside a
+worktree that is *that worktree's* `.data`, so it is per-lane and held one event in the whole
+estate. **A ledger with one copy per worker is not a ledger**; it must resolve to a shared root.
+New `factory/runs.py` + the basis vocabulary RECORDED / RECONSTRUCTED / NOT-RECORDED, so a lane
+that never launched reports NOT-RECORDED rather than `0`.
+
+**⚠ Wiring that ledger into `finish()` turned the existing test suite into a production writer.**
+`tests/test_bus_and_finish.py` already called `finish("certify")` against a fixture, so every
+suite run appended real rows — twelve landed, and the UI rendered *"certify — FINISHED, 12
+recorded runs"* for a lane that ran once, the day before, before the ledger existed. **A
+fabricated history in the instrument built to stop history being lost is worse than a wrong
+number.** Rule: **when production code starts writing a record, audit what the suite already calls
+before assuming the suite is read-only.** Fixed with an autouse `conftest.py` redirect plus an
+explicit opt-out for the live assertions.
+
+**Handoff lessons.** An earlier research pass was spent because its prompt said *"read R2, R3, R5
+and R7 first **if you have them**"* and named the *prompt* files, not the answers — the researcher
+had neither and answered on summary tables. **An instruction conditional on access the reader does
+not have is not an instruction**; ship the sources with the question. And *"not answered yet"*
+hides three states, not two: never sent (waits on you), in flight (waits on the researcher), and
+sent-but-unusable, which most trackers cannot express at all.
+
+R8/R10/R11/R12 dispatched with a generated 500 KB evidence pack. The **GTA / game-styled
+supervision strand (R9) was withdrawn** as not useful — prompt, spec and persona module removed;
+R12 replaces it, asking the session-manager *substrate* question against `doctly/switchboard`.
+
+Related: [[agent-factory]], [[vacuous-verification]], [[prefect-connectors]], [[orchestrator]].
