@@ -758,3 +758,38 @@ retry. The test asserted only that the handles were still stored. ⭐ **The head
 string stayed honest ("may STILL BE RUNNING and holding quota"), which makes it worse: a
 promised automatic recovery is the thing that stops someone acting.** Fixed with a real
 retry pass whose seven negative controls assert the *drain*, not the storage.
+
+## 2026-08-23 — agent-factory control-plane lane, third independent read
+
+Three findings, F32–F34, all reproduced before being believed.
+
+**F32 — a retry loop with no attempt cap, in the lane whose founding control is an attempt
+cap.** The round-two fix for F30 added a retry pass for handles a termination budget had
+skipped. `terminate_prefect_flow_run` sends Prefect **CANCELLING before** the ownership
+check, so every retry of a handle whose ownership cannot be proven is another cancel sent
+to a colleague's flow run. Measured over 24h of sweeps at `REAPER_INTERVAL_SEC=300`:
+CANCELLING sent to a colleague's run **1 → 288**; audit growth for one stuck handle
+**229 KB/day**; deletes attempted 0 throughout. And with no ordering, a stuck handle at the
+head of the store ate the whole budget every sweep — over 20 sweeps the one killable handle
+was attempted **0** times and the stuck one 21. ⭐ **The ownership refusal held the whole
+time; the safety argument protected the CONTAINER and never protected the RUN.** Fixed with
+`MAX_TERMINATION_ATTEMPTS = 4` and least-recently-attempted-first ordering. Rule: **a retry
+is a dispatch, and every dispatch needs a cap** — including one inside the control that
+exists to cap dispatches.
+
+**F33 — structural discovery must be a fixed point.** The AST guard added so a new route
+could not be forgotten matched only functions calling the engine entry point *directly*. A
+handler reaching it through a one-line helper was in neither the guard nor the derived
+parametrisation, and shipped answering **404** for a control refusal with the suite at its
+identical pass count. Made a fixed point over the call graph: 4 failures naming the new
+route. **Taint propagates through callers; a one-hop match is a list with extra steps.**
+
+**F34 — a skip reads as a pass.** `tests/test_mutation_anchors_still_match.py`, itself the
+fix for F29, `pytest.skip`ped when a target file was absent and counted rows *loaded*
+rather than rows *checked*. Pointed at an empty directory: **1 passed, 12 skipped, 0
+failed**, with one whole harness's 18 anchors silently absent from the population. Now 16
+failed. **Where a skip means "I could not look", make it a failure** — the ZERO vs
+NOT-MEASURED distinction arriving as a test-runner default.
+
+Related: [[agent-factory]], [[prefect-connectors]], [[orchestrator]],
+[[vacuous-verification]].
