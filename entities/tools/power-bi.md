@@ -1,9 +1,9 @@
 ---
 tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
-sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21, Navira live-data-model + ME/Agency integration 2026-06-18]
+sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21, Navira live-data-model + ME/Agency integration 2026-06-18, Agentic Power BI docs pointer 2026-08-23 (UNREAD)]
 created: 2026-04-16
-updated: 2026-06-18
+updated: 2026-08-23
 ---
 
 # Power BI
@@ -244,6 +244,31 @@ Company Total (incl Lectric).** Pattern is the warehouse conformed-component wor
 § GP-254). Same incremental-column recipe below was used to populate `Order Line[ENTITY_CODE]`.
 
 **Gotcha — adding a column to an incremental-refresh table:** new column metadata alone won't populate; a `type=calculate` recalc only builds calc/relationship indexes. You must run a **`type=full` enhanced-refresh scoped to that table** (`objects:[{table}]`, `applyRefreshPolicy:false`) to reprocess existing partitions and pull the new column from the source view, *then* `type=calculate`. If the table's refresh-policy `SourceExpression` selects all columns (no explicit column list), no M edit is needed — the new view column flows in automatically on reprocess.
+
+## Agentic Power BI (Microsoft, first-party)
+
+- Source: https://github.com/MicrosoftDocs/powerbi-docs/blob/main/powerbi-docs/developer/agentic/power-bi-agentic-overview.md
+- Raw: https://raw.githubusercontent.com/MicrosoftDocs/powerbi-docs/main/powerbi-docs/developer/agentic/power-bi-agentic-overview.md
+- Captured: 2026-08-23 — flagged as relevant to the **Power BI Data Model Designer** agent team
+  in [[agent-factory]], which is currently blocked on the fact that no contract exists for what
+  its output must satisfy.
+- Status: **UNREAD** — saved as a pointer only. Nobody has read this doc yet, so nothing in it
+  is a design premise. Tier it before citing: Microsoft product docs are `MARKETED` until a
+  capability has been exercised against a real tenant.
+
+**Why it matters:** if Microsoft ships a first-party agentic surface over Power BI models, that is
+either the contract we would otherwise have to author, or the incumbent we would be duplicating.
+Both readings change the Power BI team's design, so this is a build-vs-defer input.
+
+**It sharpens an open question rather than answering one.** The agent-factory boot prompt records the
+Power BI team as blocked on a non-existent contract. If Microsoft's agentic layer *defines* that
+contract, the team's unlock condition changes materially — which is worth a real read rather than a
+skim. `prospect` is the right instrument: it tiers vendor claims and refuses `MARKETED` ones as
+design premises.
+
+⚠ **This repo is Microsoft's documentation, not a library we can depend on.** Its value is
+intelligence about what the platform will do for us, so treat the save as research input, not a
+technical dependency.
 
 ## See Also
 
