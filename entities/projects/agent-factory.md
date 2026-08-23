@@ -533,6 +533,124 @@ no instrument, and a human sorting from memory. The fix is a declared workstream
 real — **exactly one `CURRENT` per workstream**. And do not backfill: the old files report
 `UNCLASSIFIED`, which is a fact about the convention's age, not about the files.
 
+## 2026-08-23, evening — four surfaces that answered a question they had not measured
+
+Four defects found in one session, all the same shape: **a surface reported a verdict it had
+inferred rather than looked at.** Worth carrying because none of them was a bug in the usual
+sense — every one was code doing exactly what it said, over a population or a signal it had
+silently narrowed.
+
+### 1. `claims.py` read liveness off a clock
+
+`STALE` meant "older than `STALE_AFTER` (4h)" and the refusal text read *"release it if that
+session is gone"*. Three lanes claimed 29h earlier were labelled STALE while **all three sessions
+were still running**. Following that advice would have freed the lanes, let a relaunch start a
+second agent in an occupied worktree, and recreated F73 — through the claim store's own advice text.
+
+`finish()` had always consulted `sessions.live()` before releasing. `claims.py` never did, so two
+modules disagreed about one question and **the one that talked to the operator was the one that had
+not looked.** Now `holder()` measures against the process table and returns three verdicts, never
+two: `HELD-LIVE` / `HELD-GONE` / `HELD-UNVERIFIED`.
+
+### 2. ⭐ The blocked-question inbox hid the oldest questions
+
+`blocked()` was `[r for r in inventory() if r["needs"]]`, and `inventory()` iterates the **session
+registry**. A question whose session had exited was filtered out of the surface built to display it.
+
+**Five agents were blocked. The tab showed two.** And the bias has a direction:
+
+```
+hidden   812h, 61h, 61h      <- two of them credential requests
+shown     13h,  2h
+```
+
+The longer a question waits, the more likely its session has exited — so a session-keyed inbox
+**systematically hides the questions that have waited longest**. The oldest had been blocked since
+21 July, 33 days. Fix: read JOBS as the primary source and join back to the registry. A question is
+a fact on disk and outlives the process that wrote it; liveness is metadata about *how to answer*,
+never a filter on *whether to show*. New state `NO-SESSION`, kept distinct from `EXITED-GONE`.
+
+Age is keyed on the agent's own `updatedAt`, not file mtime — mtime is a filesystem property and a
+copy or sync would silently reset the age of the very questions the list ranks *by* age.
+
+### 3. `truthful` passed over a population of one
+
+The gate that catches a record contradicting its own event log reported *"recorded status agrees
+with the event log"* having compared **exactly one pipeline, with 13 event logs unexamined**:
+
+```
+2 pipelines listed · 14 runs with an event log · 1 actually compared
+```
+
+It iterates `pipelines.json`, not the audits, so a run with a log but no entry is invisible to it.
+Meanwhile `from-history` — the FAIL it declares a dependency on — was naming *"3 runs recorded
+succeeded over 115, 21 and 15 failures"*. Those are precisely the records `truthful` exists to
+catch, sitting in the 13 it never looked at.
+
+**No `comparable != 0` check before scoring.** That is the same false-certification shape the
+connector parity gate already closed structurally — *the lesson was learned in one place and not
+carried to the other*. Now raises `Unmeasurable` below a floor of 3. **The board went 10 → 9 of 30**,
+which is the honest number.
+
+### 4. `tenancy` over-claimed in its title, and its edge asked a different question
+
+Gate title read *"Is blast radius certifiable?"*; the probe passes on a non-empty `allowed_tenants`
+list. So PASS announced certifiable blast radius while meaning *"somebody wrote six account ids
+down"* — ids verified 2026-05-29, ~12 weeks before the blueprint that carries them, which itself
+says *"Confirm against a live pull before activation."* Retitled to **"Is a tenant scope DECLARED?
+(declared, not verified)"**, and the `tenancy -> certified` edge removed: reading a list out of a
+blueprint needs no live instrument. The edge was written for *"is the list still correct?"*, which
+no gate asks. **The missing gate is real** — `tenancy-verified` — and adding it changes `len(GATES)`
+and the pinned artifact, so it is its own job.
+
+## `factory/launch.py` — three questions, not one word
+
+The board answers *which gates pass*. An operator wants *may I press start, and what happens if I
+walk away*. Those conflate into "ready" and had **different answers**:
+
+```
+May I RUN it, watching?     SUPERVISED-OK
+May I LEAVE it?             UNATTENDED-BLOCKED   cap · reaper · ceiling · concurrency · bounded
+May I TRUST the output?     OUTPUT-UNCERTIFIED   certified · corpus · version · breadth · isolated
+```
+
+⭐ **The circle this breaks:** `finishes` and `succeeds` are UNMEASURABLE *because no run has
+started since the controls landed*. They cannot go green until something runs; nothing should run
+unattended until they are green. The way out is a **supervised** run — a human is a cap, a reaper
+and a spend ceiling, just an expensive one — and a board rendering a single "9 of 30" cannot say
+so, leaving an operator to read 30% and not start the run that is both safe and the only way to
+measure the loop at all.
+
+`UNGATED` is preserved for a team with no contract: **not 0%**. Same distinction as `NO-SESSION`.
+
+## Two features both called `sessions`
+
+`factory/sessions.py` existed on the integration branch *and* on the control-plane lane, with **zero
+API overlap** — one about OS processes (pids, liveness, transcripts), one about work (waves,
+running order, mutual exclusion, handoff cards). Neither a superset, both wanted.
+
+**git reported it only as an add/add conflict on one filename**, which is the weakest possible
+warning for two features quietly claiming one name; resolving it by hand would have silently
+deleted a feature. The lane side was renamed to `factory/workplan.py` (tab `Plan`) because the
+substrate already owns the word — `~/.claude/sessions/<pid>.json`, `CLAUDE_CODE_SESSION_NAME`,
+`claude agents` are not ours to redefine.
+
+## The findings-id collision, proven rather than inherited
+
+`load()` reads `docs/findings.md` first, then `findings.d/*.md`, keeping the **first** occurrence.
+Materialising the post-merge tree and running `load()` against it:
+
+```
+39 findings after merge
+F20 -> "An instrument that counts its own writes"      <- lane's
+F21 -> "pipelines.py has no in-process lock"           <- lane's
+```
+
+The `findings.d` pair — *gate finishes can never pass* and *gate succeeds is an all-time ratio* —
+**silently vanish from every consumer**, while remaining on disk. `git merge-tree` reports the
+findings CLEAN because they are in different files. A second collision waits: control-plane holds
+F1–F34, certify holds F30–F32.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]

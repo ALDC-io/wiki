@@ -874,3 +874,14 @@ distinct prefixes, 74% undated — against an instruction to "read the newest ma
 workstream". Nothing declares which handoff is current for anything.
 
 Related: [[agent-factory]], [[prefect-connectors]], [[vacuous-verification]].
+
+## 2026-08-23 — agent-factory: four surfaces that inferred instead of measured
+
+Appended to [[agent-factory]]: `claims.py` read liveness off a clock and advised releasing three
+claims whose sessions were live; the blocked-question inbox was session-keyed and so hid the three
+oldest questions (812h/61h/61h, two of them credential requests) while showing the two youngest;
+`truthful` passed over a population of 1 with 13 event logs unexamined and no `comparable != 0`
+check, taking the board honestly from 10 to 9 of 30; `tenancy` over-claimed in its title and its
+edge asked a question the probe never asks. Plus `factory/launch.py` — RUN / LEAVE / TRUST as three
+separately-measured questions, which is what breaks the finishes-succeeds circle — and two features
+both named `sessions`, where git's add/add was the only warning.
