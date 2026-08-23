@@ -769,9 +769,21 @@ skipped. `terminate_prefect_flow_run` sends Prefect **CANCELLING before** the ow
 check, so every retry of a handle whose ownership cannot be proven is another cancel sent
 to a colleague's flow run. Measured over 24h of sweeps at `REAPER_INTERVAL_SEC=300`:
 CANCELLING sent to a colleague's run **1 → 288**; audit growth for one stuck handle
-**229 KB/day**; deletes attempted 0 throughout. And with no ordering, a stuck handle at the
-head of the store ate the whole budget every sweep — over 20 sweeps the one killable handle
-was attempted **0** times and the stuck one 21. ⭐ **The ownership refusal held the whole
+**229 KB/day**; deletes attempted 0 throughout.
+
+⚠ **Basis, corrected by a fourth read after this entry was first written.** `288` is
+**DERIVED** — 24h ÷ `REAPER_INTERVAL_SEC = 300`, driven in a loop, not observed over a real
+day. The audit sizes are **simulation-derived and payload-sensitive**: they move with the
+fields the real terminator returns, and an independent reconstruction measured **179 KB / 5
+KB** — same order, different constant. Do not quote either as a production observation.
+`deletes = 0` reproduces exactly.
+
+And with no ordering, a stuck handle at the head of the store ate the whole budget every
+sweep — over 20 sweeps the one killable handle was attempted **0** times and the stuck one
+21. ⚠ **Conditioned, also by the fourth read:** `0 / 21` holds only with **no cap AND no
+ordering**. With the cap present and only the ordering missing, the killable handle is
+rescued on **sweep 11** — the cap retires the stuck handles into `needs_human`. The clean
+figure is **sweep 2**; the gap is 2→11, not 0→11. ⭐ **The ownership refusal held the whole
 time; the safety argument protected the CONTAINER and never protected the RUN.** Fixed with
 `MAX_TERMINATION_ATTEMPTS = 4` and least-recently-attempted-first ordering. Rule: **a retry
 is a dispatch, and every dispatch needs a cap** — including one inside the control that
