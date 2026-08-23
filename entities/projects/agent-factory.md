@@ -446,6 +446,93 @@ that cannot fail is not a check.
   third that most trackers cannot express at all — filing the bad answer reads as ANSWERED, not
   filing it reads as never-sent, and both are false. Same shape as folding UNMEASURABLE into FAIL.
 
+## 2026-08-23, afternoon — three lessons that generalise past this repo
+
+### ⭐ Parallel speedup floors at the slowest single task, not total ÷ width
+
+A page took 9.4 s because 30 readiness probes ran serially. The obvious fix — "independent,
+I/O-bound, use an 8-wide pool, 9.3/8 ≈ 1.2 s" — is **wrong by about eight times**, and it was
+produced, believed, and propagated into a research prompt, a synthesis section and a boot prompt
+before an outside session measured the distribution:
+
+```
+total 9.39 s across 30 gates
+  suite      9.16 s  = 97.6%   <- shells out to a full `python -m pytest`
+  other 29   0.23 s  =  2.4%
+```
+
+One gate is a single indivisible subprocess. A pool of any width takes this from 9.39 s to 9.16 s.
+
+**The general rule: a figure derived by dividing a total by a width assumes the total is
+divisible.** Before quoting `total ÷ N`, measure the distribution — if one task dominates, the
+floor is that task and concurrency buys nothing.
+
+⚠ And the reason nobody re-derived it: **it agreed with what we wanted.** The page felt slow, 1.2 s
+felt fast, and the arithmetic was plausible. A number that confirms the desired conclusion is the
+one least likely to be checked.
+
+The real fix is architectural, not concurrency: take the expensive thing out of the request path
+and cache it against the git SHA of the code it tests, rendered with its age attached — which the
+no-silent-cache rule permits, because the age travels with the figure.
+
+### "X routes through Y" is a claim to grep, not a premise to inherit
+
+A rebuild was being considered partly to decouple connectors from `core-api`. Two greps settled it:
+
+| field | uses | |
+|---|---|---|
+| `environment_level` | 4 | builds three strings |
+| `environment_deployment_group` | 2 | the same strings |
+| `core_url` | **0** | required, plumbed through container env, defended by tests, **read by nothing** |
+| `core_api_token` | **0** | same |
+
+There was no request path to decouple from — the dependency was four lines of config, half of it
+dead. **A rebuild justified by escaping it would have been escaping something that was not there.**
+
+The failure mode underneath is worth keeping too: `get_global_config()` did
+`try: ... except Exception: return None`, called at **package import**. A missing credential that
+nothing reads silently yields `None`, and every consumer then raises `AttributeError` at runtime
+inside a container. **A bare except at import time converts a config error into a runtime mystery.**
+
+### ⭐ Three research passes failed in one day, and not one failed on model capability
+
+| Pass | How it failed | Cause |
+|---|---|---|
+| R8 run 1 | asserted internal facts it could not check; answer discarded | its prompt said *"read these first **if you have them**"* — conditional on access it did not have, and it named the *prompt* files rather than the answers |
+| R13 run 1 | invented an entire migration section; struck from the record | never read its own **named attachment** |
+| R15 | supported a recommendation with a fabricated user study | *"in our user studies we found…"* — there were none |
+
+**Every one was a competent model, a clear question, and an incomplete brief.** None would have
+been saved by a better model or a different agent; all three would have been stopped by a
+file-existence check on the named attachments.
+
+The repair that worked, three times:
+
+1. **Ship the evidence with the question** — a generated pack containing every source the question
+   depends on, rebuilt before each dispatch because a copy is stale on the next edit.
+2. **State that the pack wins** where it disagrees with the prompt, and that the disagreement is
+   itself a finding.
+3. **Let `NOT-SUPPLIED` beat a plausible assumption.** The last assumption cost a whole section.
+
+⭐ **This generalises from research prompts to agent task briefs — they are the same object:** a
+question plus the evidence it depends on, handed to something that will answer confidently either
+way. It also reorders the roadmap: optimising *agent configuration* tunes the wrong variable if the
+failures come from *requirement quality*, and it will converge, confidently, on a setting that was
+never the problem.
+
+### A filing convention can describe an organisation that does not exist
+
+`boot-prompts/` holds **186 files with 183 distinct name prefixes**, 74% of them undated in the
+filename. The standing instruction is *"read the newest one matching the ticket or workstream"* —
+which cannot work: there is nothing to match against and mostly no date to be newest by. **Nothing
+declares which handoff is CURRENT for anything.**
+
+Same failure class as research prompts before a dispatch instrument existed: state living in prose,
+no instrument, and a human sorting from memory. The fix is a declared workstream key and a state
+(`CURRENT` / `SUPERSEDED` / `SPENT` / `ORPHAN` / `UNCLASSIFIED`), with one assertion that makes it
+real — **exactly one `CURRENT` per workstream**. And do not backfill: the old files report
+`UNCLASSIFIED`, which is a fact about the convention's age, not about the files.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]

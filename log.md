@@ -845,3 +845,32 @@ supervision strand (R9) was withdrawn** as not useful — prompt, spec and perso
 R12 replaces it, asking the session-manager *substrate* question against `doctly/switchboard`.
 
 Related: [[agent-factory]], [[vacuous-verification]], [[prefect-connectors]], [[orchestrator]].
+
+## 2026-08-23 (afternoon) — parallel speedup, a coupling that was not there, and briefs
+
+**⭐ Parallel speedup floors at the slowest single task, not total ÷ width.** A 9.4 s page looked
+like 30 independent I/O-bound probes; an 8-wide pool "should" give 1.2 s. Wrong by ~8x — one gate
+shells out to a full pytest and is **97.6% of the total**, so a pool of any width reaches 9.16 s.
+The wrong figure was produced, believed, and carried into a research prompt, a synthesis section
+and a boot prompt before an outside session measured the distribution. **It went unchecked because
+it agreed with what we wanted.** Rule: before quoting total÷N, measure the distribution.
+
+**"X routes through Y" is a claim to grep.** A rebuild was part-justified by decoupling connectors
+from `core-api`. Of four required config fields read at package import, **two have zero uses** —
+required, plumbed through container env, defended by tests, read by nothing. There was no request
+path to decouple from. Underneath it, a bare `except: return None` at import time turns a missing
+credential nothing reads into an `AttributeError` at runtime inside a container.
+
+**⭐ Three research passes failed in one day and none failed on model capability.** One was told to
+read files "if you have them" and had none; one never read its own named attachment and invented a
+section; one cited a user study that does not exist. Competent model, clear question, incomplete
+brief — every time. The repair that worked three times: ship a generated evidence pack with the
+question, state that the pack wins where it disagrees with the prompt, and let NOT-SUPPLIED beat a
+plausible assumption. **This generalises to agent task briefs, which are the same object**, and it
+reorders any roadmap that puts a config optimiser before requirement quality.
+
+**A filing convention can describe an organisation that does not exist.** 186 boot prompts, 183
+distinct prefixes, 74% undated — against an instruction to "read the newest matching the
+workstream". Nothing declares which handoff is current for anything.
+
+Related: [[agent-factory]], [[prefect-connectors]], [[vacuous-verification]].
