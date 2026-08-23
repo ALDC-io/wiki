@@ -651,6 +651,78 @@ The `findings.d` pair — *gate finishes can never pass* and *gate succeeds is a
 findings CLEAN because they are in different files. A second collision waits: control-plane holds
 F1–F34, certify holds F30–F32.
 
+## 2026-08-23, evening — a fast tracker, and five instances of one bug
+
+### ⭐ Threading a server deleted a correctness property nothing had declared
+
+The tracker took **27.3 s** per page and served one request at a time (`socketserver.TCPServer`), so
+a second viewer sat on a spinner behind the first. Threading it fixed that and **silently broke
+`claims.claim()`**, which is check-then-write: it reads `blockers()`, then writes, with nothing in
+between. That was atomic *only* because the transport was serial — an accident, not a property of
+the code. `/start/<lane>` is a **GET**, so a double-click or a browser prefetch was enough.
+
+Negative control: with the lock removed, **17 of 20 concurrent threads claimed the same lane.** With
+it, 1 of 20. That is F73 — two agents, one worktree, one branch — re-opened at the HTTP layer.
+
+**Carry this:** when you remove a bottleneck, ask what was relying on it. Serialisation is a silent
+mutex, and nothing in the code says so.
+
+### A cache inherits every input its subject reads
+
+Caching the `suite` gate (97.6% of a `measure()`) took the page to **0.84 s** warm. The first
+version shipped three real holes, all found by *attacking* it rather than testing it:
+
+- `scripts/` was not in the fingerprint **and the suite imports it** — so the one file under active
+  edit could not invalidate its own cache
+- the published artifact HTML was not in it, and a test reads it
+- **the environment was not in it**, and `$PREFECT_CONNECTORS` changes the verdict — F72 returning
+  through the cache door
+
+Also: a cached **FAIL** must never be served (an env-only fix changes no bytes, so the board would
+stay red — the F20/F21 shape), and the negative control deserves a TTL rather than being replayed
+from JSON forever.
+
+⚠ Keyed on a **content hash, not a git SHA** — deliberately against the written plan. A commit SHA
+is stable across uncommitted edits, which is exactly when you are iterating and most likely to be
+served a stale green.
+
+### ⭐ `__file__.parent.parent` is right in the primary and wrong in every worktree — five times
+
+Reproduced live in `.worktrees/certify`: `git status` reported the tree dirty while
+`worktrees.is_dirty()` returned **`False`**, because `existing()` filters worktree paths under
+`<root>/.worktrees` and from inside a worktree that root nests one level too deep. `finish.checks()`
+reads that value to warn *"uncommitted work does not survive the worktree being removed"* — so the
+warning stopped existing exactly where work is most likely to be lost.
+
+Five modules had it: `claims`, `worktrees`, `handoff`, `bus`, `operator`. **`runs.py` already had
+the correct resolver and kept it private**, which is precisely what let the other four stay wrong.
+`handoff` was the worst — `BOOT.mkdir(parents=True, exist_ok=True)` *silently created* the wrong
+directory inside `.worktrees/` and wrote the lane's closing note there.
+
+**Fixing instances did not work.** The rule is now enforced by test: anything under `.data/` resolves
+through `factory.repo`. Git-tracked content may legitimately be checkout-relative — that is the real
+distinction, and it is why the guard targets `.data/` rather than banning the expression.
+
+### Check the INDEX, not the working tree
+
+A commit staged a `claims.py` importing `factory.repo` while `repo.py` was still **untracked**, and
+HEAD stopped importing. **Every check anyone could run in the working directory passed** — the file
+was sitting right there on disk. A pre-commit hook now exports `git checkout-index` to a temp dir and
+imports from there, which is the tree a fresh clone would get.
+
+Cause was two sessions in one checkout: one had the file open and unstaged, the other ran `git add`
+across the directory. **Neither acted wrongly.** See [[session-contention-and-artefact-homes]].
+
+### Verify a citation before promoting it to a settled decision
+
+A research pass settled a long-open UNKNOWN by citing a specific commit. The SHA resolved and the
+substance held — but its **line numbers were wrong** (`:88`/`:1158` against an actual `:101`/`:1288`).
+Nobody would have known without re-fetching the raw file. In an estate whose own record contains
+*"one answer invented its evidence"*, a verdict resting on one unchecked citation is that failure
+wearing a better answer.
+
+**Report the outcome honestly** — *substance confirmed, precision off* is a publishable result.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[GEP]]

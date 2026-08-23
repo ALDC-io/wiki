@@ -885,3 +885,36 @@ check, taking the board honestly from 10 to 9 of 30; `tenancy` over-claimed in i
 edge asked a question the probe never asks. Plus `factory/launch.py` — RUN / LEAVE / TRUST as three
 separately-measured questions, which is what breaks the finishes-succeeds circle — and two features
 both named `sessions`, where git's add/add was the only warning.
+
+## 2026-08-23 (evening) — a fast tracker, five instances of one bug, and where files live
+
+Ingested to [[agent-factory]] and a new [[session-contention-and-artefact-homes]].
+
+Tracker 27.3s -> 0.84s (threaded server + suite-gate cache on a CONTENT hash, deliberately not a
+git SHA — a SHA is stable across uncommitted edits, which is exactly when a stale green is served).
+⭐ Threading **deleted a correctness property nothing had declared**: `claims.claim()` was
+check-then-write, atomic only because the transport was serial. Negative control — **17 of 20
+concurrent threads claimed one lane** without a lock, 1 of 20 with it. F73 re-opened at the HTTP
+layer, on a GET, so a double-click was enough.
+
+The cache shipped three holes, all found by attacking rather than testing it: `scripts/` absent
+from the fingerprint *while the suite imports it*, the artifact HTML absent while a test reads it,
+and the **environment** absent while `$PREFECT_CONNECTORS` changes the verdict — F72 through the
+cache door. A cached FAIL must never be served; an env-only fix changes no bytes.
+
+⭐ **`__file__.parent.parent` — right in the primary, wrong in every worktree — five times**
+(claims, worktrees, handoff, bus, operator). Reproduced live: git reported a tree dirty while
+`is_dirty()` returned False, so `finish.checks()` stopped warning about uncommitted work exactly
+where it is most likely to be lost. `runs.py` already had the correct resolver **and kept it
+private**, which is what let the other four stay wrong. Fixing instances did not work; the rule is
+now enforced by test.
+
+Two sessions in one checkout shipped a non-importing HEAD. `collisions()` existed and never named
+the repo involved — it keys on cwd, and all four sessions had a different one. Replaced with
+`contended_repos()`, attribution declared `NOT-MEASURABLE` on every row. Also: **killing a PID does
+not close a background session** — the daemon respawned it with a new PID.
+
+R13 run 2 and R14 answered as local subagents with repo access (less independent, stronger on
+file-and-line — recorded in both run logs). §13.6 settled: R12 right, R15 wrong, and switchboard
+has **no guard at all**. ⚠ Its cited SHA resolved but its line numbers were wrong — verified before
+promoting. New `deep-research` skill distils the method (R10 mechanism E).
