@@ -1,9 +1,9 @@
 ---
 tags: [pattern, power-bi, dax, data-modelling, navira, gep, correctness]
 aliases: [answerability guard, __ME Answerable, inert axis, silent grand total, guard measure]
-sources: [GP-318 T5/T6/T7 2026-08-13, aldc-launchpad docs/evidence/gp318, conversation 2026-08-13]
+sources: [GP-318 T5/T6/T7 2026-08-13, GP-319 2026-08-24, aldc-launchpad docs/evidence/gp318 + gp319, conversation 2026-08-13, conversation 2026-08-24]
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-08-24
 ---
 
 # Answerability guard — making a model refuse questions it cannot answer
@@ -143,6 +143,67 @@ IF ( <the same condition>,
 to 16 and left the diagnostic testing the original nine — so users blanked by the seven new ones were
 told *"OK — figure is valid on this axis."* The explanation contradicted the thing it explains.
 
+## ⛔ A measure-level guard cannot close a column-level hole
+
+**Learned GP-319, 2026-08-24, and it is the limit of this whole pattern.** After guarding all three
+visible measures on `Marketing Efficiency Product` in the Marketing model `2d8587b5` and verifying
+they returned BLANK on `Product[Master SKU]`, the trap was **still live**:
+
+```
+SUM('Marketing Efficiency Product'[Grounded Ad Spend (USD)])  by Product[Master SKU]
+  -> 2,452,729.7999  repeated down every row, unchanged by the guard
+```
+
+The table's raw numeric columns are **visible**, so a PivotTable user drags the column instead of the
+measure, Excel aggregates it implicitly, and the guarded measure is never evaluated. For an Excel
+consumer — where the field list *is* the interface — the column sits directly beneath `ASIN` and
+`Product Name`, which is exactly where someone building a product pivot reaches.
+
+**So a guard is only complete when paired with hiding the raw columns behind it.** Hidden columns
+still resolve for existing workbook references (established GP-318), so hiding is additive for
+consumers who already use them — but it needs a bound-report scan first.
+
+⭐ **Verify at the column, not just the measure.** A verification pass that only probes measures will
+report a clean result on a model that still lies.
+
+## Derive the refuse-list from the relationship graph, never by hand
+
+A hand-written refuse-list is wrong by omission — the standing defect in this idiom. On GP-319 the
+list was generated from the model's own relationships using a rule reverse-engineered from the
+shipped `__ME Answerable`:
+
+> a table with a **direct edge to `Date` or `Agency`** is crossfiltered whenever the user filters by
+> date or entity — both legitimate axes — so it must be tested with **`ISFILTERED`** (direct only).
+> Every other table gets **`ISCROSSFILTERED`** (broader).
+
+⭐ **The rule was asserted to reproduce `__ME Answerable`'s own split exactly before being reused.**
+If a derived rule cannot reproduce the guard you already trust, the rule is wrong and nothing should
+be generated from it. Recipe: `aldc-launchpad/pbi_ops/_gp319_mep_guard_apply.py::build_guard()`,
+survey + assertion in `_gp319_guard_survey.py`.
+
+Measured coverage on `2d8587b5`, 2026-08-24 (`pbi_ops/_gp319_guard_coverage.py`, re-runnable):
+58 of 59 visible `Marketing Efficiency` measures guarded. The one exception is
+`Marketing Efficiency — Why Blank?` — the diagnostic explainer, which **must** stay unguarded
+because its job is to answer when everything else is blank.
+
+## ⚠ Global parameter tables are deliberately NOT in the refuse-list
+
+`Consolidation`, `Periodicity`, `MAP Min ASINs Floor` are what-if / parameter tables, not axes.
+Refusing on them would blank the measure in **any report that merely has that slicer set** — a
+visible regression on a client surface, traded for a trap never measured on them. Record the
+exclusion as a stated decision in the script, or a later pass will "fix" it.
+
+## Two verification checks, not one
+
+A guard that blanks *everything* passes a "does it return BLANK on the bad axis?" check perfectly and
+is a **deletion**, not a fix. Every guard pass therefore needs both:
+
+1. **BLANK on the axis it cannot answer** — the fix
+2. **still VARIES on its own grain and on Date** — proof it is a guard and not a delete
+
+Plus the standard no-regression evidence: totals unchanged to the cent, table/relationship counts
+unchanged, measure count up by exactly the number of guards added.
+
 ## Where this has been applied
 
 | Model | Fact | Guard |
@@ -150,12 +211,14 @@ told *"OK — figure is valid on this axis."* The explanation contradicted the t
 | Navira Daily Sales `66151728` | `Marketing Efficiency` | `__ME Answerable`, 16 tables |
 | Navira Daily Sales `66151728` | `Marketing Efficiency Product` | `__MEP Answerable`, 17 tables |
 | Navira Daily Sales `66151728` | `Order Line` | `__Sales Answerable`, 9 tables, 38 measures |
-| Navira Marketing `2d8587b5` | `Marketing Efficiency` | 20 tables, 58 measures, + 17 hidden columns |
+| Navira Marketing `2d8587b5` | `Marketing Efficiency` | 20 tables, 58 of 59 visible measures, + 17 hidden columns |
+| Navira Marketing `2d8587b5` | `Marketing Efficiency Product` | `__MEP Answerable`, 23 tables, 3 measures — **GP-319, 2026-08-24**. ⚠ raw columns still unhidden |
+| Navira Daily Sales `66151728` | `Google Ad Spend (Product)` | `__GASP Answerable` — ⚠ `Google SKU Resolution %` is visible and unguarded |
 
 Scripts: `aldc-launchpad/pbi_ops/_gp318_t5_*`, `_gp318_t6_*`, `_gp318_t7_*` — each takes
 `--apply` / `--live` / `--delete`.
 
 ## Related
 
-[[GP-318]] · [[model-enablement-guide]] · [[consumer-layer-validation]] · [[power-bi]] ·
+[[GP-318]] · [[GP-319]] · [[model-enablement-guide]] · [[consumer-layer-validation]] · [[power-bi]] ·
 [[pbi-xmla-automation]]

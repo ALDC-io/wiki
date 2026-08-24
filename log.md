@@ -982,3 +982,24 @@ appeared to agree on.
 instruction). Boot prompt rewritten in place at
 `aldc-launchpad/boot-prompts/agent-factory-tracker-2026-08-23-evening.md`; `next:` is calibrating
 `pbi_contract.py`.
+
+## 2026-08-24 — GP-319 Marketing Model design pass
+
+Updated [[answerability-guard]] with the limit of the pattern, learned the hard way: **a
+measure-level guard cannot close a column-level hole.** After guarding all three visible measures on
+`Marketing Efficiency Product` and verifying BLANK on `Product[Master SKU]`, dragging the raw
+*column* still returned $2,452,729.80 down every row — Excel aggregates it implicitly and the guard
+is never evaluated. Also added: derive the refuse-list from the relationship graph (and assert the
+rule reproduces the guard you already trust before reusing it); parameter tables are deliberately
+excluded; and every guard pass needs a second check that it still VARIES on its own grain, because a
+guard that blanks everything passes the first check and is a deletion.
+
+Measured, not inherited: 58 of 59 visible Marketing Efficiency measures are guarded; the one
+exception is the "Why Blank?" explainer and it must stay unguarded.
+
+Three claims were published and corrected inside the same session — Marketing Efficiency does not
+return a repeated grand total (it is guarded); Google ad spend is not unkeyable (35.1% is
+product-keyable); and parsing ASINs out of campaign names is a proxy, not a measurement. All three
+came from generalising one object's disposition to a whole source.
+
+Evidence: `aldc-launchpad` branch `feature/gp319-marketing-model-product-key`, commit `52a66aa`.
