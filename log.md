@@ -1003,3 +1003,42 @@ product-keyable); and parsing ASINs out of campaign names is a proxy, not a meas
 came from generalising one object's disposition to a whole source.
 
 Evidence: `aldc-launchpad` branch `feature/gp319-marketing-model-product-key`, commit `52a66aa`.
+
+## 2026-08-24 — GP-318: a dead source found by splitting one question into two
+
+Ingested into [[GP-318]]. Sponsored Display had been carried as a frozen feed for 80 days. It was
+not a connector failure: TEST already held current data (9,524 rows to 2026-08-24) and our own view
+was reading the stale PROD-share copy (942 rows, dead at 2026-06-05). GP-317 had diagnosed the
+mechanism correctly in August; what was missing was that the fix costs one token per view.
+
+⭐ The instrument is the lesson. A classification gate that asks "is this data in TEST?" answers yes
+and moves on. Recording `exists_local` and `read_by` as SEPARATE columns is what makes the defect
+visible. Applied across the fleet it refuted the standing hypothesis: the split is alive-vs-stale,
+not sales-vs-marketing, and the TEST connectors never stopped — 30 of 30 days carry writes by the
+Eclipse service account, GOOGLE_ADS at exactly 362/day. So "re-activate the fleet" is, for the
+sources that matter, a repoint rather than a reactivation.
+
+Switched SD only. A schema-level switch was refuted by decomposing deltas by signature: the SP
+table's 5,751-row gap reconciles as US −6,322 / CA −604 / UK +1,174, i.e. missing interior history
+worth $28.9k, not lag. Verified at three layers, with the acceptance test written before the change:
+warehouse +$3,110.48 and exactly $0.00 on every other platform; then model refreshed and
+source==consumer parity proved to the cent on all five platforms.
+
+⭐ "Other platforms move by $0.00" is right at the warehouse layer and WRONG at the model layer — a
+refresh also ingests intraday accrual. Parity is falsifiable where a delta is not.
+
+⭐ B14 is the B15 argument made concrete: the Windsor Google product feed runs perfectly on schedule
+(120 attempts/day since 2026-08-12, again this morning), logs 120 SUCCESS a day alongside 120 FAIL,
+and has landed zero rows in 13 days. Any monitor asking "did the job run" scores it healthy. An
+alarm has to watch rows landed.
+
+Justin's settlement question answered by enumeration: zero settlement-named objects in PROD; 11
+`SETTLEMENTID` columns, all SellerCloud order-line, none advertising. The "settlement" label was
+ours — both ad-spend figures are Advertising API at two grains, which is why they agree to ~99.8%.
+
+Also corrected a claim of my own: I reported the MEP guard pass as shipping without a rollback
+because my `ls` searched only `pbi_ops/`. It was in `docs/evidence/gp319/`, captured before the
+write, all five fields. A zero from an instrument not proved able to see is not a measurement —
+including when the instrument is mine.
+
+Evidence: `aldc-launchpad` commits `536f817`, `6e70681` on `docs/repo-orientation`.
