@@ -918,3 +918,67 @@ R13 run 2 and R14 answered as local subagents with repo access (less independent
 file-and-line — recorded in both run logs). §13.6 settled: R12 right, R15 wrong, and switchboard
 has **no guard at all**. ⚠ Its cited SHA resolved but its line numbers were wrong — verified before
 promoting. New `deep-research` skill distils the method (R10 mechanism E).
+
+## 2026-08-23 (evening) — agent-factory stabilisation: one dependency graph, and three wrong ways to know a session finished
+
+The boot prompt's `next:` was *"fix whatever stops the R17/R18 run buttons working"*. **The premise
+was false** — both buttons worked; verified end-to-end (the launch chain, space-in-path `.ps1` and
+all, was proved on the machine). R17 and R18 have now both run.
+
+What was actually broken: **two dependency graphs for one relation.** `dispatch.DEPENDS` was a
+hardcoded map; `research_run.depends_on` parsed the prompt's own `**Depends on:**` header. R18
+declared `R17` in its header and had no map entry, so the Research tab correctly disabled its button
+while the readiness board said *"send it — nothing is working on it"*. **The unguarded surface said
+go.** `_validate()` could never have caught it: it checks that authored edges name a live prompt — a
+*dangling* edge — and a *missing* edge is invisible to it by construction. Now one implementation
+(`dispatch.edges()`, union of map and header) that both surfaces call.
+
+Four more found by chasing that one: `dispatch.py`'s `__main__` guard sat two-thirds up the file
+above half its own module, so `python -m factory.dispatch` raised `NameError` **while the whole
+suite was green** (no import-based test can see it — the new guard runs the CLI as a subprocess);
+`/reload` never re-imported `factory.dispatch` under either alias and reported success; the reload
+count said 6 while reloading 16; and a **dry run dispatched the pass it was pretending to
+dry-run** (`dry` checked three statements after `rrun.start()` had already flipped the status line
+and written the ledger — and the one instruction future tests were given was *use `dry=True` to
+avoid side effects*).
+
+New page [[agent-session-completion-signals]] — **nothing an agent session leaves behind reliably
+says "I am finished", and every cheap proxy fails toward "done"**. Three tried in one evening, all
+three wrong: file-existence (`ANSWERED` flips on the first byte; R17 grew 13 KB after the board
+unlocked its dependent), process-exit (the `claude` CLI stays resident, so the watcher never fired),
+and 60-second mtime stability (the session paused between sections, then wrote **751 more lines**
+after the commit that claimed to contain them). ⭐ A quiet window measures the agent's rhythm, not
+its progress — and a green gate is not a completion signal either, since a partial artefact can
+satisfy the gate's own condition. The cheapest correct instrument on the night was asking Paul, who
+could see the terminal.
+
+Also: a **synthesize button**, overturning the page's own printed rule that there is none *"because
+synthesis is judgement"* — true while the only mechanism was a paste loop, superseded now that a
+button can open a session that does the reading. It dispatches judgement rather than performing it,
+and the panel says in print that neither check can tell a real reconciliation from one sentence per
+answer. It shipped **without a re-entry guard** — two clicks were two agents writing one 76 KB file,
+last-write-wins — fixed with a `task--` claim namespace kept deliberately separate from `LANES`
+(R14 measured `lane` as already four objects wearing one string).
+
+`factory/pbi_contract.py` written — the Power BI GreenContract, M1..M12, per the contract-before-agent
+ordering rule. M10 *every visual paints* and M11 *each control responds* **cannot be probed from
+XMLA/DAX at all** and are declared anyway, defaulting to `Unmeasurable`: dropping them would have
+returned GREEN on [[GP-293]], where a repoint passed DAX parity while every visual rendered "Error
+loading data". ⛔ It has **no tests yet** — an authoritative-reading, unverified instrument.
+
+R17 answered (5 blind lanes, 38 citations verified, 5 corrected) and reconciled. It overturns four
+things the repo believed — *"enforceable in code"* replaced by a **grant** (a rule about what SQL an
+agent may write is an instruction in a repo the agent can edit); R8's "10+ agents via clones"
+refuted as stated (cloning removes one class of conflict edge and adds three the graph cannot
+represent); two Anthropic figures re-tiered to `MARKETED`; and a 41.7% figure that is about other
+people's repositories, an attribution five places here had lost. ⭐ Its §16.9 independently reaches
+R16's reviewer-throughput finding — 22,000 developers, median review time **+441.5%**, PRs merged
+with **no review +31.3%** — and concludes that raising lane concurrency before the evidence gate is
+sublinear reduces **safety**, not just speed, *because a saturated gate does not present as a queue,
+it presents as a bypass*. That demotes the notification-channel-first action three earlier passes
+appeared to agree on.
+
+246 tests green. 26 commits on `feat/readiness-generator`, **not pushed** (Paul's standing
+instruction). Boot prompt rewritten in place at
+`aldc-launchpad/boot-prompts/agent-factory-tracker-2026-08-23-evening.md`; `next:` is calibrating
+`pbi_contract.py`.

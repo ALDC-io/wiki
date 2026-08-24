@@ -115,5 +115,6 @@ read data files at import.
 ## See Also
 
 - [[agent-factory]] — where this was found, and the readiness harness it protects
+- [[agent-session-completion-signals]] — the other half of the two-sessions problem: knowing when the other one has actually STOPPED
 - [[prefect-connectors]] — the repo the ephemera left
 - [[resuming-claude-sessions-windows]] — session lifecycle on Windows

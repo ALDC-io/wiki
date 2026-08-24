@@ -3,7 +3,7 @@ tags: [pattern, verification, evidence, agents, review, quality, claude-code]
 aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
 sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md]
 created: 2026-08-14
-updated: 2026-08-22
+updated: 2026-08-23
 ---
 
 # Vacuous Verification
@@ -121,6 +121,7 @@ is wrong — the number simply does not mean anything until you say where it was
 
 ## See Also
 
+- [[agent-session-completion-signals]] — the sibling failure: content genuinely PARTIAL while every instrument reports arrival (a proxy for done-ness fails toward "done")
 - [[answerability-guard]] — the four ways a guard test battery lies, including vacuous passes
 - [[schema-dialect-drift]] — the vacuous mutation test, and *a mismatch you can measure is not evidence you found every mismatch*
 - [[conclave-pr-review]] — adversarial re-verification of every merge-gating claim before it reaches a human
