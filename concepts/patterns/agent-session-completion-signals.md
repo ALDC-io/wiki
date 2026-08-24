@@ -24,7 +24,7 @@ has arrived.
 |---|---|---|
 | **The file exists** | the agent was told to write exactly one file | flips on the **first byte**. R17's answer registered `ANSWERED` and then grew **13 KB** |
 | **The process exited** | a finished program exits | the `claude` CLI **stays resident** after finishing. A watcher polling for process exit never fired at all |
-| **mtime stable for N seconds** | a finished writer stops writing | sessions **pause between sections**. A 60 s window declared done; the session then wrote **751 more lines** |
+| **mtime stable for N seconds** | a finished writer stops writing | sessions **pause between sections**. A 60 s window declared done; the session wrote **751 more lines**. Retried at **5 minutes** on the next run — it fired at 144,203 bytes and the file reached **180,166**. ⭐ Lengthening the window does not fix it; there is no N that does |
 
 ### 1. File existence — `ANSWERED` means "a file exists"
 
@@ -90,7 +90,8 @@ same principle, applied to time rather than content.
 5. **Where only proxies are available, state which one you used and its failure mode.** "Stable for
    60 s" is a defensible basis if it is written down as a basis. It is indefensible as an unstated
    assumption behind the word "done".
-6. **Ask the human when the human is right there.** On 2026-08-23 Paul could see the terminal and
+6. ⭐ **The declaration is the only signal that worked.** Measured across three attempts on 2026-08-23: 60 s stability wrong, 5 min stability wrong, process-exit never fired — and the run ended correctly the one time the session *said* it had finished, and used the same message to flag what it had NOT verified (`path:line` claims inherited from two other answers, left `REPORTED`). A worker that can declare completion can also declare its own limits, which no external proxy can ever do.
+7. **Ask the human when the human is right there.** On 2026-08-23 Paul could see the terminal and
    said *"its finished"* in one message — cheaper and more accurate than every instrument tried.
 
 ## Detection
