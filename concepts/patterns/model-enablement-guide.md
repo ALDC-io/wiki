@@ -20,7 +20,8 @@ be produced **at least four times**, so it is a pattern rather than a one-off:
 | # | Subject | When | Depth |
 |---|---|---|---|
 | 1 | **Navira Daily Sales Model** (`66151728`) | ✅ **built 2026-08-13** | full |
-| 2..n | **Marketing model — one per candidate design** | [[GP-319]] Phase 1/2 | thin, comparative (see §Sizing) |
+| 2 | **Navira Marketing Model** (`2d8587b5`) | ✅ **built 2026-08-25** | full, matching #1's spine |
+| 3..n | **Marketing model — one per candidate design** | [[GP-319]] Phase 1/2 | thin, comparative (see §Sizing) |
 | final | **Marketing model — the chosen design** | [[GP-319]] Phase 3 | full |
 
 ## Why it exists
@@ -152,3 +153,29 @@ Produced for the Daily Sales Model on 2026-08-13 from `pbi_ops/_gp318_guide_extr
 
 [[GP-318]] · [[GP-319]] · [[consumer-layer-validation]] · [[power-bi]] · [[pbi-xmla-automation]] ·
 [[cross-channel-marketing-attribution]] · [[GEP]]
+
+
+## What the SECOND build taught (Navira Marketing Model, 2026-08-25)
+
+Built by repointing the Daily chain rather than authoring: `_gp319_guide_extract.py` →
+`_gp319_guide_reach_matrix.py` → `_gp319_build_guide.py`, all read-only, all taking `--daily` to
+retarget the sibling.
+
+- ⭐ **The reach map needs THREE states, not two.** The Daily guide drew *reachable* vs *severed*.
+  The Marketing model has a third and worse state — **INERT**, where the filter does not propagate
+  and the measure returns the grand total on every member. It neither errors nor blanks, so a
+  two-state figure renders it as healthy. See [[answerability-guard]].
+- ⭐ **The most valuable content was not planned: the duplicate-concept table.** Where a model offers
+  a safe and an unsafe measure for the same idea and signals nothing, tabulating the pairs converts a
+  vague complaint ("we don't like the design") into a lookup. Detect the pairs against the live model
+  so a rename cannot silently invalidate the table.
+- ⚠ **A guide can only be generated for what exists.** Of three candidate designs, only one was
+  built; a guide for an unbuilt design is a design spec wearing a guide's clothes. Generate for the
+  live model, and mark what changes under each candidate.
+- ⚠ **Undocumented measures scale with the model, and the ratio is itself the finding.** Daily: 70 of
+  122. Marketing: **128 of 198**. Print "not documented" and count it on the page.
+- ⚠ **Excel holds an exclusive file lock.** Appending sheets to a workbook the reviewer has open
+  fails with `PermissionError`. Write a new versioned file instead of asking them to close it.
+- ⚠ **A drag-list is not a schema.** A workbook of rows/values per question is a pivot recipe; a
+  design review needs the fact inventory and the dimension→fact conformance matrix. And drawing one
+  dimension row under every candidate hides the only thing that differs — the *edges*, not the list.

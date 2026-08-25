@@ -1042,3 +1042,25 @@ write, all five fields. A zero from an instrument not proved able to see is not 
 including when the instrument is mine.
 
 Evidence: `aldc-launchpad` commits `536f817`, `6e70681` on `docs/repo-orientation`.
+
+## 2026-08-25 — GP-319 Marketing Model: enablement guide, design schema, and five inert axes
+
+Ingested from an aldc-launchpad session (commit `7538fc4`, Jira GP-319 comments 36055/36056).
+
+- **New** `tickets/gep/GP-319.md` — the ticket page, which did not exist though `index.md` and
+  `GP-318.md` both linked `[[GP-319]]`.
+- **Updated** `concepts/patterns/answerability-guard.md` — the three-verdict rule
+  (SPLITS / BLANK / INERT) and the single-member-axis false positive. Five inert axes recorded on
+  `2d8587b5`; `Sales Measures` and `Marketing Measures` added to the applied-guards table as having
+  **no** guard.
+- **Updated** `concepts/patterns/model-enablement-guide.md` — 2nd build marked done, plus what it
+  taught: the reach map needs three states, the duplicate-concept table was the most valuable
+  unplanned content, and a drag-list is not a schema.
+- **Updated** `index.md`.
+
+Headline lessons: **a single-member axis correctly equals the grand total** (the first probe run
+overstated the defect count by 80efore that rule existed), and **there is no single measure on the
+Marketing Model that is both complete and per-product** — the strongest argument for the
+conformed-core design, never previously stated. Also: `Agency[Entity Code]` is the only thing scoping
+that model to Navira ($2,763,265.00 of Lectric sales, zero Lectric cost, zero Lectric ad spend), so
+the entity strip must precede the agency removal.

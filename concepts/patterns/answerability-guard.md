@@ -214,6 +214,35 @@ unchanged, measure count up by exactly the number of guards added.
 | Navira Marketing `2d8587b5` | `Marketing Efficiency` | 20 tables, 58 of 59 visible measures, + 17 hidden columns |
 | Navira Marketing `2d8587b5` | `Marketing Efficiency Product` | `__MEP Answerable`, 23 tables, 3 measures — **GP-319, 2026-08-24**. ⚠ raw columns still unhidden |
 | Navira Daily Sales `66151728` | `Google Ad Spend (Product)` | `__GASP Answerable` — ⚠ `Google SKU Resolution %` is visible and unguarded |
+| Navira Marketing `2d8587b5` | `Sales Measures` | ⛔ **NONE — 38 of 40 unguarded, and 3 axes measured INERT** (GP-319, 2026-08-25) |
+| Navira Marketing `2d8587b5` | `Marketing Measures` | ⛔ **NONE — 0 of 24 guarded, 2 axes measured INERT** |
+
+## ⭐ Static coverage is not behaviour, and a single-member axis is not a defect
+
+Two rules earned on 2026-08-25, both of which change a published count.
+
+**1. Counting guard references tells you what CAN inherit blankness, not what returns.** A static DAX
+read of the Marketing Model reports `Marketing Measures` 0/24 guarded and `Sales Measures` 2/40 —
+true, and it does not tell you which axes actually misbehave. Only a behavioural probe does.
+*Propagation, not adjacency — and behaviour decides.*
+
+**2. An axis with exactly ONE member correctly equals the grand total.** Calling that inert is a
+false positive. The first behavioural run on `2d8587b5` reported **nine** inert combinations; four
+were single-member axes (`Marketplace[Channel Name]`, and `Agency[Entity Code]` on three facts).
+Inertness is only demonstrated when a **real split was available and ignored**, so the verdict needs
+`rows > 1`. Without that rule the finding would have overstated by 80%.
+
+The three verdicts a reach probe must separate:
+
+| verdict | meaning | how it reads to a user |
+|---|---|---|
+| `SPLITS` | the figure genuinely varies | correct |
+| `BLANK` | the guard refused the axis | honest — a refusal |
+| ⛔ `INERT` | the filter did not propagate | **a confident number that is the portfolio total** |
+
+⭐ **`INERT` is why "does it error?" is not a sufficient test.** An inert axis neither errors nor
+blanks; it looks perfectly healthy. Instrument: `aldc-launchpad/pbi_ops/_gp319_guide_reach_matrix.py`
+(read-only, `--daily` retargets the sibling model, negative + positive controls mandatory).
 
 Scripts: `aldc-launchpad/pbi_ops/_gp318_t5_*`, `_gp318_t6_*`, `_gp318_t7_*` — each takes
 `--apply` / `--live` / `--delete`.
