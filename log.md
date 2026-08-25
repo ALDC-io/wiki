@@ -1090,3 +1090,47 @@ Lessons worth the page, all earned by measurement rather than review:
 Also verified for the client: Amazon UK ad spend is present ($6,617.31, CY2026, SP only) but is NOT
 decomposable by campaign, its August spend genuinely stopped (feed is live to 08-23), and its USD is
 DERIVED from a frozen FX rate. Jira comments 36066 and 36067 posted; 15 learnings to Zeus Management.
+
+## 2026-08-25 (PM) — GP-319: the Marketing Model's "data problem" was a measure-layer problem
+
+Shipped deliverable (c) for the Marketing Model — the guide as a checked 14-page PDF and
+`NAVIRA-MARKETING-MODEL-COOKBOOK-PIVOTS.xlsx`, 7 tabs of live PivotTables with Heather's own Mastersku
+pivot on the measure that works beside the refusing one. Then answered deliverable (a). See
+[[GP-319]].
+
+⭐ **The finding.** `Actual - Marketing - Cost` is hard-coded to two platforms by a DAX literal
+(`PLATFORM_ID IN {"Amazon Ads Sponsored Products","Amazon Ads Sponsored Brands"}`), while
+`Ad Clicks`/`Ad Impressions` are plain unfiltered SUMs. So the "two measures per concept, 4–11% apart"
+that three sessions chased as a data-quality problem is **one family scoped to two platforms and the
+other to five, with nothing in either name saying which**. The warehouse is complete: the activity
+fact carries cost, clicks, impressions AND conversions for all five platforms, and
+`GET_DDL` proves the efficiency view is built from it. The whole chain reconciles —
+2,952,898.82 activity − 23,689.66 (a Google coverage boundary) = 2,929,209.16 efficiency, with SP, SB,
+SD and Meta agreeing to the cent.
+
+**Decision: declare the activity fact canonical and rebuild the measure layer. Do NOT build a
+conformed fact** — it would be a 15th copy of figures that already reconcile through a proven
+lineage. Long/narrow rejected with a reason (the AC owed that re-test). Curation ships on top, not
+instead. **And Paul's call, which is the better one: build the redesign as a SEPARATE model rather
+than mutating `2d8587b5`, so the two can be compared — which also makes every naming decision
+reversible.**
+
+Lessons worth keeping:
+
+- **Put the scope in the measure name.** A platform allow-list inside a DAX literal is invisible at
+  the field list and in the relationship graph, and reads downstream as a data defect.
+- **A recommendation built on which columns live in which table is a hypothesis until you query the
+  table.** Mine pointed at a new conformed fact until the activity fact turned out to hold
+  everything; the `GET_DDL` lineage check was run before publishing, not after.
+- **The checker must be a separate module from the builder** — it failed 1 of 26 assertions on the
+  first run and the failure was real (9 literal `0.00` cells for Sponsored Display, adjudicated
+  **UNVERIFIED, not ZERO**).
+- **[[GP-296]] was refuted 13 days ago and the ticket still says otherwise** — I repeated the stale
+  $2.72M framing in a Jira comment before catching it. A refutation nobody acts on keeps costing.
+- Jira description edits go through a markdown round-trip with no programmatic read-modify-write, so
+  a wholesale overwrite is the only route — verify by anchor after, and lean on Jira's field history.
+
+Jira: GP-319 comments 36073 (enablement pack) and 36082 (the design decision); description corrected
+under a dated banner — including the false *"the source does not report it"* claim Paul had flagged
+thirteen days earlier. `aldc-launchpad` commits `065ba60`, `4545fad` (unpushed); skills commit
+`bb0750e` adds `data-processing/pbi-excel-deliverables.md`.
