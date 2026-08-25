@@ -1064,3 +1064,29 @@ Marketing Model that is both complete and per-product** — the strongest argume
 conformed-core design, never previously stated. Also: `Agency[Entity Code]` is the only thing scoping
 that model to Navira ($2,763,265.00 of Lectric sales, zero Lectric cost, zero Lectric ad spend), so
 the entity strip must precede the agency removal.
+
+## 2026-08-25 — GP-318 Daily Sales Model: D1/D3/D9 closed, guides to PDF, client workbooks
+
+Ingested into [[GP-318]] (+ index line). TEST `66151728` only, PROD untouched; all three fixes are
+measure-level metadata so no refresh and no deploy were required.
+
+Closed: **D1** the Google/Meta false zero on named marketplaces (pivot stores literal `0` not NULL —
+9,548 rows: 6,962 BLANK / 1,802 zero / 784 real, all 784 with a blank marketplace key); **D3** the
+last two inert axes via a new `__MM Answerable` guard, taking the model to **zero inert axis/fact
+combinations**; **D9** the 2026-08-24 boundary hide, reversed to PROD parity after measuring PROD
+and finding all ten objects visible there rather than the five that had been assumed.
+
+Lessons worth the page, all earned by measurement rather than review:
+- an **inherited premise is a hypothesis** — the boot prompt's D1b was already done, and its other
+  half was structurally impossible
+- **`ISCROSSFILTERED` on a downstream fact** refuses every legitimate dimension; use `ISFILTERED`
+- **a perfect reconciliation on one member is an unattributed bucket, not a grain** — hit twice
+- **do not call a divergence a defect before decomposing it** — the $23,689.66 gap is a coverage
+  boundary, exactly five months, and I had already reported it as a defect
+- **reading the rendered PDF** caught three false claims that 5/5 automated checks passed over,
+  one of them client-facing and the opposite of a recipe in the same guide
+- a workbook builder writing `[Measure]+0` **re-introduces the false zero in the deliverable**
+
+Also verified for the client: Amazon UK ad spend is present ($6,617.31, CY2026, SP only) but is NOT
+decomposable by campaign, its August spend genuinely stopped (feed is live to 08-23), and its USD is
+DERIVED from a frozen FX rate. Jira comments 36066 and 36067 posted; 15 learnings to Zeus Management.
