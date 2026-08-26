@@ -1134,3 +1134,28 @@ Jira: GP-319 comments 36073 (enablement pack) and 36082 (the design decision); d
 under a dated banner — including the false *"the source does not report it"* claim Paul had flagged
 thirteen days earlier. `aldc-launchpad` commits `065ba60`, `4545fad` (unpushed); skills commit
 `bb0750e` adds `data-processing/pbi-excel-deliverables.md`.
+
+## 2026-08-25 (evening) — GP-318: the render AC, and three inherited claims that died
+
+Closed the consumer-layer render AC on [[GP-318]] — open since 08-12 and the only acceptance
+criterion nothing had touched. Drove the client's Analyze-in-Excel workbook in desktop Excel against
+Data Model `66151728`: **PASS**. Google/Meta render BLANK not `$0.00` on all 25 named marketplaces,
+`Cross-Channel` carries 251,468.66 to the cent, 9/9 D9 measures visible, 26/28 slicer cells respond
+with the 2 exceptions decomposed member-by-member rather than filed as inertness.
+
+Three claims measurement overturned, two of them mine mid-session: the inherited **"Excel COM cannot
+drive this connection (0x800706BE)"** blocker is false (that run was invisible *and* set
+`BackgroundQuery` on an OLAP connection; it was slow, never blocked); **`CubeFields` is not the
+consumer's field list** — it lists hidden members, and nearly shipped a false "internal measures leak
+to the client"; and **`SlicerCache.Delete()` leaves its filter applied**, silently corrupting every
+later measurement until anchors caught it.
+
+Diagnosed the unlabelled marketplace row: `MARKETPLACE_KEY_XREF` is a calculated column resolving
+**by name**, so the fix is one dimension row, not the re-plumb the handoff assumed — and "a shared
+object is read by others" turned out to be a reason to measure blast radius (0 of 15 measures count
+its rows), not to file it unfixable. Verified the Eclipse consumer route with a discriminating check
+after finding the workstation's `az` CLI defaults to the **prod** subscription.
+
+Jira: GP-318 comment **36085**. `aldc-launchpad` commit `f444ad8` (unpushed). Warehouse-side rollback
+NOT captured, so the Cross-Channel fix stays gated.
+
