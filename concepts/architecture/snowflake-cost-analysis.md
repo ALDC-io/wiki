@@ -241,6 +241,50 @@ All on branch `feature/aldc-651-cost-reduction` in `ALDC-io/observability`.
   - **`pg-aldc-superset-qa` auto-restarts ~2026-08-04** (Azure restarts stopped flexible servers after 7 days), which silently reverses ~$19/mo *and* re-exposes a `0.0.0.0`–`255.255.255.255` firewall rule with public access enabled. Any "stop it to save money" action needs a deletion follow-up or a recurring check.
   - **ALDC-744's description is stale** — it still says prod was "deliberately left unchanged so it acts as a clean A/B control". Prod was changed 2026-07-28; this page is correct and the ticket is not.
 
+## ⭐ Measurement corrections (ALDC-1026, 2026-08-26) — read before quoting any figure above
+
+A Navira-share consumption sweep re-measured the instruments this page rests on and found four
+defects. **Figures on this page that predate 2026-08-26 inherit them.**
+
+1. **The credit price was never measured.** `ORGANIZATION_USAGE.RATE_SHEET_DAILY` on both accounts
+   gives **$2.25/credit and $25.00/TB-month**. **`$2.15` appears nowhere on either account** — it is
+   the hardcoded `--price` default in `observability/jobs/snowflake-cost/cost_baseline.py:163`.
+   Every dollar figure derived from that default is **~4.7% low**.
+2. **`WAREHOUSE_METERING_HISTORY` is not the whole bill.** It carries **93.1% non-prod / 96.9% prod**
+   of account credits (365d) — and it returns *exactly two warehouse names per account* while
+   **five distinct service-pool warehouses execute queries and appear in none of them**. On non-prod
+   those pools burn **130,781 query-seconds against `COMPUTE_WH`'s 99,725 — 131%**. `TRUST_CENTER`
+   alone is **513.6 credits/yr ≈ $1,155** across both accounts. **Use `METERING_DAILY_HISTORY` as the
+   denominator.**
+3. **`TABLE_STORAGE_METRICS` undercounts storage ~4.8×** because it excludes the 7-day fail-safe tail
+   of *dropped* tables — and on a `CREATE OR REPLACE` estate that tail *is* the storage story.
+   GEP measured **141.80 GB** on that basis and **685.79 GB** at billing grain
+   (`DATABASE_STORAGE_USAGE_HISTORY`). ⚠ **The wrong basis was used twice, by two different people,
+   after the defect had already been flagged in the same analysis.** Flagging a defect does not
+   remove it from circulation.
+4. **`ACCESS_HISTORY` is NOT-RECORDED on Standard edition** — SELECTable, fully defined (14 columns),
+   **0 rows on both accounts across 13 months**. Any estate analysis that read "never accessed" from
+   it produced a **false zero** and must be re-opened.
+
+### The thesis holds, and harder than stated
+
+`COMPUTE_WH` measured: **non-prod 3,353.55 credits / 6,942 billed hours / 152.71 execution hours =
+2.20% busy over 365 days.** Prod, 30 days: **562.73 credits / 720 billed hours** — that is
+**24 hours a day; the prod warehouse never suspends** — at 23.34% busy.
+⇒ **~98% of a year's non-prod compute spend bought idle time.** A per-job cost on a shared warehouse
+is arithmetic on an assumption: killing a job that runs concurrently with others saves nothing.
+`QUERY_ATTRIBUTION_HISTORY` **is live on both accounts** and gives per-query credits — but it
+accounts for only **59.5% prod / 11.8% non-prod** of metered compute, so per-object cost is a
+**floor**, and grossing it up is INFERRED with the model stated.
+
+### Storage: where GEP's money actually is
+
+**685.79 GB ≈ $17.15/month** across both accounts, **70% of it `PROD_DG1_GEP` fail-safe (478.19 GB)**,
+concentrated **99.4% in three schemas** — `SELLERCLOUD_SQL` 17.21 GB, `AMAZON` 12.68 GB,
+`AMAZON_ADS` 8.61 GB on 0.487 GB active (**17.7×**). GEP is **47.2% of prod account storage**.
+Every orphan and rollback/shadow table combined is **2.4 GB (0.35%)** — the orphan sweep is not
+where the money is. **This is the live T3 lead.**
+
 ## See Also
 
 - [[Snowflake]] — platform reference (env naming, tasks, dynamic tables, reader accounts)
