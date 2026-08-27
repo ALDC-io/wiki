@@ -1189,3 +1189,24 @@ all clear** when the defect lives in how two tables are joined at read time.
 Jira: GP-327 comment 36123; GP-328 comments 36124 (options + measured blast radius) and 36125 (TEST
 build). Branch `feature/gp319-marketing-model-product-key` — **uncommitted**. PROD promotion of
 GP-328 not started; the visual repoint has never been executed anywhere.
+
+### 2026-08-27 (later) — GP-328 promoted to PROD
+
+View → model → Eclipse cache → visual, in that order, each gated. Nine dim-exposed measures at
+delta exactly 0.0; overview checksum identical; blank row eliminated on all 8 client vendor
+dashboards with every vendor reconciling exactly (PENN-PLAX was worst at 2,528 violations across 28
+hidden sellers). Paul confirmed the rendered Condor dashboard.
+
+Two things worth carrying forward. **Eclipse caches the model schema in its own `dataset` doc**, so
+a visual repointed to a new table resolves nothing unless the cache is registered first — nearly
+missed. And **decoupling the invisible steps from the visible one** turned a risky first-execution
+into a measured switch: the view and model table change nothing anyone sees, so they were deployed
+and then rehearsed in PROD with DAX while the live visual still read the old dim, which also
+produced the vendor-scoped proof TEST structurally could not give.
+
+Also confirmed under QA that both dashboard filters genuinely scope the MAP grid — timeframe (YTD
+17,558 / 90d 14,451 / 30d 9,400 on Condor) and the Default Vendor lock (19 sellers vs 1,019
+unscoped). Branches `GEP/gp328-map-seller-dim` (clients, `d6214178`) and
+`feature/gp328-map-seller-dim` (aldc-launchpad, `fd35e4b`) pushed, not merged. GP-327 and GP-328
+both moved to GEP QA. Open: PENN-PLAX rendered check; 329 never-named sellers; the
+`Product[Default Vendor]` blank member.
