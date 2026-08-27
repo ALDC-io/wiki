@@ -1160,3 +1160,32 @@ after finding the workstation's `az` CLI defaults to the **prod** subscription.
 Jira: GP-318 comment **36085**. `aldc-launchpad` commit `f444ad8` (unpushed). Warehouse-side rollback
 NOT captured, so the Cross-Channel fix stays gated.
 
+
+## 2026-08-26/27 — GP-327 filter removal, and the blank seller row it uncovered (GP-328)
+
+**GP-327 — shipped to PROD.** Navira asked for two filters gone from the MAP grid. Removed
+`'Navira MAP Violators'[Selling FBA (Yes/No)]` and `[Avg ASINs Listed]` from **7** client vendor
+dashboards. Row-neutral by measurement: both carried an empty `value` in *both* `locked_value` and
+`default_value`, corroborated independently by the client's own screenshot showing both as `<Any>`.
+Verified from a fresh Cosmos read rather than the write path's own report; Rain Bird — which never
+had them — came back `_ts`-identical, proving the run wrote only where it said. Rendered check still
+outstanding.
+
+**GP-328 — found while looking at the same grid.** A blank seller row carrying 1,347 violations,
+4th-largest on Condor. The warehouse said nothing was wrong (0 null seller IDs, 0 orphan keys) and
+three pre-registered hypotheses were all refuted there. It resolved only at the consumer's layer:
+the grid's attributes come from a **90-day** dim while its measures come from the **full-history**
+fact, and the dashboards default to **Year-to-date** — so 274 of 1,019 sellers collapse into one
+blank member. Reproduced figure-for-figure against the client's screenshot (four independent figures
+per row). Fixed additively on TEST — a *second*, all-history seller dim, because 9 of 24 MAP
+measures are defined on the 90-day dim but the grid's 4 are fact-only. All 9 unchanged at delta
+0.0; blank row 33,782 → 0 with 150 newly-named rows summing to exactly 33,782.
+
+Two things the method earned: **scope a reproduction the way the consumer scopes it** (a SQL rebuild
+on `BRAND LIKE '%CONDOR%'` did not reproduce the grid, because the dashboard scopes on
+`Product[Default Vendor]` — the [[GP-312]] divergence), and **a query-layer "all clear" is not an
+all clear** when the defect lives in how two tables are joined at read time.
+
+Jira: GP-327 comment 36123; GP-328 comments 36124 (options + measured blast radius) and 36125 (TEST
+build). Branch `feature/gp319-marketing-model-product-key` — **uncommitted**. PROD promotion of
+GP-328 not started; the visual repoint has never been executed anywhere.
