@@ -3,7 +3,7 @@ tags: [concept, pattern, power-bi, xmla, tom, automation, gep]
 aliases: [PBI XMLA automation, TOM model automation, pbi_model_apply pattern]
 sources: [entities/projects/workflow-automation.md, processes/distributed-workflow/active/phase6-pbi-automation-plan.md, processes/deployment/pbi-xmla-model-changes.md, GP-208 validation session 2026-04-24]
 created: 2026-04-24
-updated: 2026-04-25
+updated: 2026-08-27
 ---
 
 # PBI XMLA Model Automation
@@ -173,6 +173,72 @@ The shape matches deliberately — the `/gep-feature` skill's Sub-step 1 (Snowfl
 
 ---
 
+## ⛔ Two hazards of TMSL export, learned the hard way (2026-08-27, [[GP-329]])
+
+Both bite the moment you follow the standing rule *"capture a rollback before any mutation"*, because
+**capturing a rollback IS a full TMSL export.**
+
+### 1. A TMSL export writes the model's credentials to disk
+
+`JsonSerializer.SerializeDatabase(db)` emits every shared expression verbatim, and on the GEP models
+those include **`CORE_API_CLIENT_TOKEN`** — a live 32-char bearer credential held as a Power BI
+parameter and sent as a raw `Authorization` header. Exporting and committing puts it in git. It
+reached 9 tracked files across 10 pushed commits before anyone noticed, and **the same single value
+authenticates against both `aldctestfnapcore1c01` and `aldcprodfnapcore1c01`** — it is not a
+test-only secret.
+
+**Route every dump through one fail-closed writer.** In `aldc-launchpad` that is
+`pbi_ops/xmla.py::write_tmsl_safely` — it redacts credential-named parameters, then scans the
+**entire** serialized document for every literal it redacted and **raises rather than writes** if one
+survives elsewhere (a secret pasted into a partition query or annotation slips past name-matching).
+Why one shared writer rather than per-script care: see the inert-control case in
+[[vacuous-verification]].
+
+**A redacted TMSL is evidence, not a rollback.** Replaying one would write a placeholder over a live
+credential. So genuine rollback captures write the unredacted text to a **gitignored** location
+(`rollback/`) and the redacted copy to the repo. Probes and scratch dumps get no unredacted copy at
+all.
+
+### 2. ⭐ On a shared model, NEVER replay a full-model TMSL as a rollback
+
+A full TMSL is a **snapshot of the whole model at one instant**. The Navira TEST Data Model
+`66151728` is worked concurrently — during one GP-329 session a colleague deployed a `Budget` table
+to it mid-flight (+1 table, +1 relationship, +11 measures), and the model moved 358→369 measures and
+40→41 tables inside three hours. **Replaying a snapshot silently reverts every change anyone else
+made after it was taken**, and it does so while reading as a careful rollback.
+
+The discipline that follows:
+
+1. **Write a surgical rollback** that removes exactly what you added and touches nothing else. Keep
+   the full TMSL for forensics and last resort, and say so in the script's own docstring.
+2. **Recapture the baseline immediately before applying**, not at session start — otherwise the
+   additive-only proof is against a stale picture.
+3. **Prove the rollback by exercising it:** apply → validate → rollback → assert the model is
+   *identical* to baseline on measures, tables, columns, hidden set, relationships and headline
+   figures → re-apply → validate again. A captured file is not a rollback until it has been run.
+4. **After deploying, verify the other party's objects explicitly** — their table present, measure
+   list identical, columns identical, their measures still *evaluate*, relationship count unchanged.
+   A structural "additive-only" diff does not by itself prove their work still works.
+5. **Assert the model ID, never resolve by workspace+name alone.** `GEP Test Models` holds more than
+   one database; see the `_get_model` note in `xmla.py` for the by-name trap that silently redirected
+   both reads and writes.
+
+### The safest additive measure is a pure alias
+
+When a correctly-guarded measure already computes what a client is asking to see under a new name,
+**reference it rather than re-deriving it**. GP-329's `Amazon Ad Spend (USD)` is literally
+`[Amazon Advertising Fees (settlement)]`: it inherits both the [[answerability-guard]] and the
+exact-zero blanking, cannot drift from its source, and introduces zero new arithmetic — which is why
+its no-regression proof came out total rather than approximate. Renaming in place would have broken
+the two bound reports; aliasing is additive and reversible.
+
+⚠ **And check which name the environment actually carries.** The measure is
+`Actual - Cost - Advertising` in PROD and `Amazon Advertising Fees (settlement)` in TEST, and the
+`Cost & Margin` display folders differ between the two. A plan written against one environment does
+not transfer unmodified to the other.
+
+---
+
 ## Related Tooling
 
 - `GEP/scripts/pbi_model_apply/` — the wrapper (source in this repo; build with `dotnet build -c Release`).
@@ -192,3 +258,5 @@ The shape matches deliberately — the `/gep-feature` skill's Sub-step 1 (Snowfl
 - [[gep-snowflake-pbi-deployment]] — runbook; annotated with the new XMLA path
 - [[entities/tools/power-bi|Power BI]] — tool reference
 - [[GP-208]] — first ticket validated end-to-end with this pattern (2026-04-24)
+- [[vacuous-verification]] — why the credential leak recurred: an inert control (a correct `.gitignore` that cannot touch tracked files; a redactor in 1 of 13 call sites)
+- [[GP-329]] — the session that produced the two TMSL hazards above

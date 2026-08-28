@@ -1210,3 +1210,16 @@ unscoped). Branches `GEP/gp328-map-seller-dim` (clients, `d6214178`) and
 `feature/gp328-map-seller-dim` (aldc-launchpad, `fd35e4b`) pushed, not merged. GP-327 and GP-328
 both moved to GEP QA. Open: PENN-PLAX rendered check; 329 never-named sellers; the
 `Product[Default Vendor]` blank member.
+
+## 2026-08-27 — GP-329 TMSL export hazards + the inert control
+
+**Ingest** (session: GP-329 Tier 1 deploy to Navira TEST `66151728`).
+
+Updated:
+- `concepts/patterns/vacuous-verification.md` — new section "the inert control: correct, present, and doing nothing". Third shape alongside the empty verdict and the gate that cannot fire. Reference case: `CORE_API_CLIENT_TOKEN` in 9 tracked files / 10 pushed commits while two correct controls sat inert (a `.gitignore` that cannot touch already-tracked files; a redactor in 1 of 13 call sites). Lesson: a fix at a single call site is not a control. Detection questions added.
+- `concepts/patterns/pbi-xmla-automation.md` — new section on the two TMSL-export hazards: exports carry live credentials (one shared fail-closed writer; a redacted TMSL is evidence, not a rollback), and never replay a full-model TMSL on a concurrently-worked model (surgical rollback, recapture baseline before apply, prove the rollback by exercising it, verify the other party' objects still evaluate). Plus the pure-alias pattern and the per-environment measure-name trap.
+- `index.md` — both entries expanded.
+
+Source evidence: `aldc-launchpad` branch `feature/gp329-adspend-cost-section` — `docs/evidence/gp329-tier1-deploy.md`, `gp329-test-preflight.md`, `gp329-tmsl-credential-redaction.md`.
+
+Not ingested: per-run figures and the GP-329 ticket state, which live in the repo evidence and Jira.

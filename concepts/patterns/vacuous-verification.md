@@ -3,7 +3,7 @@ tags: [pattern, verification, evidence, agents, review, quality, claude-code]
 aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
 sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md]
 created: 2026-08-14
-updated: 2026-08-23
+updated: 2026-08-27
 ---
 
 # Vacuous Verification
@@ -119,9 +119,45 @@ And a measurement with no stated basis: the same readiness board reads **9 from 
 and 10 from a lane worktree at the same commit**, because paths resolve relative to cwd. Neither
 is wrong — the number simply does not mean anything until you say where it was taken.
 
+## 2026-08-27 — the inert control: correct, present, and doing nothing ([[GP-329]])
+
+A third shape, and the most dangerous of the three because it survives inspection. The verdict-shaped
+failures above are empty; the gate-shaped failures cannot fire. **An inert control is genuinely
+correct and genuinely does nothing**, so anyone who reads it concludes the risk is handled.
+
+`CORE_API_CLIENT_TOKEN` — a live bearer credential embedded as a Power BI model parameter — reached
+**9 tracked files across 10 pushed commits** over roughly twelve weeks. Two controls existed the
+whole time:
+
+| Control | Why it was inert |
+|---|---|
+| `pbi_ops/.gitignore` excluding `*.tmsl.json` and `*_rollback*.json`, added 2026-06-26 | **gitignore never affects already-tracked files.** Four of the six offending files predate the rule, so it landed and silently did nothing about them. Two more were force-added after it. The rule reads as coverage and is correct as written |
+| A redaction function in `_gp319_clone_rehearse.py`, added 2026-08-25 after the leak was first noticed | **It lived in one script out of thirteen that serialize TMSL.** The very next rollback capture, `_gp328_add_seller_dim.py`, wrote the credential again **two days later** — the fix was one file away and nobody called it |
+
+⭐ **A fix that lives in a single call site is not a control; it is a coincidence that has to be
+re-enacted by memory every time.** The remedy in both halves was structural rather than more
+diligence: one shared `write_tmsl_safely` in `pbi_ops/xmla.py` that **every** dump routes through,
+fail-closed so it refuses the write rather than warning, plus `git rm --cached` so the ignore rule
+finally applies to the files it always named.
+
+Detection questions that would have caught both, and neither of which is "is the rule correct?":
+
+- **"How many call sites bypass it?"** Not "does it exist". Thirteen scripts serialized TMSL; one
+  redacted. That ratio is the control's real strength.
+- **"Does this rule apply to the objects already in the state it forbids?"** A `.gitignore` added
+  after the fact answers *no*, always, and silently.
+- **"Would it refuse, or merely warn?"** A warning on a secret write is a secret write.
+
+The same run also produced the positive form: name-based redaction of `model.expressions` was
+sufficient for today's model, but a deliberately planted secret in an annotation sailed past it — so
+the writer additionally scans the **whole serialized document** for every literal it redacted and
+raises. The guard-that-can-fire was proved by making it fire, which is the [[inquest-bug-resolution]]
+discipline applied to a control rather than a defect.
+
 ## See Also
 
 - [[agent-session-completion-signals]] — the sibling failure: content genuinely PARTIAL while every instrument reports arrival (a proxy for done-ness fails toward "done")
+- [[pbi-xmla-automation]] — the operational half of the 2026-08-27 case: TMSL exports carry credentials, and surgical vs full-model rollback on a shared model
 - [[answerability-guard]] — the four ways a guard test battery lies, including vacuous passes
 - [[schema-dialect-drift]] — the vacuous mutation test, and *a mismatch you can measure is not evidence you found every mismatch*
 - [[conclave-pr-review]] — adversarial re-verification of every merge-gating claim before it reaches a human
