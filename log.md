@@ -1259,3 +1259,12 @@ per-run figures and ticket state.
 "design, the label can never clear" — refuted by `REFRESH_MODE = FULL` on the dynamic tables, which
 the orchestrator re-verified directly before accepting the minority view. Re-verify refutations, not
 just findings; a council majority is not evidence.
+
+## 2026-08-28 — GP-329 ingest (Navira ad spend cost section)
+
+Source: conversation 2026-08-27/28; `aldc-launchpad` commits `a3282e0`, `0da4811`, `0bee01f`, `42b17d2`; evidence `docs/evidence/gp329-widen-impact.md`; Jira GP-329 comment 36188.
+
+- **Created** `tickets/gep/GP-329.md` — Tier 1 TEST deploy, the measured 1.07 bps margin impact of widening `SALES_FCT_COST`, three distinct causes behind three look-alike absences, the zero-residual reconciliation, the TMSL credential leak and its bypassed control, six gotchas.
+- **Updated** `concepts/patterns/answerability-guard.md` — new section *"The guard blinds the measurer"*: exact-zero blanking collapses four distinct states onto one BLANK, so a verdict must be read from the **unguarded column plus a row count**, never from the guarded measure. Reusable beyond Navira.
+- **Updated** `index.md` — GP-329 ticket entry under GEP (the key was already cross-referenced from the [[vacuous-verification]] and [[pbi-xmla-automation]] pattern entries; this adds the ticket itself).
+
