@@ -3,7 +3,7 @@ tags: [entity, project, fusion92, dax, flight-check-app, web-app, eclipse]
 aliases: [DAX Media App, Flight Check App, Flight Management Application, Flight Check Replacement]
 sources: [CF92/1439399945, CF92/1206779949, CF92/1360887813, CF92/1425440769, CF92/1437204481, CF92/1437302786, CF92/1437204494, CF92/1632141315, CF92/1633681409, CF92/1654030337, CF92/1660911619, TECH/1777106945 (Steven Offboarding), TECH/1772126209 (Azure Resources Reference)]
 created: 2026-04-18
-updated: 2026-04-27
+updated: 2026-08-28
 ---
 
 # DAX Media App
@@ -21,7 +21,8 @@ Source: Confluence TECH/1777106945 (Steven Offboarding).
 - **Frontend:** Next.js, running inside [[Eclipse]] 2.0 (not Eclipse 2.1). Flight Check cannot currently run as a standalone application — it depends on Eclipse 2 for authentication (token sharing).
 - **Document Storage:** Flight and job data stored as "Application" JSON documents in [[CosmosDB]], accessed via [[core_api]] (the old/v1 version, not v2/Eclipse 2.1).
 - **Business Logic Backend:** Split between [[core_api]] and the [[workflows|Dax API]]. General calls (auth, user info, document retrieval) go through Core API; all new features go to the Dax API. Over time, existing features should be routed through the Dax API even if they call Core API internally.
-- **Reporting Layer:** Flight Check data synced to [[Snowflake]] every 30 minutes by the `FlightCheckSnowflakeSyncWorkflow` in [[workflows]]. Due to this schedule, new Platform IDs added to flights take up to an hour to appear in the warehouse and metrics table.
+- **Reporting Layer:** Flight Check data synced to [[Snowflake]] by the `FlightCheckSnowflakeSyncWorkflow` ([[workflows]], `dax_api/sync/lib.py:130`), driven by Azure Functions timer triggers.
+  > ⚠ **Corrected 2026-08-28 (FU92-430).** This bullet used to read *"every 30 minutes … up to an hour to appear"*. **That is wrong, and it misled both a client and an investigation.** The 30-minute cadence only holds for **14 hours a day**: the incremental syncs run `0 20,50 10-23 * * *` — :20 and :50 past the hour, **hours 10–23 UTC only** (`function_app.py:341,365`) — plus a single full reconcile at **09:10 UTC** (`:391`). So there is a **10h30m nightly blackout, 23:50 → 10:20 UTC**, and an overnight edit can take **~10.5 hours** to appear, not one. The window is Pacific-aligned while Fusion92 is **Central**, so their working evening (after ~18:50 CT) falls inside the gap. Dynamic-table lag sits on top of this. See [[fusion92-platform-ids]] § *Clearing IDs*.
 
 ### Azure Resources (Production)
 

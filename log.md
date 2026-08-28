@@ -1223,3 +1223,39 @@ Updated:
 Source evidence: `aldc-launchpad` branch `feature/gp329-adspend-cost-section` — `docs/evidence/gp329-tier1-deploy.md`, `gp329-test-preflight.md`, `gp329-tmsl-credential-redaction.md`.
 
 Not ingested: per-run figures and the GP-329 ticket state, which live in the repo evidence and Jira.
+
+## 2026-08-28 — FU92-429 Smartsheet-ID substitution + a wrong freshness figure we had published
+
+**Ingest** (session: FU92-428/429/430, DAX Media App defects reported by Fusion92).
+
+Updated:
+- `concepts/architecture/fusion92-platform-ids.md` — two new sections. **"Clearing ALL THREE IDs does
+  not release a flight"**: `shared_dim_flight.sql:163-166` substitutes the flight's *Smartsheet*
+  platform IDs when `HAS_PLATFORM_IDS` (an `OR` across the three DAX fields) goes false, so the flight
+  keeps matching direct spend and the metrics table stays read-only. Proven byte-identical across three
+  layers on flight `1FVO2`. Carries the ⛔ *do not change the `IFF`* warning — the warehouse cannot
+  distinguish a deliberate clear from a flight that never had DAX IDs (both are three NULLs) and **677
+  flights depend on the fallback**. Also records where the label is actually decided
+  (`calculations.py:247`, which never reads the ID fields — editing it ships a no-op that reads as a
+  fix). Second section: **freshness**, and the rule not to diagnose ID-matching inside the blackout.
+- `entities/projects/dax-media-app.md` — **corrected a figure this wiki had published wrong.** The
+  Reporting Layer bullet claimed sync was "every 30 minutes … up to an hour to appear". The 30-minute
+  cadence holds only 14 hours a day: `0 20,50 10-23 * * *` (hours 10–23 UTC only) plus a 09:10 UTC
+  reconcile ⇒ a **10h30m nightly blackout, 23:50 → 10:20 UTC**, Pacific-aligned while Fusion92 is
+  Central. Overnight worst case is ~10.5h, not 1h. That stale figure misled a client *and* framed the
+  first half of this investigation toward a latency explanation that was wrong.
+- `index.md` — platform-ids entry expanded with both warnings.
+
+Source evidence: `aldc-launchpad` branch `feature/fu92-428-429-dax-defects`, commit `dfbdd5d` —
+`docs/evidence/fu92-428-429/{PREDICTIONS,FINDINGS}.md` and `sf_ops/_fu92_428_429_probe{,2,3}.py`
+(read-only, predictions pre-registered before the probes ran).
+
+Not ingested: FU92-428's export diagnosis (still LIKELY, not proven — the failing request was never
+sent because the Chrome extension would not pair; the arithmetic is 124 flights → 4,833-char query
+string vs a 2,048 cap). Stays in the repo evidence and Jira until it is settled. Also not ingested:
+per-run figures and ticket state.
+
+**Method note worth keeping:** run with `inquest`. Two of five council seats concluded FU92-429 was
+"design, the label can never clear" — refuted by `REFRESH_MODE = FULL` on the dynamic tables, which
+the orchestrator re-verified directly before accepting the minority view. Re-verify refutations, not
+just findings; a council majority is not evidence.

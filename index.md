@@ -135,7 +135,7 @@ Master catalog of all wiki pages. Search here to find relevant pages.
 - [[test-prod-environment-parity]] — Decision record (ACCEPTED 2026-07-21, GP-294): TEST is a *preview of prod-next*, not a mirror of prod-now. Full-parity + promotion-gate — TEST ingests everything itself on a slower schedule, drain the PROD→TEST share, parity enforced by identical code + schema diff + freshness + spot-recon (NOT row-exact). Fixes the mixed test-native/prod-share provenance mess.
 - [[accumulating-source-tables]] — `CURRENT_REPORT_*` and `CURRENT_MAIN_*` tables retain multiple ingestion batches per key; dedup required at read time. Includes moving-target QA workflow (drift diagnostic, acceptable tolerance).
 - [[connector-timeout-outage]] — Post-mortem: `/work/pick` Azure Function timeout caused by O(N_accounts x N_connections) global queue sweep. Short-term and long-term fixes documented.
-- [[fusion92-platform-ids]] — Platform account/campaign/order ID mapping for Fusion92 Flight Check. Format rules, matching logic, overlap caveats, Google Ads vs SA360 precedence.
+- [[fusion92-platform-ids]] — Platform account/campaign/order ID mapping for Fusion92 Flight Check. Format rules, matching logic, overlap caveats, Google Ads vs SA360 precedence. **⚠ Clearing all three IDs does NOT release a flight — the warehouse substitutes the Smartsheet IDs (FU92-429); do not fix the `IFF`, 677 flights depend on it.** Plus the 10h30m nightly sync blackout you must not diagnose inside.
 - [[fusion92-data-architecture]] — Fusion92 Snowflake setup decisions (Azure, Standard Edition, account structure, implementation checklist) + DIOS→DAX→DSP audience integration flow.
 
 ### Patterns
