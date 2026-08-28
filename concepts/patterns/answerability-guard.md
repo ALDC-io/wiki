@@ -1,9 +1,9 @@
 ---
 tags: [pattern, power-bi, dax, data-modelling, navira, gep, correctness]
-aliases: [answerability guard, __ME Answerable, inert axis, silent grand total, guard measure]
-sources: [GP-318 T5/T6/T7 2026-08-13, GP-319 2026-08-24, aldc-launchpad docs/evidence/gp318 + gp319, conversation 2026-08-13, conversation 2026-08-24]
+aliases: [answerability guard, __ME Answerable, inert axis, silent grand total, guard measure, exact-zero blanking, NOT-RECORDED vs ZERO]
+sources: [GP-318 T5/T6/T7 2026-08-13, GP-319 2026-08-24, GP-329 2026-08-28, aldc-launchpad docs/evidence/gp318 + gp319 + gp329-widen-impact.md, conversation 2026-08-13, conversation 2026-08-24, conversation 2026-08-28]
 created: 2026-08-13
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # Answerability guard — making a model refuse questions it cannot answer
@@ -247,7 +247,60 @@ blanks; it looks perfectly healthy. Instrument: `aldc-launchpad/pbi_ops/_gp319_g
 Scripts: `aldc-launchpad/pbi_ops/_gp318_t5_*`, `_gp318_t6_*`, `_gp318_t7_*` — each takes
 `--apply` / `--live` / `--delete`.
 
+## ⭐ The guard blinds the measurer — read the unguarded column to tell ZERO from NOT-RECORDED
+
+The companion convention to the answerability guard is **exact-zero blanking**: a pivot stores `0`,
+not `NULL`, where a platform is not instrumented on a marketplace, so the measure blanks an exact
+zero rather than publish `$0.00` as a measurement we do not have.
+
+```dax
+Spend - Amazon Sponsored Display =
+IF ( [__ME Answerable] = 1,
+    VAR v = SUM ( 'Marketing Efficiency'[Amazon Ad Spend — Sponsored Display (USD)] )
+    RETURN IF ( COALESCE ( v, 0 ) = 0, BLANK (), v )   -- an exact 0 is NOT-RECORDED
+)
+```
+
+That is correct **for the reader** and a trap **for the analyst**. The guard maps three distinct
+states onto one blank, and the measure can no longer tell you which you are looking at:
+
+| underlying state | guarded measure | what it actually means |
+|---|---|---|
+| no rows for this member | `BLANK` | **NOT-VISIBLE** — the member never reaches the fact |
+| rows exist, column stores exact `0` | `BLANK` | **NOT-RECORDED** — instrumented, nothing to record |
+| rows exist, column is genuinely `0.00` | `BLANK` | **ZERO** — a real measured nothing |
+| the axis cannot propagate | `BLANK` | **refusal** — the answerability guard fired |
+
+⇒ **Never conclude a verdict from a guarded measure. Read the underlying column, unguarded, and
+count the rows in the same query.** The discriminating shape:
+
+```dax
+EVALUATE
+SUMMARIZECOLUMNS(
+  'Marketing Efficiency'[Marketplace],
+  "raw_sd",  SUM('Marketing Efficiency'[Amazon Ad Spend — Sponsored Display (USD)]),
+  "raw_sp",  SUM('Marketing Efficiency'[Amazon Ad Spend — Sponsored Products (USD)]),
+  "me_rows", COUNTROWS('Marketing Efficiency')          -- ⭐ the row count is the discriminator
+)
+```
+
+On [[GP-329]] this separated two blanks that looked identical and were not. Amazon UK returned
+`BLANK` for Sponsored Display from the guarded measure. Unguarded: **407 rows present**, `raw_sd`
+stored as **exact `0.0`**, `raw_sp` `6,633.04` ⇒ UK is instrumented and **Sponsored-Products-only**
+— NOT-RECORDED, not absent, not zero. Amazon Brazil on the same axis returned `BLANK` from *both*
+the measure and the column, with rows present ⇒ a different verdict entirely.
+
+That distinction decided a real number: it is why the UK/Sponsored-Display overlap in the
+margin-impact calculation is **genuinely $0.00** and no dollar was double-counted. Had the guarded
+blank been read as "unknown, assume some overlap", the delta would have been hedged; had it been
+read as "absent", UK Sponsored Display would have been proposed as deliverable when the data says
+UK does not run it.
+
+**Rule:** guards exist to protect the *reader* from a false zero. When you are the *measurer*, go
+under them — and never publish `ZERO`, `NOT-RECORDED`, `NOT-VISIBLE` or `NOT-RETAINED` as if they
+were the same finding.
+
 ## Related
 
-[[GP-318]] · [[GP-319]] · [[model-enablement-guide]] · [[consumer-layer-validation]] · [[power-bi]] ·
-[[pbi-xmla-automation]]
+[[GP-318]] · [[GP-319]] · [[GP-329]] · [[model-enablement-guide]] · [[consumer-layer-validation]] ·
+[[power-bi]] · [[pbi-xmla-automation]]
