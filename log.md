@@ -1408,3 +1408,35 @@ is my own work, so no JIRA tickets yet."* Launchpad commits carry `Ticket: none`
 4. **`army/SKILL.md` and `eclipse-app/SKILL.md` have no YAML frontmatter** — registered via their H1,
    so neither carries a trigger condition and neither fires reliably. `army` is a flagship skill.
    **Not fixed.**
+
+## 2026-08-29 — agent-factory: a defeated promotion gate, and the client intake portal design
+
+**Source:** live session in `agent-factory` + `aldc-launchpad` + `clients`.
+**Pages touched:** [[agent-factory]], [[vacuous-verification]], index.md.
+
+1. ⛔ **The factory's promotion gate believed an unattributed verdict.**
+   `factory/evaluator.py`'s `RemoteVerdict.parse()` checked that the attribution *keys existed* and
+   then read them with `payload.get("evaluator") or {}`, so
+   `{'verdict':'PASS','promotable':True,'evaluator':None,'scored_against':None}` parsed as
+   `is_pass=True, promotable=True` and `certify --remote` exited **0**. Fixed to check content.
+   **299 tests, was 287.** The 9 new parametrised cases were run against the unfixed file as a
+   negative control first: **8 of 9 failed**.
+2. ⭐ **The lesson is the test, not the null check.** The test named for the guarantee omitted the
+   attribution keys entirely, so it pinned *presence* while the guarantee was about *content*.
+   Filed to [[vacuous-verification]] as a fourth shape: **a test that supplies fewer fields than the
+   failure mode needs is testing a different property than the one in its name.**
+3. ⚠ **The obvious hardening would have broken honest refusals.** `REFUSED` / `UNMEASURABLE` /
+   `NOT_RUN` carry `scored_against: None` deliberately; requiring a corpus on every verdict turns a
+   refusal into a parse error and destroys the reason the caller needed.
+4. ⭐ **The client intake portal was designed, and the measurement reframed it.**
+   `aldc-launchpad/docs/evidence/gep-intake/` already holds **36 triaged client requests, 21
+   UNDERSPECIFIED (58%), 25 with a drafted `question_for_client`, 9 drafts each with a
+   `blocking_question`, 0 with a surface to answer in.** Nothing in the wiki pointed at that store.
+   The portal is a render target for a populated question store, not a new questionnaire. Spec at
+   `agent-factory/docs/specs/client-intake-portal.md`; readout published.
+5. ⭐ **The form already exists as a dataclass** — `ConnectorTarget`'s `# canary expectations` block
+   is what A9 reads its meaning from, so a client's answers compile into the assertions the connector
+   is certified against.
+6. ⚠ **Two boot-prompt premises corrected.** `artifact.yaml`'s `decisions`/`change_requests` are
+   **in use** (2 of 2 tickets, 8 decisions; GP-199's names the approver, channel and date), not
+   unused; and the artifact gallery holds **26**, not 24.

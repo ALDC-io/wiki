@@ -3,7 +3,7 @@ tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
 sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21, Navira live-data-model + ME/Agency integration 2026-06-18, Agentic Power BI docs pointer 2026-08-23 (UNREAD)]
 created: 2026-04-16
-updated: 2026-08-23
+updated: 2026-08-29
 ---
 
 # Power BI
@@ -269,6 +269,19 @@ design premises.
 ⚠ **This repo is Microsoft's documentation, not a library we can depend on.** Its value is
 intelligence about what the platform will do for us, so treat the save as research input, not a
 technical dependency.
+
+### The blocking contract now exists (2026-08-23)
+
+The "blocked on a non-existent contract" premise above is superseded. `factory/pbi_contract.py` in
+[[agent-factory]] ships the **Power BI GreenContract**, M1 through M12, mirroring the
+connector-migration GreenContract one layer up — built deliberately *before* any Power BI agent
+exists. Same rendered-surface lesson this page already carries from GP-293/GP-318 (stale
+`dataset_name` passing DAX parity while every visual errors; false zeros where the source reports
+nothing), now stated as an executable contract rather than a postmortem: two of the twelve
+assertions — every visual paints, every slicer responds — are declared even though no XMLA/DAX
+instrument can observe either, and default to `Unmeasurable` rather than being silently dropped, so
+an estate with no renderer wired reports "did not look" instead of a false PASS. See
+[[agent-factory]] §"The Power BI GreenContract" for the full assertion list.
 
 ## See Also
 

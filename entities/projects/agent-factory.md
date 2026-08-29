@@ -1,9 +1,9 @@
 ---
-tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research]
-aliases: [Agent Factory, GreenContract, Zeus Pantheon Suite, readiness gates]
-sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, prefect-connectors/orchestrator/data/audits]
+tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
+aliases: [Agent Factory, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
+sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits]
 created: 2026-08-21
-updated: 2026-08-23
+updated: 2026-08-29
 ---
 
 # Agent Factory
@@ -723,6 +723,360 @@ wearing a better answer.
 
 **Report the outcome honestly** — *substance confirmed, precision off* is a publishable result.
 
+## R16 — the decision review that found a live-broken gate hiding in a Python string literal (2026-08-23)
+
+`docs/research/answers/R16-answer-decision-review-and-order.md`. Attacked the roadmap's eighteen
+authored actions (not the field) and cites file+line throughout. Headline: **the "0 of 15
+dimensions" figure quoted in four documents is not stale, it is wrong, and the instrument that
+produced it can never say otherwise.**
+
+`factory/readiness.py:870` built its regex as `f"\x08{d}\x08"` — an f-string missing the `r` prefix,
+so Python resolved `\b` to a literal U+0008 backspace before the pattern was compiled. A backspace
+cannot occur in Python source, so the pattern can never match and the gate can only ever return
+`0 of 15` and FAIL. With the intended word-boundary regex the true value is **6 of 15** — and the
+comment three lines above the bug (`readiness.py:857-862`, *"# we have these"*) already names the
+six correct dimensions. The instrument disagreed with the comment sitting directly above it and
+nobody had checked. The identical bug sits in `scripts/file_answers.py:74`.
+
+⛔ **All three of the roadmap's gate-linked actions are wired to gates that cannot decide them**,
+despite `roadmap.py:19-22`'s own claim that a gated action's status is `MEASURED` rather than
+`AUTHORED`. a8 ("containerise agent execution") is gated on `isolated`, which only checks an env var
+is set and a client class is defined — set the var, add the class, and a8 renders SHIPPED with zero
+agents in containers. a10 ("restate the unattended goal as a 30–45 min run") is gated on `finishes`,
+which counts completions with no duration term anywhere — a10 is an action to change the gate,
+gated on the unchanged gate. a16 is gated on the broken `version` probe above.
+
+Other findings worth carrying forward: **a14 ("build the notification channel first") is refuted by
+both passes that landed after it was written**, and neither refusal reached `SYNTHESIS.md` despite
+R14 being named there five times — its "three passes and one measurement agree" citation collapses
+two measurements with different verdicts (four agents blocked on an unread question = PROVEN
+absence; two PRs waiting 6–9 days = whether GitHub ever notified anyone was never checked) into
+one. **The eval corpus has exactly one file** (`evals/corpus/windsorai-2026-08-20.json`) and none of
+the eighteen actions names expanding it, despite three separate passes citing the ≥29-case
+requirement and moving on. R16 independently re-derived the `/finish`-button defect covered below.
+
+R16's own epistemic flag is worth keeping: it is a Claude subagent running inside this repo on this
+estate's own conventions, so *"every pull is toward agreement"* — it compensated by forming a
+verdict from the cited source before reading what the synthesis concluded from it.
+
+## R17 — the external field survey, and the one control an agent cannot prompt its way around (2026-08-23)
+
+`docs/research/answers/R17-answer-data-engineering-external-survey.md`. Five parallel lanes, ~196
+searches, **38 citations independently verified against primary sources — 33 confirmed exactly, 5
+corrected** rather than silently promoted (e.g. a CodeCRDT abstract read by an earlier pass as a
+null result in fact reports "+21.1% on some tasks, −39.4% on others" with 5–10% semantic conflict
+rates).
+
+**Executive answer: build the Snowflake grant envelope; do not raise lane concurrency.** One role
+per lane, `USAGE` + `CREATE TABLE`/`CREATE VIEW` on exactly one managed-access schema, owning
+nothing in production, no policy object, `DEFAULT_SECONDARY_ROLES = ()`, a network policy, a
+resource monitor per reader account. Reasoning: in Snowflake *"unless allowed by a grant, access is
+denied"* and no super-role bypasses authorization — **a GRANT is the only control in the whole
+survey an agent cannot ignore by ignoring its prompt.** Every dbt-side control (`--target` prefixes,
+`--defer`, naming conventions) is an instruction living in a repo the agent can edit.
+
+⛔ **The concurrency ceiling is a theorem, not a preference — confirmed, with a correction to the
+framing.** Under a fixed conflict graph the instantaneous parallelism ceiling is the maximum
+independent set; no coordination topology enlarges it, because a known static graph with
+homogeneous agents leaves nothing to discover. But the file-level conflict graph is *coarse-grained
+locking* — it over-approximates real conflict while under-counting semantic conflict to zero, "the
+worst possible error profile." Field data: at 22,000 developers over two years, throughput rose
++33.7% while median PR review time rose +441.5% and no-review merges rose +31.3% [Faros, verified].
+**Raising lane concurrency before the evidence gate is sublinear reduces safety, because a
+saturated gate does not present as a queue — it presents as a bypass.**
+
+⭐ **Clone-per-agent does not lift the 3-lane cap — it swaps one conflict class for three.** It
+removes exactly the class the file-conflict graph already catches cheaply (the physical write
+collision), and adds three the graph has no representation for: a shared warehouse queue (lanes
+starve rather than corrupt each other past `MAX_CONCURRENCY_LEVEL=8`, and a timed-out validation
+reports a false negative), a shared name-and-manifest space (two lanes can share zero files and
+zero rows and still both resolve `ref('dim_customer')` to the same physical relation), and a shared
+clone-provenance surface (streams/pipes/external tables silently absent from a clone, policies that
+can point outside it, one field report of "186 of 280 views had hardcoded production references"
+after cloning). And a clone of a **share** does not degrade, it does not exist — imported databases
+cannot be cloned or Time-Travelled, so any lane touching share-consumed data has no isolation story
+at all. Cloning is still worth doing (near-free — cloud-services metadata, billed only above 10% of
+daily warehouse usage; the real cost driver is the 60-second warehouse-resume minimum, not clone
+count) — it just will not be the thing that removes the cap.
+
+⚠ **The 41.7% cross-agent conflict rate this estate cites is a verified external measurement and
+was never claimed as an internal one.** R5 always attributed it correctly to arXiv 2607.04697v2 (a
+corpus of 33,596 agent PRs); R17 confirmed the figure verbatim against the paper. R18, below, found
+the attribution had drifted downstream into four places that now read as if it were measured here.
+
+## R18 — the factory audits itself, and finds its own ledger's citations have drifted (2026-08-23)
+
+`docs/research/answers/R18-answer-our-factory-internal-audit.md`. `STRUCTURE_CRITIQUE`, run
+blind-first against the repo at `feat/readiness-generator @ b46d27d` before opening any prior
+finding, spec, or the R17 answer — where it converged with something found blind, that is credited
+rather than claimed as novel.
+
+**Three of the thirty readiness probes have no reachable PASS path**, confirmed by AST-walking
+every `g_*` probe: `g_failure_is_bounded` (`factory/readiness.py:253-268`) returns `_fail`
+unconditionally with no `_pass` branch reachable; two more at `:543-597` and `:799-806` are the same
+shape. Not new — `F11` on `lane/control-plane` found the identical defect a day earlier by the same
+method, and its fix (`tests/test_readiness_probes_can_pass.py`, `scripts/mutate_readiness_probes.py`)
+exists **only on that branch**. `factory/launch.py`, written on the primary after F11 was filed,
+built its three-level readiness model on top of two of the unfixable probes anyway.
+
+⛔ **All 8 currently-passing gates are declarative, not behavioural** — file-exists, substring
+match, non-empty-list, `git remote` non-empty, regex-in-a-draft. Every gate that measures actual
+behaviour is FAIL, UNMEASURABLE or NOT_RUN.
+
+⭐ **Five of this repo's own finding citations were re-checked line-by-line: substance held in all
+five, precision held in none.**
+
+| Finding | Cited | Actual |
+|---|---|---|
+| F72 | `readiness.py:33` | `readiness.py:35-37` |
+| F72 | `readiness.py:811` | `readiness.py:1033` |
+| F20 | `readiness.py:175` | `readiness.py:204-224` (condition at `:222-223`) |
+| F21 | `readiness.py:188` / `:180-190` | `readiness.py:227-250` |
+| F71 | `local_tracker.py:1181`, "single-threaded `TCPServer`" | `local_tracker.py:2357-2362`, now `ThreadingTCPServer` |
+
+F71's case matters most: its argument against building a threaded broker rested partly on the
+tracker being single-threaded, and by the time R18 checked it no longer was — the recorded
+reasoning needs re-arguing on current grounds, not just a corrected line number.
+
+**The F70 fix (ledger → `findings.d/`) converted a loud merge conflict into a silent semantic
+loss.** `git merge-tree` reports the four lane ledgers merge cleanly, but `factory/findings.py`'s
+`load()` reads the old `docs/findings.md` first, then the fragments, and silently `continue`s past
+any id already seen. Simulated and confirmed: merging `lane/control-plane` would silently drop the
+primary's `F20` and `F21` — the two ADOPTED findings that say a gate which cannot pass is a defect —
+because `lane/control-plane` reuses the same ids for two entirely different findings. **55 findings
+across four unmerged branches are waiting on this**, and nothing in the repo detects a duplicate id.
+
+Also caught live: the `suite` gate returned `FAIL "1 failed, 245 passed"` then, at the same commit
+~8 minutes later, `PASS "246 passed"` — `_suite_fingerprint()` hashes the working tree's bytes, and
+another session's uncommitted edit changed the verdict mid-session. Same defect as F72, on the time
+axis instead of the cwd axis.
+
+## Findings F70–F75 (`docs/findings.d/`)
+
+Filed across the 2026-08-22 three-lane launch and the 2026-08-23 stabilisation/R17-R18 session.
+
+- **F70 — ADOPTED.** A shared `docs/findings.md` cannot survive parallel lanes: three worktrees each
+  read F10 as the last id and independently minted three F11s and three F12s, a merge that would
+  have silently dropped two of each. This is the formal filing of the incident already described
+  above under "the ledger became a directory."
+- **F71 — OPEN.** Fixing the merge collision did not fix the blindness: a fragment written on one
+  lane is invisible to another until both merge — typically after the point where knowing would
+  have helped. Every cross-lane correction that actually landed in time on 2026-08-22 arrived over
+  `SendMessage`, none through the ledger. **Corrected 2026-08-23 by R18** — see above: the tracker
+  stopped being single-threaded the same day, voiding half the recorded argument against a threaded
+  broker. `factory/bus.py` (`.data/bus/`, one append-only file per writer) was built as the other
+  rejected option and argues machine-local is the *correct* design, not a compromise — a live
+  disagreement with F71's own premise, left standing on the record rather than smoothed over.
+- **F72 — ADOPTED.** The board's headline number depends on which directory it's run from.
+  Re-verified independently this session (2026-08-29, see the gotcha below): **10 of 30** from the
+  main checkout, **12 of 30** from `.worktrees/artifact`, same commit.
+- **F73 — ADOPTED.** A claim is an intent, not a process: `finish()` released a lane claim while its
+  session was still alive (idle, not dead), and a relaunch started a second agent in the same
+  worktree — for a period on 2026-08-22 there were three control-plane sessions and two artifact
+  sessions sharing one worktree and branch each. Nothing collided only because the extras were idle.
+  Fixed: liveness now checked against the process table, with a distinct `unverified` verdict when
+  the table can't be read, never collapsed into "nothing running."
+- **F74 — ADOPTED.** A research-answer upload path that worked perfectly reported as broken from
+  outside, because its only diagnostic was `print()` to a server usually started
+  `-WindowStyle Hidden` — a refusal produced no file, no message, no record, so failure and
+  "feature doesn't exist" were indistinguishable from outside. Fixed: every attempt now logs to
+  `.data/answer-log.jsonl` regardless of outcome.
+- **F75 — OPEN.** The important one. Both reconciliation checks (`unsynthesised()`,
+  `unreconciled()`) read green — `[] ['R18']` — immediately before the session that actually read
+  the answers found **R13 run 2 substantially unabsorbed, R14 unabsorbed, and R18 entirely
+  unabsorbed**, with `SYNTHESIS.md` stating twice, in the same document, that R14 "has not run"
+  while R14 had been `ANSWERED` and on disk for hours. Root cause: the checks measure **mention**
+  and **mtime**, not **absorption** — a sentence saying "R14 has not run" *mentions* R14, satisfying
+  the mention check while stating the opposite of absorption, and reconciling one answer clears the
+  mtime signal for every other answer as a side effect. No fix adopted: accept-and-label,
+  self-reported per-answer absorption markers, and tense/negation detection on mentions are all
+  considered and each rated worse than it sounds; tightening the mtime check to per-answer
+  comparison is explicitly refused as "a stricter proxy for the same unmeasured thing." Same shape
+  as the R8 filename-swap defect noted in the Gotchas above, repeating in the same document, after
+  the check written to catch it.
+
+## The Power BI GreenContract — M1 through M12 (`factory/pbi_contract.py`, 2026-08-23)
+
+Mirrors the connector-migration GreenContract for the same reason, one layer up: *"a model an agent
+produces that nothing can check is not a deliverable, it is a liability."* Built **before** any
+Power BI agent exists, per `boot-prompts/power-bi-data-model-designer.md` — the ordering is the
+point.
+
+Twelve assertions, preflight → model layer → consumer layer: rollback captured before mutation (M1);
+target identity by dataset id + environment, never by matching values (M2 — REPORTED in the file's
+own docstring as citing the GEP "Missing COGs" wrong-layer deploy this estate already has a standing
+rule about, and GP-318); every written field appended or prior-asserted (M3 — REPORTED citing a
+GP-318 fix that asserted one field's prior value while blanket-overwriting `Description` and
+destroying 693 characters of unrelated guidance); additive-only manifest, no rename or delete
+because a TOM rename doesn't rewrite dependent DAX (M4); refresh moved data not metadata (M5 —
+REPORTED citing a client model whose last three refreshes were ~0.5s); anchors hold (M6); enumerated
+no-regression (M7); absence renders BLANK never 0 (M8 — REPORTED citing GP-318's B26, 17 months of
+literal $0.00 where the source simply didn't report a value); an independent warehouse-agreement
+instrument (M9); and three consumer-layer assertions.
+
+⭐ **The central design decision: M10 ("every visual paints") and M11 ("each slicer responds") are
+declared even though no XMLA/DAX instrument can make either observation, and default to
+`Unmeasurable` rather than being silently dropped.** The citation, per the file's own docstring
+(REPORTED — not yet a wiki entry of its own): a repoint on ticket GP-293 passed DAX parity while
+every visual rendered "Error loading data" from a stale `dataset_name`. *"A contract that quietly
+drops the two assertions only a renderer can make is a contract that certifies the wrong layer — and
+would have returned GREEN on GP-293 while every visual was broken."* An estate with no renderer
+wired gets `Unmeasurable` for the whole contract — the honest verdict, distinguishing "did not
+observe a failure" from "observed a pass." M12 additionally requires bound reports to be
+**enumerated, never assumed** — on the client's live dataset `66151728`, neither of the two bound
+reports binds a single Sales Measures field even though 38 of 70 guarded measures live there, and a
+naive scan of PBIR's escaped visual JSON returns 0 bound entities (NOT-VISIBLE, not ZERO, unless the
+scan decodes the escaping first).
+
+This generalises the same GP-293/GP-318 lesson [[power-bi]] already records from the consumer-layer
+side, applied here prospectively as a contract rather than retrospectively as a postmortem.
+Cross-linked from that page.
+
+## The tracker as a named surface (`scripts/local_tracker.py`, `python -m factory.local_tracker --serve`)
+
+Eight tabs (`TABS`, `local_tracker.py:93-98`): Gates, Goals, Roadmap, Flow, Lanes, Sessions,
+Research, Handoff. Since 2026-08-23 the server is a `socketserver.ThreadingTCPServer` with
+`daemon_threads = True` (`:2357-2362`) — see the earlier note on what threading silently broke in
+`claims.claim()`. Several buttons carry real server-side effects, not just navigation: `/finish`
+(releases a lane's claim and writes a handoff), `/start/<lane>` (launches a lane), `/research/start`
+(dispatches a research pass, dry-run capable), `/synthesize/start` (dispatches a synthesis pass).
+
+⚠ **`/finish` never calls `factory.finish`.** Re-verified against the current file: the handler
+(`local_tracker.py:2102-2116`, out of 15 `factory` modules imported at `:39-60`) calls
+`ho.write_lane_handoff()` then `claimlib.release()` only — `factory.finish` is not among the
+imports. Closing a lane through the UI therefore writes no `.data/runs.jsonl` row, pushes nothing,
+and announces nothing on the bus, even though `factory/finish.py` exists specifically to guarantee
+those three things happen together. First found by R14, independently re-derived by R16 (§2.9,
+calling it the reason "every recorded outcome is FINISHED — three of three, zero REFUSED").
+
+The synthesize button (commits `0c050ec`, `08f2939`) shipped without a re-entry guard: two clicks —
+plausibly two people, or one double-click — could dispatch two synthesis agents against the same
+file. Fixed the same day.
+
+## Three specs written 2026-08-23 (`docs/specs/`)
+
+Explicitly marked in their own text as design proposals to be attacked, not conclusions.
+
+- **`product-end-state.md`** — states, for the first time, what the product is commercially *for*:
+  two products, **Zeus Chat** (enterprise knowledge/institutional memory, MCP-reached) and
+  **Zeus Foundry** (pipeline construction/proof/assurance, the build plane at `:8765`). Flags its
+  own overdue-ness: R8, R13 and R14 were all dispatched *before* this existed — three research
+  passes asked what to build with no statement of what it is for.
+- **`control-room.md`** — answers "should we build a session-manager UI now" with **no, and the
+  reason matters for build order**: of three measured time costs, two are not UI problems at all (an
+  unread question file blocking 4 agents; 5 of 12 sessions sharing one name, fixable with an env
+  var) and only the third (a single-threaded server re-running 30 probes serially, ~19s per load) is.
+  Recommends building in slices, cheapest first, with an explicit stop line before the expensive
+  terminal-grid/attach layer.
+- **`ui-future-features.md`** — the three ideas Paul named in conversation (an agent-team config
+  surface, a config optimizer, requirement-quality tooling), each rated: the team shape is already
+  decided (R2's worker + non-LLM-verifier verdict) and invisible, so a **read-only** config surface
+  is justified now; the optimizer and requirement-quality tooling both carry measured arguments
+  against building yet, stated explicitly rather than deferred to prose.
+
+## Gotchas (added 2026-08-29)
+
+- **The readiness board's headline number depends on which `prefect-connectors` checkout
+  `$PREFECT_CONNECTORS` (or its default sibling-path fallback) resolves to — and that can be a
+  different *branch*, not just a different cwd.** Re-measured directly this session: from the main
+  checkout, `python -m factory.readiness` reads **10 of 30** against the sibling `prefect-connectors`
+  clone; from `.worktrees/artifact`, the same command reads **12 of 30** against
+  `.worktrees/prefect-connectors`, which sits on `lane/control-plane` and carries finished
+  control-plane work the main clone lacks. This generalises `[[F72]]` from cwd to *branch*: two runs
+  from two worktrees are not just measuring "here" vs "there", they can be measuring two different
+  codebases entirely.
+- **The tracker's `/finish` button does not call `factory.finish`.** See above — closing a lane
+  through the UI silently skips the run ledger, the push and the bus announcement that
+  `factory/finish.py` exists to guarantee.
+
+## 2026-08-29 — a defeated promotion gate, and the client intake portal design
+
+**The gate.** `factory/evaluator.py`'s `RemoteVerdict.parse()` believed an unattributed verdict: it
+checked that the attribution *keys existed*, then did `payload.get("evaluator") or {}`. A payload of
+`{"verdict":"PASS","promotable":True,"evaluator":None,"scored_against":None}` parsed as
+`is_pass=True, promotable=True`, summarised itself as *"PASS for r1 - by unidentified, bundle ?"*,
+and `certify --remote` exited **0** on it. Fixed by checking attribution **content**: the evaluator
+block must be a mapping stating a non-empty `identity` and `bundle_sha256`, and any *scored* verdict
+must name a corpus. ⚠ `REFUSED` / `UNMEASURABLE` / `NOT_RUN` are explicitly **exempt from the corpus
+requirement** — the service emits `scored_against: None` for those on purpose, and demanding one
+would have turned an honest refusal into a parse error. **299 tests** (was 287); the 9 new
+parametrised cases were run against the unfixed file first and **8 of 9 failed**. The reusable
+lesson is on [[vacuous-verification]] — *a test that supplies fewer fields than the failure mode
+needs is testing a different property than the one in its name*.
+
+**The client intake portal — design only, nothing built.** Spec:
+`agent-factory/docs/specs/client-intake-portal.md`. Readout:
+https://claude.ai/code/artifact/0b01e843-cb59-4fdc-bee9-cecfbb0d1909
+
+Paul's three decisions this session: **internal now, client-facing path designed in** (so §7 of
+`docs/specs/product-end-state.md` is *deferred, not resolved*); **contract-authoring first**, with an
+assisted layer so a client is never asked to invent an answer; and answers land in an **internal
+ticket in ALDC's own UI**, which then creates a linked Jira issue — our record is the original, Jira
+a projection.
+
+⭐ **The measurement that reframed the build: the questions already exist.**
+`aldc-launchpad/docs/evidence/gep-intake/` holds a machine-readable triage of one real client's
+request sheet — **36 rows, 21 UNDERSPECIFIED (58%), 25 already carrying a drafted
+`question_for_client`, 9 drafts all carrying a `blocking_question`, and 0 with a surface the client
+can answer in.** Nothing in this wiki pointed at that store before today. So the portal is a
+**render target for a question store that exists and is populated**, not a new questionnaire —
+building it blank would rebuild the finished half. Regenerate:
+
+```bash
+cd aldc-launchpad/docs/evidence/gep-intake
+python -c "import json;d=json.load(open('triage.json'));r=d['rows'];print(len(r), d['counts'], sum(1 for x in r if str(x.get('question_for_client') or '').strip()))"
+```
+
+⭐ **And the form already exists as a dataclass.** `ConnectorTarget` carries a block commented
+`# canary expectations` — `required_keys`, `key_column`, `primary_key`, `non_null_positive`,
+`date_column`, `run_date`, `expect_rows`, plus `allowed_tenants`/`tenant_column` — and **A9 reads its
+entire meaning from it**. "Which markets must all appear?" *is* `required_keys`. So the client's
+answers compile directly into the assertions the connector is certified against, closing design
+alignment to verified delivery in one object. **Generate the form from the dataclass, never by hand**
+— the same rule `factory/board.py` states about boards.
+
+⛔ **The load-bearing safety rule, and it is already proven in this repo.** A9's own comment records
+that *"with this list empty, A9 passed a partial extraction that had dropped an entire account"*. An
+unanswered question and a declared "no constraint" both produce an empty list, so every portal
+control is **three-state** — declared / declared-not-applicable / **unanswered, which emits no value
+at all** and yields `UNMEASURABLE`. Every cell also carries provenance, and only two of four values
+compile: `CLIENT-DECLARED` and `CLIENT-CONFIRMED` become live assertions; `PROPOSED-UNANSWERED`
+(drafted by probe, chat or precedent) becomes `NOT_RUN`; `INFERRED` becomes `UNMEASURABLE` until
+confirmed. **A proposal is never an answer** — that single distinction is the entire safety property
+of the assisted layer, without which the portal manufactures the client's consent and then certifies
+against it.
+
+Boundary inherited from `evaluator.py`: **the client authors the expectation and never the verdict.**
+There must be no field anywhere in the portal through which a client can influence their own grade.
+Contracts freeze and hash as v*n*; a run certified against v3 while the client is on v5 gets its own
+verdict, `CERTIFIED-AGAINST-SUPERSEDED`, rather than a pass.
+
+**Build order.** Slices 1 (one answer → one assertion, proved able to FAIL) and 2 (render the 25
+existing questions) are **unblocked and need nothing that does not already exist**. Slice 3
+(probe-grounded feasibility, with `AVAILABLE` / `ABSENT` / `UNPROBED` never collapsed) is ⛔ **blocked
+on running real connectors** — `evals/corpus/` holds exactly one fixture, `windsorai-2026-08-20.json`,
+and synthesising more would make every feasibility answer a `PROXY` wearing a measurement's clothes.
+
+⛔ **Tripwire to keep §7 from being crossed by accident:** the moment anyone proposes sending a portal
+link to a client, that reopens the internal-vs-product question — it is an architecture change, not a
+deployment task. Write that sentence beside the code.
+
+**Honesty note.** The portal attacks the **client-response** bottleneck (the GEP domain). It does not
+attack connector delivery, whose measured shape is different — one migration was 21.6 min of active
+stage time inside 8 h 20 m of wall clock, 4.3%. Two domains, two bottlenecks.
+
+### ⚠ Two corrections to the 2026-08-29 boot prompt
+
+1. **`artifact.yaml`'s `decisions` and `change_requests` are NOT unused.** Measured across
+   `clients/GEP/tickets/*/artifact.yaml`: **2 of 2 tickets carry populated `decisions` (8 in total)**
+   and 1 carries a change request. GP-199's entry reads *"Client (Justin Shuster) approved Approach A
+   via email 2026-05-01"* — it **already records who approved, through what channel, on what date**.
+   The portal therefore does not invent decision capture; it makes that line the product of a click
+   rather than a transcription. Also **2 tickets, not 3**.
+2. **26 artifacts in the gallery, not 24** (`aldc-launchpad/docs/artifacts/REGISTRY.md`). The
+   8-with-no-source and 13-orphaned figures are confirmed. Giving artifacts an engagement to belong
+   to is the cheapest fix on the table for both.
+
 ## See Also
 
-[[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]]
+[[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]] · [[power-bi]]

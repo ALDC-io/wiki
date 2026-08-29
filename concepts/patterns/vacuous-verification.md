@@ -3,7 +3,7 @@ tags: [pattern, verification, evidence, agents, review, quality, claude-code]
 aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
 sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md]
 created: 2026-08-14
-updated: 2026-08-27
+updated: 2026-08-29
 ---
 
 # Vacuous Verification
@@ -154,6 +154,53 @@ the writer additionally scans the **whole serialized document** for every litera
 raises. The guard-that-can-fire was proved by making it fire, which is the [[inquest-bug-resolution]]
 discipline applied to a control rather than a defect.
 
+## 2026-08-29 — the fourth shape: a test that pins a weaker property than its own name
+
+[[agent-factory]]'s `factory/evaluator.py` opens with an explicit guarantee:
+
+> *"A verdict is accepted only if it names the evaluator identity, the evaluator bundle hash, and
+> the corpus it was scored against."*
+
+`RemoteVerdict.parse()` enforced it by checking that the attribution **keys existed**, then read
+their values with `payload.get("evaluator") or {}`. Reproduced verbatim:
+
+```
+RemoteVerdict.parse({'verdict':'PASS','promotable':True,'evaluator':None,'scored_against':None})
+  is_pass    : True
+  promotable : True
+  summary    : PASS for r1 - by unidentified, bundle ?
+```
+
+`certify --remote` exits **0** on that, and anything on a socket can emit it. This is the promotion
+gate for the whole factory.
+
+⭐ **The part that generalises is not the missing null check — it is the test.** A test named
+`test_an_unattributed_verdict_is_not_believed` existed and passed, and it **omitted the attribution
+keys entirely**. It therefore pinned *presence* while the guarantee it is named for is about
+*content*, and could not express the payload that defeats the gate. Rewritten as 9 parametrised
+cases supplying the keys with null, empty, whitespace and wrong-typed values, **8 of 9 failed
+against the unfixed file** — the ninth was the single case the old test already covered.
+
+> **A test that supplies fewer fields than the failure mode needs is testing a different property
+> than the one in its name.**
+
+That is a fourth shape on this page. The earlier three are an **empty verdict**, a **gate that
+cannot fire**, and an **inert control**; this is a *guarantee whose test cannot express its own
+violation*. All four survive a review that reads the assertion and the check side by side, because
+in every one of them both are correct — the gap is in what the test never supplies.
+
+**Detection.** For any test named after a guarantee, construct the **cheapest payload that satisfies
+the check and defeats the guarantee**. If that payload is not in the test, the test is not pinning
+the guarantee. Prefer parametrised cases varying **one field at a time**: the null case, the empty
+case and the wrong-type case are three different bugs, and one of them is usually live.
+
+⚠ **The counterpart trap on the fix side.** The obvious hardening — *require every attribution field
+on every verdict* — would have broken the service's honest refusals, which emit
+`scored_against: None` on purpose for `REFUSED` and `UNMEASURABLE` because nothing was scored. A
+strictness that turns an honest refusal into a parse error destroys the reason the caller needed.
+The rule that survives both is **verdicts that were scored must name their world; verdicts that were
+never scored must not be required to invent one.**
+
 ## See Also
 
 - [[agent-session-completion-signals]] — the sibling failure: content genuinely PARTIAL while every instrument reports arrival (a proxy for done-ness fails toward "done")
@@ -165,3 +212,4 @@ discipline applied to a control rather than a defect.
 - [[github-actions]] — the green run that published nothing
 - [[orchestrator]] — `trigger_and_wait` swallows exceptions; assert on the absence of the specific refusal
 - [[prefect-connectors]] — where the reference case was produced
+- [[agent-factory]] — the 2026-08-29 promotion gate, and the intake portal whose whole safety property is that an unanswered question stays unanswered
