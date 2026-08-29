@@ -413,6 +413,59 @@ Source: Confluence TECH/1777106945 (Steven Offboarding).
 | **User invite flow** | Known issues with new user password-setting. After a role change, user settings may behave unexpectedly — ask the user to log out and back in. Role changes auto-disable notification settings not available to the new role but never auto-enable anything. |
 | **Cosmos document structure** | Flights and jobs are stored as generic "Application" JSON documents. Schema changes must be carefully managed. The difference between a flight and a job is encoded via an ID linking to a Metadata document for the respective form/table. |
 | **Core API vs Dax API split** | The boundary is informal. All new features should go to the Dax API. General calls (auth, user info, document retrieval) go through Core API because they are generic ALDC logic. Custom logic (exports, calculations, metrics) goes through Dax API. Ideally everything would flow through the Dax API which can call Core internally. |
+| **The app renders in an iframe on its OWN subdomain** | Added 2026-08-28. The Eclipse shell at `<client>.eclipse.aldc.io` embeds Flight Check in an **iframe served from `dax.<client>.eclipse.aldc.io`**. The top-level document contains no table and no buttons — browser automation and DOM queries must target the frame. Measuring the shell host instead of the `dax.` host produced an entirely wrong conclusion on FU92-428. It also has a **security consequence** — see below. |
+| **Selection-size ceiling on exports** | See § *Export request-size ceiling*. Any UI that sends a list of ids must POST them. |
+
+### ⚠ Export request-size ceiling — never put an id list in a query string
+
+**Measured on FU92-428, 2026-08-28.** Putting every selected flight id into a **GET query string**
+makes "select all" on a large job build a request whose total header list exceeds the server limit.
+The response is **`431 Request Header Fields Too Large` with an EMPTY body**, and the client's
+`response.json()` then throws on the empty body — so the user sees only a generic
+"Export generation failed" toast with nothing to diagnose.
+
+Measured inside a real authenticated session (the app's own origin, cookies and HTTP/2):
+
+| n flights | URL chars | Result |
+|---|---|---|
+| 113 | 4,552 | reaches the app |
+| **114** | **4,591** | **431, rejected before the app** |
+
+**The ceiling is not a fixed flight count.** The cap is on the *total header list*, not the URL:
+an unauthenticated probe puts the crossover at n≈133, a real session at **n=114**, because cookies
+and browser headers consume roughly 800 flights' worth of budget. So it **varies per user and per
+session** — a bigger JWT fails sooner, which is why the bug looks intermittent.
+
+Three lessons worth more than the bug:
+
+1. **Never measure a consumer-layer limit from outside the consumer's session.** An anonymous probe
+   understates it and will tell you the code is fine.
+2. **Raising a server-side limit is not a fix** — it is one claim-size increase away from failing again.
+   `flight_ids` must travel in a **POST body**. The multi-job export already did this and was never
+   reported broken.
+3. **The lesson did not travel across two functions in one file.** `flight-check` `da54d4f`
+   (2026-01-07) moved the multi-*job* export to POST, saying so explicitly in its commit message;
+   `0a6b895` (2026-01-28) then added per-*flight* selection to the single-job route as a GET query
+   string, reintroducing the identical hazard three weeks later. Latent for 7 months, surfaced only
+   when jobs grew past ~114 flights.
+
+Related code gotcha: `dax_api/lib/string.py` `split_ids("")` returned **`[""]`** — a *truthy* list
+holding an id matching nothing — which defeated `if params.flight_ids:` in `jobs/routing.py` and made
+"export all flights" raise `KeyError`. `"".split(",")` is `[""]`, not `[]`; guard for it whenever a
+delimited string becomes a list.
+
+### ⛔ Security — the `dax.` subdomain is not covered by the shell's auth
+
+**ALDC-1064, found 2026-08-28.** Because the app is served from `dax.<client>.eclipse.aldc.io`, and
+the Eclipse shell's auth middleware appears not to cover that host, its Next.js API routes are
+reachable **with no session**. The routes attach `DAX_API_MASTER_TOKEN` themselves
+(`lib/dax/apiUtils.ts:38`), making them a **confused deputy** — authenticating *to* the backend while
+never authenticating the *caller*. The backend's own function-key auth is intact, which is exactly why
+the gap is invisible from the backend side.
+
+Blast radius across routes and other tenants is **deliberately unmeasured** — sizing it means pulling
+more live client data, which is a human's decision. **Pull the host's access logs before closing the
+hole**, or "has this been exploited" becomes unanswerable.
 
 ---
 

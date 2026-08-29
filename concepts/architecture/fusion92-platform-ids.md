@@ -104,6 +104,27 @@ reads the platform-ID fields at all: `dax_api/jobs/lib/calculations.py:247`
 `is_direct = any(f.source == SnowflakeSource.direct for f in snowflake_metrics)`, fed by rows keyed on
 `FLIGHT_ID`. Editing `calculations.py` ships a no-op that reads as a fix.
 
+#### ✅ Resolution — the explicit signal exists now (`manual_metrics_entry`)
+
+The "new explicit signal" predicted above was built on 2026-08-28: a `manual_metrics_entry: bool`
+on the flight document (`workflows` @ `667355a`, **not deployed**). When set, direct rows are dropped
+in `build_metrics_table` *before* the source-priority ladder runs, so the flight behaves exactly like
+one that never matched direct spend and falls through to Smartsheet → mixed → Dax.
+
+Two things worth carrying forward:
+
+- **⭐ No warehouse change was needed.** The flag lives on the Cosmos flight document and is read by
+  the DAX API, which already holds it. So the 677-flight `shared_dim_flight.sql` change came *off*
+  the critical path entirely. When a derived value needs an override, check whether the override can
+  live at the layer that already has the document before touching the shared dimension.
+- **Two code paths decide the label, not one.** `build_metrics_table` serves Job Details;
+  `build_grouped_metrics_table` serves the **Job List** from pre-aggregated rows. Guarding only the
+  first makes a flight read as manual on one screen and "API Direct" on the other. Any change to
+  source classification must touch both.
+
+Still blocked on product decisions (who may set it; what happens to already-matched metrics; whether
+it is reversible), so there is no UI yet.
+
 ### Freshness — an ID change is not visible immediately
 
 Platform-ID edits reach the warehouse only via the sync timers, which run **hours 10–23 UTC only**
