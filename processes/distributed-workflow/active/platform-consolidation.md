@@ -144,11 +144,30 @@ predicted. **The cause of the 1-point difference is still unknown.** Measure it;
 the hypothesis.
 
 ⭐ **The gate is a live instance of the defect this repo is named for.** It is green by coincidence,
-not by measurement — it would print *"pushed to origin"* with every commit unpushed. As of
-2026-08-29 it is sharper still: `agent-factory`'s `origin` carries the push URL
-`no-push://aldc-io-disabled` (a deliberate guard, see *Gotchas*), so the durable gate now reports
-**"pushed to origin, personal"** while naming a remote it is structurally unable to push to. See
-[[../../../concepts/patterns/vacuous-verification]].
+not by measurement — it prints *"pushed to <remote>"* whenever `git remote` is non-empty, and would
+print it with every commit unpushed. See [[../../../concepts/patterns/vacuous-verification]].
+
+⚠ **The remote setup changed twice on 2026-08-29 — this paragraph has already been corrected once.**
+`agent-factory` pushes to a **personal** remote; `origin` (ALDC-io) first had its push URL disabled
+(`no-push://aldc-io-disabled`) as a deliberate guard, and was then **removed entirely** at Paul's
+instruction. Measured after each change:
+
+| Remotes | `g_repo_is_durable()` headline |
+|---|---|
+| `origin` (push disabled) + `personal` | `pushed to origin, personal` — naming a remote it cannot push to |
+| `personal` only *(current)* | `pushed to personal` |
+
+The gate's verdict was `PASS` in both, and would have been `PASS` with nothing pushed in either.
+**The verdict never moved; only the sentence did** — which is the whole point.
+
+⛔ **Removing `origin` broke a hardcoded default, and it failed in the safe direction.**
+`factory/finish.py` ran `git push -u origin <branch>`, so every lane close would have pushed to a
+remote that no longer exists. The push-failure path refuses, records `REFUSED` and deliberately does
+**not** release the claim — so nothing would have been lost, but no lane could ever close, and the
+symptom would have read as a push problem rather than a config one. Fixed in `d2c5d4e`: the remote
+is now resolved from the checkout (`remote.pushDefault`, else the only remote, else `origin`), with
+5 tests that all fail against the hardcoded version. **A remote name is a fact about the checkout,
+exactly like the branch and the score.**
 
 **State the branch beside any figure** — and note that "and ideally the push state" was advice this
 gate cannot act on.
