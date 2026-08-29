@@ -17,6 +17,7 @@ This wiki exists so that any Claude Code session pointed at this directory can i
 wiki/
 ├── CLAUDE.md              # THIS FILE — read first, always
 ├── index.md               # Master catalog — search here to find pages
+│                          # (artifact registry lives in aldc-launchpad/docs/artifacts/REGISTRY.md)
 ├── log.md                 # Append-only operation log
 ├── sources/               # RAW SOURCES — immutable, never modify
 │   └── obsidian-import/   # Paul's Obsidian notes (original form)
