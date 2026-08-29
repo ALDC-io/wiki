@@ -131,6 +131,43 @@ Write: `POST https://zeus.aldc.io/api/store`, `X-API-Key: <Paul's key>`,
 `{"content": "...", "source": "cce_success_log|cce_failed_approach|cce_decision_log", "metadata": {"user": "paul"}}`.
 Do not pass `tenant_id` (inferred from key); `metadata.user="paul"` is required for leaderboard attribution.
 
+## ⛔ The local `ccx` MCP goes anonymous under concurrency — and reports "connected" (2026-08-29)
+
+**Symptom.** Every `cce_*` MCP tool returns
+`{"error": "No active session for session_id='' user_id='anonymous'"}` while the SessionStart hook
+prints **"✓ Zeus Memory (ccx) connected"** and `docker ps` shows the container `Up (healthy)`. Nothing
+is being stored, and nothing says so.
+
+**It is not the API key.** Verified by running the MCP handshake three ways — no header, with
+`ZEUS_API_KEY`, with `ZEUS_ALDC_API_KEY` — and getting the *identical* anonymous error each time. A
+bearer token is not how this server identifies a caller.
+
+**Root cause.** Identity comes from an **`X-CCE-User` header sent at MCP `initialize`**
+(`src/ccx/mcp/server.py`, and `tests/test_mcp.py::test_mcp_initialize_anonymous_without_header` says
+so outright). The `ccx` entry in `~/.claude.json` carried `type` and `url` and **no headers at all**.
+When the header is absent there is a dev-mode fallback that adopts the user *only if exactly one hook
+session is active*, or exactly one started after the MCP session — so it works on a single-session
+machine and **fails silently the moment concurrency grows**. On 2026-08-29 there were 17 live sessions
+across interactive, cloud and Remote Control; neither branch can ever match.
+
+**Fix.**
+
+```json
+"ccx": { "type": "http", "url": "http://localhost:7432/mcp",
+         "headers": { "X-CCE-User": "<CCE_USER from repos/ccx/.env>" } }
+```
+
+Also set `CCE_USER`, `CCX_URL` and `ZEUS_TENANT_ID` in `~/.claude/settings.json` `env` — the seven
+`ccx-*` hooks otherwise fall back to `getpass.getuser()`, which is a different string from the ccx
+username. **MCP config is read at session start, so it takes effect on the next session, not the
+current one.**
+
+⭐ **The general lesson.** This is a measurement gap wearing a healthy instrument's clothes — the exact
+ZERO-vs-NOT-RECORDED distinction the evidence rules exist to protect, failing inside the tool meant to
+preserve sessions. **A readiness probe that reports on reachability rather than on identity will call a
+dark instrument healthy.** Do not treat "✓ connected" as evidence that memory is being written; call a
+`cce_*` tool and check the returned `user_id`.
+
 ## See Also
 
 - [[cce]] — uses Zeus Memory as its backend for cross-session knowledge persistence

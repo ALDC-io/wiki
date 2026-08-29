@@ -1271,3 +1271,140 @@ Source: conversation 2026-08-27/28; `aldc-launchpad` commits `a3282e0`, `0da4811
 - **Updated** `concepts/architecture/fusion92-platform-ids.md` — resolution section for FU92-429: the "new explicit signal" the page predicted now exists (`manual_metrics_entry`). Two carry-forwards: **no warehouse change was needed** because the flag lives on the document the API already holds, which took the 677-flight `shared_dim_flight.sql` change off the critical path; and **two code paths decide the label** (`build_metrics_table` for Job Details, `build_grouped_metrics_table` for the Job List) — guarding one makes the two screens disagree.
 - **Created** `processes/operations/browser-render-validation.md` — the `browser_ops` CDP harness runbook. Why attach rather than automate a login (the Eclipse session cookie is `httpOnly` and domain-scoped, so attaching means no credential is ever handled); the **Chrome 136 `--user-data-dir` trap**, measured back-to-back; calibrating with a deliberate negative control; and the two evidence-leak traps caught before staging — `record()` storing success payloads, and `refuseDownloads()` logging a `data:` URL that *is* the entire file.
 - **Updated** `index.md` — new operations page, plus the FU92 gotchas appended to the DAX Media App entry.
+
+## 2026-08-29 — agent-factory: closing the ingest gap since "2026-08-23 evening" (R16, R18, F70-F75, tracker, specs)
+
+**Ingest** (from `C:\Users\PaulRussell\repos\agent-factory` on `feat/readiness-generator`, HEAD
+`f66c71c`). The 2026-08-23-evening entry above already covers R17, the Power BI GreenContract's
+existence, and the synthesize-button re-entry bug — this ingest fills the rest of the gap between
+that entry and HEAD without restating it.
+
+Updated `entities/projects/agent-factory.md` (`updated:` bumped to 2026-08-29):
+- **R16** — the decision review that found `factory/readiness.py:870`'s regex held a literal
+  backspace byte (un-prefixed f-string `\b`), making the "0 of 15 dimensions" figure quoted in four
+  documents not stale but structurally incapable of ever passing (true value 6 of 15); all three of
+  the roadmap's gate-linked actions wired to gates that cannot decide them; a14 ("notification
+  channel first") refuted by two later passes that never reached `SYNTHESIS.md`.
+- **R17, additions beyond the 08-23 entry** — the concurrency ceiling is a proven theorem (maximum
+  independent set), not a preference, and raising it before the evidence gate is sublinear reduces
+  safety because a saturated gate presents as a bypass, not a queue; clone-per-agent removes one
+  conflict class and adds three the file-conflict graph can't represent.
+- **R18** — new page content. Internal self-audit, blind-first: 3 of 30 readiness probes have no
+  reachable PASS path (all 8 currently-passing gates are declarative, not behavioural), and 5 of the
+  repo's own finding citations had drifted line numbers (substance held in all five) — including
+  F71's "single-threaded tracker" premise, which stopped being true the same day.
+- **Findings F70-F75** — summarised each with STATUS from `docs/findings.d/`. F70/F73/F74 ADOPTED
+  and fixed. **F71 and F75 flagged OPEN.** F75 is the one worth remembering: `unsynthesised()` and
+  `unreconciled()` both read green over three unabsorbed research answers because they measure
+  *mention* and *mtime*, never *absorption* — a sentence saying "R14 has not run" satisfies the
+  mention check while stating the opposite of absorption.
+- **The Power BI GreenContract, in full** — all twelve assertions (M1-M12) summarised with their
+  citations (GP-293, GP-318), where the 08-23 entry only noted M10/M11 and that the file has no
+  tests yet.
+- **The tracker as a named surface** — 8 tabs, now a `ThreadingTCPServer`; and ⚠ **`/finish` still
+  does not call `factory.finish`** (verified against current `local_tracker.py:2102-2116` — only
+  `write_lane_handoff()` and `claimlib.release()` run, so closing a lane via the UI writes no run
+  ledger row, pushes nothing, announces nothing on the bus).
+- **Three specs** (`docs/specs/product-end-state.md`, `control-room.md`, `ui-future-features.md`),
+  each summarised — commercial framing (Zeus Chat vs Zeus Foundry), the control-room UI-vs-not
+  breakdown, and the three named future features each rated against measured evidence.
+- **New gotcha, independently re-measured this session**: the readiness board's number depends on
+  *branch*, not just cwd — ran `python -m factory.readiness` myself from both the main checkout and
+  `.worktrees/artifact`: **10 of 30** vs **12 of 30**, same commit, because the worktree's sibling
+  `prefect-connectors` resolves to `lane/control-plane` (has finished control-plane work) while the
+  main checkout's sibling does not. Generalises `[[F70]]`/`[[F72]]` from cwd to branch.
+
+Updated `entities/tools/power-bi.md` (`updated:` bumped to 2026-08-29) — new section under
+"Agentic Power BI" noting the "blocked on a non-existent contract" premise recorded there is now
+superseded by `factory/pbi_contract.py`, with a cross-link back to [[agent-factory]]'s full M1-M12
+writeup rather than duplicating it.
+
+Updated `index.md` — extended the existing dense [[agent-factory]] entry with the R16/R17/R18/
+F70-F75/PBI-GreenContract/tracker summary above, in the same style as the entry's prior paragraphs.
+
+**Not ingested / left for a future pass**: `docs/research/SYNTHESIS.md`'s R17 reconciliation itself
+(the "overturns four things" framing) — the log's 2026-08-23-evening entry already summarises R17's
+substance and the SYNTHESIS reconcile did not add new claims beyond it; `R16-outside-evidence-lane.md`
+(a second R16 companion file, not read this pass); and per-commit detail on the 144-commit history —
+git log and `docs/findings.d/README.md` remain the source of truth for that. No git commit made in
+either repo this session — wiki changes left in the working tree per standing instruction (Paul
+approves commits himself); the agent-factory repo was only read from, never mutated.
+
+## 2026-08-29 — artifact registry opened: a place published artifacts are recorded and rebuilt
+
+**Why now.** Eight artifacts were published in a single day by at least three parallel Claude
+sessions — Launchpad, The Aura Protocol, Agent Factory, Neurospect Lanes, The Neurospect Estate,
+Wave Zero Board, Council Room, The Readiness Layer — and **no session knew what any other had
+built.** The gallery lists them; nothing said what they were for, where their source lived, or how
+to rebuild one when its numbers drift.
+
+**Built** `processes/artifacts/` — `registry.md` (generated, the thing sessions read),
+`registry.json` (annotations: estate · what · source · rebuild), `live.txt` (the gallery listing
+verbatim), `build_registry.py`.
+
+⭐ **The list is MEASURED, the annotations are ours.** The gallery is the source of truth for what
+exists; it cannot know what an artifact is *for*. Anything in the gallery with no annotation renders
+as **UNANNOTATED** and anything annotated that has left the gallery renders as **ORPHANED** — both
+printed rather than dropped, because a registry that hides its own gaps looks complete and is worse
+than none. First build: **24 in the gallery, 2 annotated, 22 unannotated** — the honest starting
+state. The 22 were deliberately not guessed at.
+
+**Counts carry their regeneration command**, per the CLAUDE.md rule added the same day: the gallery
+cannot be read from a shell, so the refresh is `Artifact action:"list"` → save to `live.txt` →
+`python build_registry.py`.
+
+**Discovery is the load-bearing part** — a registry nobody reads is worse than none. Wired into
+`index.md` (a Published Artifacts section above Action Items) and into `CLAUDE.md`'s structure map
+as "CHECK BEFORE BUILDING A READOUT".
+
+**Standing rule for the `source` field: it must point at a directory in a repo, never at a session.**
+An artifact whose source exists only in a transcript cannot be rebuilt when it drifts.
+
+
+---
+
+## 2026-08-29 — agent-factory absorption backlog, F76, and the Zeus Memory blind spot
+
+**Session:** neurospect-learn checkout, agent-factory workstream. No Jira — Paul: *"this agent factory
+is my own work, so no JIRA tickets yet."* Launchpad commits carry `Ticket: none` deliberately.
+
+**Ingested into:**
+- [[session-contention-and-artefact-homes]] — rule 8 (an artefact's URL may appear in exactly one
+  repo) and a new section on the generated artifact registry.
+- [[zeus-memory]] — the `X-CCE-User` / concurrency failure mode, with the discriminating test.
+
+**What shipped (agent-factory, branch `feat/readiness-generator`):**
+- `00f9620` — `SYNTHESIS.md` §17.9 imported as **19 tickets** (AB-01…AB-19) in the factory's own
+  append-only task store, with `docs/absorption-backlog.md` as their body. The research was done;
+  nothing stood between "we concluded X" and "X got done".
+- `70859de` — **F76**. The premise that the one-file corpus means the eval cannot fail is **false**:
+  `tests/test_connector_contract.py` calibrates all twelve assertions and enforces it with
+  `test_every_assertion_has_been_proved_able_to_fail`. Two things fell out — the README's named gate
+  (`test_eval_can_fail.py`) **never loads the corpus** and proves only the mutation harness, and the
+  README's status block was stale (`PASS (PASS=12)`, not `UNMEASURABLE (PASS=11)`). AB-04 restated
+  from a sensitivity task to a **breadth** task.
+- `1b46fc3`, `359d6c1` — artefact-home bookkeeping.
+
+**What shipped (aldc-launchpad, branch `feature/gp329-adspend-cost-section`):**
+- `b3d197f` — **The Fourth Verdict** readout (`docs/readouts/`, artifact `2ff7c0ae…`). Internal only:
+  it names clients and quotes internal failure history.
+- `0f38350` — registry regenerated: **26 in the gallery · 16 located · 2 probable · 8 with no source
+  anywhere · 13 orphaned · 1 name collision.**
+
+**Corrections earned, worth more than the commits:**
+1. **There is no "the 18-stage build plane."** `orchestrator/pipelines.py` defines **eight** pipelines
+   totalling **65 stages** (migration 18, promotion 14, canary 9, activation 7, credential provision 6,
+   client onboarding 6, parity test 5, infra 0). Seven appear in no readout; the file's own banner
+   comment says "(10 stages)" above a list of eighteen. This premise is repeated across at least six
+   documents and **has not yet been filed as a finding (F77 outstanding).**
+2. **The build is versioned; the run is anonymous.** `blueprint.py` hashes the agent config, but
+   nothing hashes harness version, MCP versions, repo commit, environment, corpus id or contract
+   version. That is AB-08, filed and never built. ⭐ `neurospect-learn`'s rubric layer already solves
+   this shape — version bumps iff `content_hash` changes, and every grade stores the
+   `rubric_version` it was judged against.
+3. **`~/.claude/skills/INDEX.md` had drifted again** — claimed 235 files / 25 invocable, actual
+   **303 / 31**. Regenerated with each count's command beside it, and a CLAUDE.md rule added: a count
+   in a document must carry the command that regenerates it, or not be stated.
+4. **`army/SKILL.md` and `eclipse-app/SKILL.md` have no YAML frontmatter** — registered via their H1,
+   so neither carries a trigger condition and neither fires reliably. `army` is a flagship skill.
+   **Not fixed.**

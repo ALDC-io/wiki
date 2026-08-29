@@ -111,6 +111,42 @@ read data files at import.
 6. **Stage explicit paths. Never `git add -A` in a shared checkout.**
 7. **Killing a PID is not closing a session** — a background session is daemon-supervised and
    respawns with a new PID. See [[resuming-claude-sessions-windows]].
+8. ⭐ **An artefact's URL may appear in exactly one repo.** Added 2026-08-29. The generated registry
+   (`aldc-launchpad/docs/artifacts/REGISTRY.md`) locates each artifact's source by `git grep`-ing
+   every repo for its URL, so a second repo mentioning that URL makes the source **ambiguous, and the
+   registry then picks by path ranking rather than by truth**. Proven the same day: a readout filed in
+   `aldc-launchpad/docs/readouts/` was mis-attributed to `agent-factory/docs/artifacts/` purely
+   because the latter's README carried a courteous "it lives over there" pointer *with the link in
+   it*. Keep the prose pointer; drop the URL; let the registry hold the link.
+
+## The artefact registry (added 2026-08-29)
+
+The placement rules above are now **measured rather than remembered**. `REGISTRY.md` is generated —
+*"Generated. Do not hand-edit."* — by:
+
+```
+Artifact action:"list" scope:"all" limit:50   →  docs/artifacts/registry/live.txt   (verbatim)
+python docs/artifacts/registry/build.py
+```
+
+It reports, per run: how many artifacts are in the gallery, how many have a **located** source (a repo
+references the URL), how many are **probable**, how many have **no source anywhere**, how many are
+**orphaned** (recorded in a repo but absent from the gallery), and any **name collisions**.
+
+Measured 2026-08-29: **26 in the gallery · 16 located · 2 probable · 8 with no source anywhere ·
+13 orphaned · 1 name collision.**
+
+Two standing consequences:
+
+- **An artifact with no source cannot be rebuilt.** Eight are in that state. If one drifts or needs
+  editing, the next session starts from scratch — which is the same failure the three-homes rule
+  exists to prevent, one layer up.
+- **A name collision is a session hazard, not an aesthetic one.** Two artifacts both reading as
+  "agent factory" (`0fdcb1cd…` and `50d3ca62…`) cannot be told apart by a session that was handed
+  only the name.
+
+**Register an artifact by writing its URL into its own source directory's README** — that is the hop
+`build.py` measures. Publishing without doing so produces a sourceless artifact.
 
 ## See Also
 
