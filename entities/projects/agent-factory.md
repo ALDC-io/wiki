@@ -1188,6 +1188,41 @@ plus the line-by-line pricing) and `CIP-09`/`CIP-10` (already built upstream). `
 **RUN-01** — the pass removed a question rather than creating priority work; boot prompt at
 `boot-prompts/build-vs-adopt-2026-08-30.md`.
 
+### The operations UI prompt, rebuilt on the ledger it has to stand on (`docs/FACTORY-UI-PROMPT.md`)
+
+A 58-section "motion-first visual operations UI" brief was assessed and rewritten to 10 sections.
+⭐ **The brief specified a telemetry-rich command centre for a system that emits almost no
+telemetry**, and its own §53 escape hatch — *simulate the events if they do not exist* — made a
+beautiful mock the guaranteed outcome rather than a fallback. Measured 2026-08-29: **no
+`package.json` anywhere** (no React/Next/TS in the repo at all), the entire UI is
+`scripts/local_tracker.py` — **2,575 lines of Python serving 213 inline HTML tags** from a
+`socketserver` — `.data/runs.jsonl` holds **3 rows**, `certified` is `NOT_RUN` with 12 assertions
+uninstrumented, `breadth` is *1 case, 0 strata*, and **the path that actually launches agents records
+nothing**.
+
+⭐ **The sharpest catch: the brief's own metric bar would have reintroduced the aggregation bug the
+build-vs-adopt pass had just documented.** Its §57 principle is excellent (*"activity is not
+success… a finished ticket is not necessarily correct"*) and its §9 gets the four verdicts right —
+then §14/§40 specify `PASS RATE 81%` and `First-pass success 78%`, single numbers that cannot express
+UNMEASURABLE, on the front page of the one product whose thesis is that they must. See
+[[vacuous-verification]]'s fifth shape: six mature tools carry the state and all six destroy it at
+the score.
+
+Four structural changes: a **kill condition** above everything (inspect first; if the event stream
+does not exist, stop and build it, never simulate); **Phase 0 is the append-only event ledger with no
+UI**, because it is the only piece that cannot be reconstructed later and R19's *eligible set* cannot
+be recovered afterwards at all; the **aggregation rule binds every view**; and scale drops from 100
+agents to ~10, since the ceiling is three lanes on one workstation and is a *file* ceiling. The stack
+question is decided rather than delegated — extend `local_tracker.py` with vanilla JS over one SSE
+endpoint, no Next.js, because there is no JS app to reuse and nothing gates dependencies here
+(`BVA-01`). ⭐ **The acceptance test is rewritten so a simulator cannot pass it**, ending: *pointed at
+the factory as it stands today, the UI must look conspicuously unfinished — if it renders as a
+healthy busy command centre it is lying* — and it requires a **negative control**, a test that
+UNMEASURABLE renders distinctly from PASS which fails when the distinction is removed.
+
+⚠ Parallel work: `docs/design/session-ui-and-intake.html` ("Control Room & Intake", 35 KB) was
+created by a concurrent session the same evening. Reconcile before either surface is built.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]] · [[power-bi]]
