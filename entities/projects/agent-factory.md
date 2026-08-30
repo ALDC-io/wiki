@@ -1,9 +1,9 @@
 ---
 tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
 aliases: [Agent Factory, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
-sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits]
+sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits]
 created: 2026-08-21
-updated: 2026-08-29
+updated: 2026-08-30
 ---
 
 # Agent Factory
@@ -1076,6 +1076,117 @@ stage time inside 8 h 20 m of wall clock, 4.3%. Two domains, two bottlenecks.
 2. **26 artifacts in the gallery, not 24** (`aldc-launchpad/docs/artifacts/REGISTRY.md`). The
    8-with-no-source and 13-orphaned figures are confirmed. Giving artifacts an engagement to belong
    to is the cheapest fix on the table for both.
+
+## 2026-08-29 — build vs adopt, decided: the thesis narrows and the orchestration bet flips
+
+`docs/BUILD-VS-ADOPT-PROMPT.md` (277 lines, never run) asked, component by component, which parts of
+this system are re-implementations of mature tooling. Run as a six-lens `/prospect` council; output
+at `agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md` (491 lines). Every `BET-CHANGING` claim
+was re-verified by the synthesiser at primary source before it entered the record.
+
+⛔ **The sequencing constraint that outranks every verdict: the factory has never certified a
+connector.** `python -m factory.launch` prints `certified NOT_RUN — 12 assertions have no instrument
+wired` and `breadth FAIL — 1 case(s), 0 strata`. `factory/live_probes.py` wires **A1 and A5 only**,
+and its docstring notes both are reachable *"with no credential and no network call"*; every other
+verb inherits `Probes._refuse`. So **A2, A3, A4, A6, A7, A8, A9, A10, A11, A12 have never run against
+a live target** — the whole assertion battery the pass was asked to price an adoption for, plus the
+tenancy claim. ⭐ **Every migration cost in the review is priced against interfaces that have never
+carried traffic**, so A9 cannot be compared with `pandera` on merit: A9 has never done anything. This
+is not dishonesty — `live_probes.py` refuses *on purpose* so UNMEASURABLE cannot become PASS just
+because some instrument exists — but no ADOPT should be actioned before `CIP-05` closes.
+
+**Verdicts:** ADAPT on data contracts (take ODCS as the *artefact*, keep our validator), agent
+orchestration (build the runner, adopt only the Claude Agent SDK as transport) and intake forms
+(most of CIP-09/10 already exists upstream). **BUILD** on the other seven.
+
+⭐ **The inherited "adopt before you abstract" recommendation is falsified** — it lived in
+`boot-prompts/execution-plane-2026-08-30.md` as a starred section and has been **corrected in place**.
+The six frameworks cover **3 of 8** requirements; worktree isolation, lane claiming, the persisted
+retry ledger, the event ledger and the verdict model are ABSENT from all of them, so you build those
+either way. **AutoGen** is in maintenance mode by its own README; **CrewAI**'s core abstraction
+(`role`/`goal`/`backstory`, hierarchical process that *"automatically assigns a manager"*) **is** the
+topology R2 rejected on a 180-configuration study, and it owns control flow so it cannot sit below
+`GreenContract`; **SWE-agent** and **Aider** fail on release staleness; **LangGraph** drags
+`langsmith` — a hosted telemetry client — as the *first entry* of `langchain-core`'s **mandatory**
+`dependencies`. Pricing: **~370–510 new lines** hand-rolled (~310–420 with the SDK) on top of
+**1,682 lines that already exist and work**, against 150–300 lines of adaptation *plus* a framework.
+⭐ **And the zero-callers premise drew the wrong conclusion**: of `deploy.py`'s 265 lines, **140 are
+`AttemptLedger`**, a cap that survives restart — and every framework's budget control is
+per-invocation and resets, *which is the exact bug `AttemptLedger` was written to fix*.
+The SDK's cost is **negative**: `deploy.py:230-234` already hard-codes `--max-turns` /
+`--max-budget-usd` / `--output-format stream-json` / `--model` against an undocumented, unversioned,
+**unpinned** argv surface, so adopting it makes an existing invisible coupling typed and pinnable.
+
+⭐ **The headline thesis was refuted at the level of representation and survives only at aggregation
+— see [[vacuous-verification]]'s fifth shape** for the six tools and the arithmetic that defeats each.
+The publishable claim is now *"UNMEASURABLE must survive aggregation as a refusal"*, not *"a fourth
+verdict is uncommon"*; as drafted it was falsifiable in four minutes by opening
+`ossf/scorecard/checker/check_result.go`.
+
+**The other three theses, all narrowed, none dead:**
+- **Evidence-basis at the API boundary** — the *vocabulary* is NIST prior art (OSCAL
+  `Observation Method`: `EXAMINE`/`INTERVIEW`/`TEST`/`UNKNOWN`), but OSCAL's `Relevant Evidence` is
+  **`min-occurs="0"` — optional**, and it will validate a finding with zero evidence. `tasks.py:129`
+  *raises*. The structural ancestor is **Perl taint mode**, not assurance cases: a provenance label
+  that makes a privileged operation fatal until explicitly cleared. A proven mechanism in a new
+  domain is an easier claim to defend than an invention.
+- **Mandatory negative controls** — mature in three neighbouring fields (`promtool test rules`,
+  Atomic Red Team, and **EICAR c.1991**, whose own page says it is *"like setting fire to the dustbin
+  in your office to see whether the smoke detector is working"*). Uncommon part is making it a
+  per-gate shipping requirement for a *delivery scorecard*.
+- ⛔ **Spec-and-test-as-one-artefact is TRIED-AND-FAILED prior art.** It **is** BDD, and Cucumber's
+  own creator published in 2014 that adopters *"completely missed out on the underlying practices"*
+  and used it *"uniquely as a testing tool. No collaboration."* Concordion's last release: 2023-07-16.
+  ⭐ **BDD did not fail on format — it failed because the stakeholder does not fill it in**; an
+  engineer does it afterwards and the artefact becomes a config file the client never read. **That is
+  a prediction for CIP-07.** The only differentiator is already in the plan — *pre-fill from a live
+  schema probe so the client confirms rather than authors* — and it belongs on the critical path.
+
+⭐ **The cleanest adopt in the repo, which nobody was looking for: `claims.py:200-247` should be
+`tox-dev/filelock`** (Unlicense, **zero transitive deps**, 3.32.4 on 2026-08-23). It deletes ~48
+lines whose Windows `EACCES`-vs-`EEXIST` race the author's own comment records being bitten by —
+*"Twenty racing threads reproduce it every time; two rarely do."* A lock is not a judgement, so no
+verdict semantics change and no adapter is needed. `grep -rn filelock` returns **nothing** in the
+repo, and the prompt's candidate landscape **has no locking row at all**, so the search never ran.
+Also flagged, larger and not recommended yet: `scripts/local_tracker.py` is **2,554 lines** of
+hand-rolled `socketserver` HTTP and *caused* the concurrency bug `filelock` would fix — threading it
+removed the accidental atomicity that made `/start/<lane>`, a **GET that mutates state**, safe.
+
+⛔ **Prerequisite to any adoption, filed as `BVA-01`: there is no gate protecting the dependency
+surface.** `pyproject.toml:6` is `dependencies = ["pyyaml>=6.0"]` — the entire runtime surface — with
+**no lockfile of any kind, no `.github/` and therefore no CI**, and **none of the 27 readiness gates
+measures a dependency**. The repo gates a *corpus byte* changing (`corpus.py:89-96` raises
+`CorpusError`) and does not gate its grader's dependencies changing. Compounding it: the starred
+candidates (**datacontract-cli, Great Expectations, Soda Core, Dagster, LangGraph, CrewAI**) have
+**zero Windows CI between them — 0 of 68 workflow files**. Pure-Python packaging means they
+*install*; it does not mean a path or subprocess bug would ever be caught upstream. **Any ADOPT on
+those means "we are the Windows CI", as a standing cost.** And the **adapter tax** is uncounted
+everywhere: `contract.py:52-58` turns any instrument exception into UNMEASURABLE, while every adopted
+tool returns a boolean — so each adoption is a new place UNMEASURABLE can silently become FAIL, and
+no test guards an adapter boundary today because no adapter exists (`BVA-06`).
+
+**Corrections this pass published** (the prompt's own figures were stale the day it was written):
+`factory/` **9,227** lines across 40 files, not 8,886/38 · `tests/` **4,684** across 31, not 3,873 ·
+`docs/` **56,125** across 93, not 54,232/89 · `local_tracker.py` **2,554**, not 2,470. ⭐ **And
+"304 tests passing" is three different numbers, none reproducible without its condition** — 301
+`def test_` definitions, **388 then 409** executed within one hour as a concurrent session added
+tests, and 304 from an unrecorded sibling-repo state. The suite is currently **RED at 21 failed**,
+and those failures are the sibling checkout (`prefect-connectors` on `chore/artefact-homes`, 29 dirty
+files, `mutate_control_plane.py` absent), **not a regression**. Part 4's candidate landscape was
+`RECALLED / UNVERIFIED` and six of its rows are now corrected — AutoGen (maintenance mode), Schemata
+(last release 2023-05-08), dbt-expectations (2024-09-10), deepchecks (2024-12-15), Formbricks (K1
+fail + AGPLv3), and the "cheapest place to adopt" line itself. Also: `docs/reviews/external/verification.md:43`
+is now **stale** — `tasks.py` is NOT dead code; `TaskStore` is imported by
+`scripts/export_board.py:16` and `scripts/local_tracker.py:827`.
+
+**Ticketed** (`.data/tasks.jsonl`, 165 → 185 events): created `BVA-01` (dependency gate), `BVA-02`
+(filelock), `BVA-04` (ODCS reshape), `BVA-06` (adapter contract), `BVA-07` (retitle the claim).
+⭐ **Three of the eight drafts were NOT created because they duplicated existing tickets** — checked
+first, because the prior external review was caught proposing two tickets for code that already
+existed. They became evidence on `CIP-05` (now the gate on all adoption), `RUN-03` (the BUILD verdict
+plus the line-by-line pricing) and `CIP-09`/`CIP-10` (already built upstream). `next:` remains
+**RUN-01** — the pass removed a question rather than creating priority work; boot prompt at
+`boot-prompts/build-vs-adopt-2026-08-30.md`.
 
 ## See Also
 

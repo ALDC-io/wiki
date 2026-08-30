@@ -1440,3 +1440,30 @@ is my own work, so no JIRA tickets yet."* Launchpad commits carry `Ticket: none`
 6. ⚠ **Two boot-prompt premises corrected.** `artifact.yaml`'s `decisions`/`change_requests` are
    **in use** (2 of 2 tickets, 8 decisions; GP-199's names the approver, channel and date), not
    unused; and the artifact gallery holds **26**, not 24.
+
+## 2026-08-29 — ingest: build-vs-adopt prospect pass (agent-factory)
+
+**Source:** `agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md` (491 lines), produced by a
+six-lens `/prospect` council over `agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md` (277 lines).
+Every BET-CHANGING claim re-verified by the synthesiser at primary source.
+
+**Pages updated:**
+- `entities/projects/agent-factory.md` — new section *"2026-08-29 — build vs adopt, decided"*.
+  Ten verdicts, the falsified orchestration recommendation, the four narrowed theses, `filelock`,
+  the missing dependency gate, and the published corrections. Frontmatter `sources` extended.
+- `concepts/patterns/vacuous-verification.md` — **fifth shape** added: *the verdict exists and the
+  aggregate discards it*. Intro generalised from five mechanisms to six.
+- `index.md` — both entry lines extended.
+
+**Not created:** no new page. Both findings belong to existing pages, per the update-don't-duplicate
+rule.
+
+**Load-bearing corrections recorded:**
+- The claim *"UNMEASURABLE is not a first-class feature in any scorecard or data-quality product"* is
+  **false**; narrowed to *"UNMEASURABLE must survive aggregation as a refusal"*.
+- `boot-prompts/execution-plane-2026-08-30.md`'s starred *"adopt before you abstract"* section was
+  **falsified and corrected in place** in the source repo.
+- `docs/reviews/external/verification.md:43` is stale — `tasks.py` has live callers.
+- `BUILD-VS-ADOPT-PROMPT.md`'s four size figures were stale the day it was written; "304 tests" is
+  three different numbers and the suite is currently RED at 21 failed (sibling-checkout condition,
+  not a regression).

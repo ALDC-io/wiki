@@ -3,7 +3,7 @@ tags: [pattern, verification, evidence, agents, review, quality, claude-code]
 aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
 sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md]
 created: 2026-08-14
-updated: 2026-08-29
+updated: 2026-08-30
 ---
 
 # Vacuous Verification
@@ -13,9 +13,11 @@ verdict field says `CONFIRMED`; the reasoning field says `"test"`. Downstream, o
 read — so a verification that did no verifying is indistinguishable from one that did, and it
 propagates as fact.
 
-This is the generalisation of a failure ALDC has now hit in five different mechanisms: an agent
-return, a CI check, a mutation test, a guard-test battery, and an exception-swallowing test helper.
-In every case the *container* of the evidence was healthy and the *content* was absent.
+This is the generalisation of a failure ALDC has now hit in six different mechanisms: an agent
+return, a CI check, a mutation test, a guard-test battery, an exception-swallowing test helper —
+and, in the fifth shape below, a **scoring layer that discards a correct verdict**. In the first
+five the *container* of the evidence was healthy and the *content* was absent; in the fifth the
+content is present and correct and the **arithmetic downstream throws it away**.
 
 ## The reference case — verifier agents, 2026-08-14
 
@@ -200,6 +202,62 @@ on every verdict* — would have broken the service's honest refusals, which emi
 strictness that turns an honest refusal into a parse error destroys the reason the caller needed.
 The rule that survives both is **verdicts that were scored must name their world; verdicts that were
 never scored must not be required to invent one.**
+
+## 2026-08-29 — the fifth shape: the verdict exists and the AGGREGATE discards it
+
+The first four shapes are all *content absent from a healthy container*. This one is the opposite
+and is harder to see: the content is **present and correct at the row level**, and the arithmetic
+one layer up throws it away. Found by a six-lens `/prospect` build-vs-adopt pass over
+[[agent-factory]]'s four-verdict model (`PASS / FAIL / UNMEASURABLE / NOT_RUN`), which set out to
+show the model was novel and found the opposite — then found something better.
+
+**Six mature tools and standards already carry a "could not measure" state**, all read at primary
+source: OpenSSF Scorecard (`InconclusiveResultScore = -1`, *"returned when no reliable information
+can be retrieved by a check"*), Soda Core (`CheckOutcome.NOT_EVALUATED` **and** `EXCLUDED` — two
+states for two different claims), datacontract-cli (`ResultEnum` with seven members), Dagster
+(`EXECUTION_FAILED  # hit some exception`, `SKIPPED  # the check didn't execute`), W3C EARL 1.0
+(`earl:CannotTell`, `earl:NotTested`), and XCCDF/NIST IR 7275 (`ERROR`, `UNKNOWN`, `NOT_CHECKED`,
+`NOT_APPLICABLE`, `NOT_SELECTED`). The state is twenty years old and standardised.
+
+**And every one of them discards it at the score:**
+
+| Tool | How the aggregate defeats the verdict |
+|---|---|
+| **OpenSSF Scorecard** | Inconclusive checks are `continue`d — dropped from **both** numerator and denominator. **10 of 18 checks inconclusive can still score 10.0/10.** |
+| **OHDSI DataQualityDashboard** | `countPassed <- countTotal - countOverallFailed`, and `notApplicable`/`isError` rows carry `failed == 0` — so both **round UP to passed** in the published `percentPassed`. A run where the table is missing entirely reports those checks as *passed*. |
+| **XCCDF / OpenSCAP** | The ignore-list covers `NOT_SELECTED`/`NOT_APPLICABLE`/`INFORMATIONAL`/`NOT_CHECKED` — but **not** `ERROR` or `UNKNOWN`, which fall through and score **0.0, identical to FAIL**. The richest verdict enum in existence, and its scoring layer still cannot say "I could not measure this." |
+| **Great Expectations** | `successful = sum(exp.success or False ...)`; `unsuccessful = evaluated - successful`. **No third bucket**, and `success=None` (its own *unresolved* state) coerces to `False`. An expectation whose instrument crashed is counted as a **failing** expectation. |
+| **Grafana** | "No Data" is a real, distinct state — shipped with a configurable **"Set Normal state"** handler that rounds absence-of-measurement to healthy. |
+| **pytest** | `skipped` / `xfailed` exist and, in the docs' own words, *"don't fail the test suite by default."* |
+
+⭐ **The representation problem is solved everywhere. The aggregation problem is solved nowhere.**
+
+So the property worth protecting is not *having* a fourth verdict — it is that **UNMEASURABLE must
+survive aggregation as a refusal**: not dropped from the denominator, not counted as passed, not
+scored as failed, and **with no configuration path to defeat it**. Grafana ships the switch; pytest
+ships the default. [[agent-factory]]'s `readiness.py` keeps an UNMEASURABLE gate **in the
+denominator** so it holds the board below all-pass, and `contract.py` ranks
+`FAIL > UNMEASURABLE > PASS` with any instrument exception becoming UNMEASURABLE — *"a crash is not
+a pass."*
+
+**The same pass found the shape inside a candidate tool, in the classic form.** `datacontract-cli`'s
+`create_checks.py` (673 lines) has **seven** `logger.warning(...) → return []` paths — a declared
+rule that cannot compile emits **zero** check objects — and the file **never imports `Run`**, so the
+warning reaches a module logger and never the structured result. The rule vanishes and the run still
+reports `passed`. That is `bash-guard.sh` exiting 127, shipped inside a maintained product.
+
+⭐ **The generalisable rule: a correct verdict is not a control until you have read what consumes
+it.** Check the aggregate, the score, the rollup and the exit code — the enum is where you *look*
+for the property and the arithmetic is where it *dies*. Ask: *if every check returned "could not
+measure", what does this system print?* If the answer is a green number, the verdict is decorative.
+
+⚠ **Instrument note from the same pass, worth its own line:** `gh api search/code` and `gh search
+code` returned **0** for a string verified to exist in the target repo (a `gho_` OAuth token without
+code-search scope), with **no error**. A positive control caught it. Every code-search zero without
+one is **NOT-VISIBLE, not ABSENT**. And `WebFetch` returns a *small model's summary* even when
+pointed at raw source — it is a `DOCUMENTED`-tier instrument, and it produced a materially
+incomplete read that `curl` + `cat` settled as fact. Use `curl`/`gh api` for any claim that will
+carry a verdict.
 
 ## See Also
 
