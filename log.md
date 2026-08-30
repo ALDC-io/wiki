@@ -1467,3 +1467,31 @@ rule.
 - `BUILD-VS-ADOPT-PROMPT.md`'s four size figures were stale the day it was written; "304 tests" is
   three different numbers and the suite is currently RED at 21 failed (sibling-checkout condition,
   not a regression).
+
+## 2026-08-30 — agent-factory: the golden workflow as an architectural test, and F80/F81
+
+Ingested to [[agent-factory]] (new section, ~120 lines). Two threads:
+
+1. **Architecture anchored to a real vertical.** New Data Source -> Validated Power BI Metric,
+   expressed as one ticket -> five lanes -> four evidence artifacts -> gate -> sign-off.
+   `docs/specs/golden-workflow-fit.md` maps every object against it: the proving half fits, the
+   organising half cannot represent it because **there is no object for the job**. Built only the
+   write-time gaps — `factory/evidence.py` (four typed evidence classes, three states), run-ledger
+   join keys, `factory/context.py` (the `factory-wiki` projection seam; source required,
+   UNVERIFIED by default). Job object, MetricContract schema and capability tiers deliberately
+   deferred as reconstructible.
+2. **F80 — the readiness board had been measuring the wrong BRANCH for a week.** 21 commits /
+   4,077 lines of bounding controls sat unmerged on `prefect-connectors lane/control-plane` while
+   the board read `chore/artefact-homes` and reported them missing. Also the cause of ~21
+   "sibling-checkout" test failures nobody was meant to fix. `readiness.revision()` now stamps
+   every board with branch@sha. **F81** — three probes that could not see (two with a single
+   `_fail` return path since 2026-08-22, one case-sensitive grep) plus a fourth blind spot in the
+   checker that catches them.
+
+Merged to `prefect-connectors main` (eb354c1..0195e59, 920 tests green) and `agent-factory main`
+(2fc9089..6bd12f3). Six branches deleted; `lane/certify` declined as superseded — merging it would
+have re-added an un-redacted client blueprint and reverted the corpus re-pin.
+
+⛔ Open and not to be faked: gate `ceiling` fails on every branch; cost is recorded only on
+`stage_completed`, so fix the accounting before adding the comparison. The control-plane work
+carries **no ticket key** (verified) and shipped to a production default branch untracked.

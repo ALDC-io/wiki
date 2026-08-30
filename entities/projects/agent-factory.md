@@ -1,7 +1,7 @@
 ---
 tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
-aliases: [Agent Factory, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
-sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits]
+aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
+sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81]
 created: 2026-08-21
 updated: 2026-08-30
 ---
@@ -1222,6 +1222,123 @@ UNMEASURABLE renders distinctly from PASS which fails when the distinction is re
 
 ⚠ Parallel work: `docs/design/session-ui-and-intake.html` ("Control Room & Intake", 35 KB) was
 created by a concurrent session the same evening. Reconcile before either surface is built.
+
+## 2026-08-30 — the golden workflow as an architectural test, and the branch nobody was measuring
+
+Two threads, and the second is the one with teeth.
+
+### The workflow the architecture now has to support
+
+Paul named one real vertical as a PoC requirement — **New Data Source → Validated Power BI Metric**:
+*add an advertising source for a client and make it correctly available in their Power BI reporting,
+with evidence from source API through the rendered consumer* — expressed as
+**one ticket → five independent lanes → four mandatory evidence artifacts → explicit gate → sign-off**.
+
+`docs/specs/golden-workflow-fit.md` maps every existing object against it. **The proving half fits
+well and was in fact designed from these failure modes; the organising half cannot represent it at
+all, because there is no object for the job.** Four of six elements of the delivery shape are now
+representable, up from three.
+
+| built (write-time gaps only — everything reconstructible was deferred) | |
+|---|---|
+| `factory/evidence.py` | `TARGET / CONSUMER / REGRESSION / ROLLBACK`, typed. **Three states, never two** — `SATISFIED` (a MEASURED/DERIVED row), `ASSERTED` (rows exist, all ASSUMED — a claim, not a proof), `ABSENT` (nobody looked). `tasks.close(require=DELIVERY)` refuses and names what is missing. The defect it closes: four artefacts all answering the same question satisfied the old rule and proved almost nothing. |
+| `factory/runs.py` | join keys `job / team / team_version / agent_versions`, each writing explicit `NOT-RECORDED` rather than being omitted. An absent key reads as *"this ledger does not ask that"*; `NOT-RECORDED` reads as *"nobody answered it"*. |
+| `factory/context.py` | `ContextRef` / `ContextPack`. **`source` is required and construction raises without it** — a projection that cannot point back at its origin is a fork. `status` defaults to `UNVERIFIED`, and `CURRENT` without a `checked` date raises. Freshness and confidence are separate fields. `Lane.full_prompt` renders a pack **byte-identically** to the concatenation it replaced, tested against the recomputed old expression rather than against itself. |
+
+⚠ **Deliberately NOT built:** the `Job` object (RUN-04 is its writer; building it now is the
+zero-caller abstraction `execution-plane-2026-08-30.md` refuses on `RepoDeployer`'s evidence), the
+`MetricContract` payload schema (`ContextRef.data` is untyped on purpose — that schema is what one
+real client workflow is meant to validate), and capability tiers.
+
+### The `factory-wiki` requirement, recorded
+
+Long term the company wiki must **not** be ingested wholesale into every agent prompt. `factory-wiki`
+is to be a **derived, task-oriented projection** of `~/repos/wiki`, never a second source of truth;
+agents receive **context packs relevant to their lane**, not the corpus. Kinds to resolve eventually:
+`CompanyContext`, `RepoContext`, `ClientContext`, `SourceContract`, `DatasetContract`,
+`MetricContract`, `ContextPack`, plus provenance and freshness/confidence/status. **Extraction is not
+built and must not be until the schema is validated against one real client workflow.** `context.py`
+is only the schema allowance, chosen so no decision taken meanwhile requires context to be one blob.
+
+### ⭐ The board had been measuring the wrong branch for a week (F80)
+
+`python -m factory.launch` reported `cap · reaper · ceiling · concurrency · bounded` all FAIL, read
+by three boot prompts as *the controls do not exist*. They existed. **`prefect-connectors`
+`lane/control-plane` held 21 commits / 4,077 lines** — `cloud_reaper.py`, the attempt cap, the stage
+dispatch ceiling, 2,900 lines of tests — unmerged since 2026-08-23, while `CONNECTORS` resolved to a
+checkout sitting on `chore/artefact-homes`.
+
+It also held `tests/orchestrator/mutate_control_plane.py`, whose absence had been failing ~21
+agent-factory tests that everyone was correctly told not to fix — *"the sibling checkout, not a
+regression"*. True but incomplete: **they were an artefact of measuring the wrong revision, and the
+file existed 147 commits away.**
+
+`readiness.revision()` now stamps every board with `branch@sha`. F72 was *"the board number depends
+on WHERE you run it"*; this is the same defect one turn deeper — it also depends on **when**, and on
+a branch nobody had named.
+
+### Three probes that could not see, and a fourth in the checker (F81)
+
+- `g_orphans_are_reaped` and `g_failure_is_bounded` had **exactly one return path each, `_fail`.** No
+  input could satisfy them. Recorded in `test_readiness_probes_can_pass.py`'s own docstring on
+  2026-08-22; the fix took eight days. A 10 KB reaper with 965 lines of tests existed throughout.
+- `g_concurrency_is_reserved_outside_the_agent` grepped **case-sensitively** for `max_parallel` while
+  the code spells it `MAX_PARALLEL_STAGE_DISPATCH` — announcing *"nothing bounds concurrent STAGE
+  dispatch"* about a module holding a dispatch ceiling, a `_DISPATCH_LOCK` and a `dispatch_ceiling`
+  refusal event. Identical to review finding **D-2**.
+- **The checker itself**: `_verdicts_reachable` read only the *immediate* call in a `return`, so
+  `res = _pass(...); return res` looked unreachable and reported `suite` as *"a constant, not a
+  measurement"*. Fixed the checker, not the probe.
+
+⚠ `g_corpus_is_tamper_evident` also has no PASS path and is **not** a defect — its docstring declares
+why in advance and names the condition that would change it. Same AST shape, opposite honesty: a
+*declared* cannot-pass-yet versus an undeclared one that reads as a finding about the system.
+
+**The sentence under all four: an instrument that cannot see reports absence with total confidence.**
+
+### Both sides rewrote the same probes, a week apart
+
+On merging `lane/control-plane-renamed` it turned out **the lane author had already rewritten those
+five probes from grep to driven** — because the branch was never merged, the work was done twice.
+Theirs is better and is what landed: it drives `retry_stage` **and** `restart_from_stage` (the real
+entry points, not the internal `check_attempt_cap`), drives `_build_stage_requests`, fills the
+ceiling across **two** pipelines, and points the engine at a scratch data dir via `configure()`
+rather than muting `_append_event` — so `_refuse`'s record-before-raise still happens and can be
+observed. Kept from this side: the suite cache, the `MEASURED_SINCE` window, `revision()`, and the
+`_ENGINE` cache **keyed per checkout** (the lane's single global hands back a stale engine when
+`CONNECTORS` is repointed — F80's failure one level down).
+
+### `factory/sessions.py` was two features with one name
+
+`lane/control-plane-renamed` = `lane/control-plane` **plus one commit** (`436a1d9`) renaming
+`factory/sessions.py` → `factory/workplan.py`, because two lanes independently built a `sessions`
+module with **zero API overlap**: main's is *processes* (pids, liveness, the jobs registry, and
+`finish.py`'s live-session guard — currently the only thing stopping a second agent entering an
+occupied worktree); the lane's is *work* (session cards, gate ownership, waves, running order).
+
+Git reports that as `CONFLICT (add/add)` on one filename and nothing else — **the weakest possible
+warning for two features quietly claiming one name.** Verified before choosing: plain
+`control-plane` → 5 conflicts including `factory/sessions.py`; `-renamed` → 4, and the one that
+disappears is exactly that. ⚠ **The filename collision is fixed; the semantic overlap between
+`workplan.py` and the existing `teamplan.py` is not, and nothing imports `workplan` yet.**
+
+### Landed
+
+`prefect-connectors` `main` `eb354c1..0195e59` — five of six bounding gates now PASS on **driven**
+evidence, verified in both directions and revision-stamped; CI command run on the merge result
+before pushing (**920 passed, 0 failed**). `agent-factory` `main` `2fc9089..6bd12f3`.
+Six branches deleted after verifying containment. `lane/certify` was **declined, not merged** — its
+work reached main by a better route and merging it would have re-added the un-redacted
+`windsorai_gep.yaml`, reverted the corpus re-pin, and downgraded `live_probes.py`.
+
+⛔ **`ceiling` remains FAIL on every branch and must not be faked.** The only budget symbol is
+`TERMINATION_BUDGET_SEC`, a *time* budget for the reap sweep, and cost is recorded only on
+`stage_completed` — so an accrued figure is blind to every failure. Fix the accounting before the
+comparison, or the gate goes green over a ceiling that cannot hold. F77: RUN-01 as written is two
+tickets in two repositories, and only the `prefect-connectors` half can move that gate.
+
+⚠ **The control-plane work carries no ticket key** — verified, not assumed (`GP-273/274/275` in the
+merged range belong to older pipeline commits). It shipped to a production default branch untracked.
 
 ## See Also
 
