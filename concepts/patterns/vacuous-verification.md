@@ -1,9 +1,9 @@
 ---
 tags: [pattern, verification, evidence, agents, review, quality, claude-code]
-aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
-sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md, agent-factory session 2026-08-30 (research separation; contract.py fifth verdict, commit 0d4bdb1), agent-army-research/research/synthesis/W0-foundations.md]
+aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return, location-dependent verdict, mtime verification]
+sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md, agent-factory session 2026-08-30 (research separation; contract.py fifth verdict, commit 0d4bdb1), agent-army-research/research/synthesis/W0-foundations.md, agent-factory session 2026-08-31 (findings F91/F92/F93, commit d5c0af4)]
 created: 2026-08-14
-updated: 2026-08-30
+updated: 2026-08-31
 ---
 
 # Vacuous Verification
@@ -19,7 +19,9 @@ shapes where the content is **present and correct** and something downstream des
 fifth, the **arithmetic** throws it away (a scoring layer). In the sixth, the **transport** does —
 a shell pipeline replacing a failing exit code with `tail`'s.
 
-Six shapes, in the order they were found:
+Nine shapes, in the order they were found. The last three all came from one act — **running the
+suite from a fresh git worktree instead of the primary checkout** — which is itself the lesson:
+three of these were invisible from the only place anyone routinely stands.
 
 | | Shape | Found |
 |---|---|---|
@@ -29,6 +31,9 @@ Six shapes, in the order they were found:
 | 4 | **A test pinning a weaker property than its own name** | 2026-08-29 |
 | 5 | **The aggregate discards a correct verdict** | 2026-08-29 |
 | 6 | **The transport discards a correct verdict** | 2026-08-30 |
+| 7 | **The verdict depends on where the instrument is standing** | 2026-08-31 |
+| 8 | **A measurement so expensive it prevents the measurement it feeds** | 2026-08-31 |
+| 9 | **The check reads the filesystem's timestamps, not the content** | 2026-08-31 |
 
 ## The reference case — verifier agents, 2026-08-14
 
@@ -352,6 +357,86 @@ on 2026-08-22 and exists to prevent it. **A guard that fires only when someone r
 stopped being a mechanism.** It is caught in the ordinary suite now, but only because the suite was
 run — there is **no CI in that repo** (`.github/workflows` does not exist), and the strict tracker
 drift check runs only at lane handoff.
+
+## 2026-08-31 — three more, all found by standing somewhere else (agent-factory)
+
+All three surfaced within minutes of running the ordinary suite from a **new git worktree** rather
+than the primary checkout. Nothing was wrong with the code that day; the worktree simply asked the
+instruments a question they had never been asked. Findings `F91`, `F92`, `F93`.
+
+### 7 — the verdict depends on where the instrument is standing
+
+`factory/readiness.py` computed the estate root as `pathlib.Path(__file__).resolve().parent.parent`.
+From a lane worktree that resolves to `<primary>/.worktrees/<lane>`, so its sibling-repo pointer
+became `<primary>/.worktrees/prefect-connectors` — **a directory that does not exist**. Every gate
+reading the connectors checkout was measuring nothing whenever it ran from a lane.
+
+```
+primary   C:\...\repos\prefect-connectors                        exists: True
+worktree  C:\...\agent-factory\.worktrees\prefect-connectors     exists: False
+```
+
+⭐ **A structural guard for this exact bug already existed and did not fire.** It scans every module
+for a `__file__`-derived path that builds `.data/`, on a stated principle — *estate-wide state must
+be shared; git-tracked content may be checkout-relative*. A **sibling repository** is neither. There
+is only one `prefect-connectors`, so it is estate-wide by definition, but it is not under `.data/`.
+**The guard's category scheme had two boxes and this needed a third.** The generalisation:
+
+> A guard is only as wide as the relation it derives over. When you write one, name the relation
+> out loud — then ask what is estate-wide *without* being the thing you named.
+
+Deliberately **not** fixed by widening the guard: six other modules use the same expression and all
+stay *inside* the checkout, where checkout-relative is defensible. Flagging six legitimate uses to
+catch one defect is how a guard gets switched off.
+
+### 8 — a measurement so expensive it prevents the measurement it feeds
+
+A readiness gate shelled out to a certification command which itself started a **pytest run in a
+second repository**. It had no in-suite guard, so every test that rendered a measuring surface paid
+the whole chain: eight tests in one file at 64–169s each. The suite could not finish inside the
+300s bound of the gate that measures the suite, so **that** gate reported `FAIL` with the headline
+*"(pytest printed no summary line)"* — a red verdict for an instrument reason, not a code reason.
+
+```
+full suite        ~2100s -> 112s        (one guard)
+test_roadmap.py   never completed -> 39s
+```
+
+And the second half: the outer timeout was **120s** against a **300s** inner one.
+`subprocess.run(timeout=...)` kills only the *direct* child, so the parent was killed while its
+grandchild kept running — a timeout reported for work that had not stopped.
+
+> **Two nested timeouts must be ordered, and the outer one should be expressed in terms of the
+> inner** (`inner + margin`), never as a second literal. Two independent numbers rot apart, and the
+> failure is silent.
+
+⛔ The cost also fed a **cache that only ever stores a PASS**. Suite red → cache never fills → every
+operator page-render re-pays the full cost. A render measured **6m38s** against a documented
+*"~10-19 s a page"*; after the guard, 155s, and it will drop to seconds once the suite is green.
+A performance defect and a verification defect were the same defect.
+
+### 9 — the check reads the filesystem's timestamps, not the content
+
+A reconciliation check asked "was this answer filed *after* the synthesis was last written?" by
+comparing **mtimes**. `git worktree add` writes every file at once:
+
+```
+SYNTHESIS.md   04:52:31.012247
+R1-answer...   04:52:31.017525     <- 5 ms later
+```
+
+All eighteen answers therefore read as outstanding, on write-ordering alone. In the primary, where
+the mtimes are old and real, the same call returns `[]`. **Any fresh clone — including the first CI
+run — opens with eighteen phantom items.** That repo has no CI, which is the only reason this had
+never fired.
+
+And the test that should have caught it asks a **weaker question than the code**: it computes the
+never-mentioned half while the function under test moved to never-mentioned *plus* filed-after two
+days earlier. The code was fixed; the test was not. That is shape 4 again, one function boundary
+out — and it is why shape 9 stayed invisible.
+
+> An mtime is a fact about a checkout, not about the work. If a claim must survive a clone, it has
+> to be recorded *in* the content or derived from git, never inferred from the filesystem.
 
 ## See Also
 

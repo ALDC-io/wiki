@@ -1,9 +1,9 @@
 ---
 tags: [pattern, sessions, git, worktrees, repo-hygiene, agent-factory, prefect-connectors, aldc-launchpad]
-aliases: [artefact homes, session contention, where does this file live, two sessions one checkout]
-sources: [agent-factory commits 66b6511 c242913 f837e00, prefect-connectors 8b7c68d, aldc-launchpad 2b44282, measured 2026-08-23]
+aliases: [artefact homes, session contention, where does this file live, two sessions one checkout, parked branch, stale checkout]
+sources: [agent-factory commits 66b6511 c242913 f837e00, prefect-connectors 8b7c68d, aldc-launchpad 2b44282, measured 2026-08-23, agent-factory session 2026-08-31 (commit d5c0af4; prefect-connectors parked 8 days on chore/artefact-homes)]
 created: 2026-08-23
-updated: 2026-08-23
+updated: 2026-08-31
 ---
 
 # Session contention and artefact homes
@@ -148,9 +148,48 @@ Two standing consequences:
 **Register an artifact by writing its URL into its own source directory's README** — that is the hop
 `build.py` measures. Publishing without doing so produces a sourceless artifact.
 
+## Part 3 — a parked branch is contention that does not look like contention (2026-08-31)
+
+The incident above was two sessions racing *at the same moment*. This is the slow version, and it is
+harder to see because nothing is happening.
+
+**Measured 2026-08-31.** `prefect-connectors` was sitting on `chore/artefact-homes` @ `8b7c68d` —
+the very commit this page was written about — with **29 uncommitted files**, created
+**2026-08-23 15:20 by Paul**. Eight days parked. Nobody was working on it.
+
+The cost landed in a **different repository**. `agent-factory`'s suite reads the connectors checkout
+live, and on that branch the mutation anchors and `tests/orchestrator/mutate_control_plane.py` do
+not exist — both are on its `main`. So:
+
+```
+15 test failures in agent-factory
+  -> suite never green
+    -> .data/suite-cache.json only ever caches a PASS, so it never fills
+      -> every operator page-render re-pays the full 112s suite
+```
+
+Four consequences from one checkout left on the wrong branch, none of them visible in the repo where
+the failures appear — and the operator's reasonable reading, *"why do branches keep getting opened
+on that repo?"*, was wrong in an instructive way. **Nothing opened it. It was never closed.**
+
+⭐ **The rules that follow:**
+
+- **A checkout is shared mutable state even when idle.** `git worktree list` and `git status` in the
+  repo you are *in* say nothing about it. The question is *"what branch is every repo my tests read
+  currently on?"* — and it can only be asked from outside.
+- **Verify a branch's provenance before blaming a process.** `git log -1 --format="%ad %an" <branch>`
+  and `git reflog show <branch>` settle who and when in one command. Here they turned *"sessions
+  keep opening branches"* into *"you made this eight days ago"* — a completely different remedy.
+- **A cross-repo test dependency wants a pinned revision or a loud refusal**, not a live read of
+  whatever branch happens to be checked out. A gate truthful about the revision it read and wrong
+  about the estate is still wrong; `readiness.revision()` exists so the reader can tell which.
+- **Uncommitted work on a parked branch is why you cannot simply fix it.** Moving the checkout is
+  destructive to whatever those 29 files are, so the remedy needs the person who made them.
+
 ## See Also
 
 - [[agent-factory]] — where this was found, and the readiness harness it protects
+- [[vacuous-verification]] — shapes 7-9, all found the same day by running the suite from a worktree instead of the primary
 - [[agent-session-completion-signals]] — the other half of the two-sessions problem: knowing when the other one has actually STOPPED
 - [[prefect-connectors]] — the repo the ephemera left
 - [[resuming-claude-sessions-windows]] — session lifecycle on Windows

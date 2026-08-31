@@ -1541,6 +1541,65 @@ requested and everything was already on the remote. ⭐ And it **inverts the usu
 contended checkout, committing promptly beats leaving work in the tree for review, because
 uncommitted work is the exposed state. See [[session-contention-and-artefact-homes]].
 
+## 2026-08-31 (later) — a bootstrap pack declined, three instruments repaired, and a 19× suite
+
+An externally-generated "autonomous bootstrap pack" (110 files) was installed to
+`.agent-platform/bootstrap/` and **deliberately left inert**. Commits `d5c0af4`, `a5fb72c`.
+
+⛔ **The pack proposes building, as novel, a programme this estate had already falsified.** Its
+`VISION.md` names an Organization Compiler, an Org-IR, a Collective Cognition Fabric and an
+Evolution Chamber; `agent-army-research/research/synthesis/W0-foundations.md` (2026-08-30) had
+already concluded AOE **is** organisation-oriented MAS, that the category name is taken twice in
+2026 (Waites `arXiv:2602.13275`; **IMACS** `arXiv:2607.25446` *is* the organizational-compiler
+thesis), and that the novelty claim is refuted on all four components. Meanwhile `README.md:94-104`
+independently gates Agent Army behind **one certified team**, and `.data/runs.jsonl` holds 10 rows
+with **0 PASS**. ⭐ **Treated as a build plan it would have started six ranks above the evidence.**
+The reconciliation — every pack concept mapped to where that idea already lives here — is
+`.agent-platform/RECONCILIATION.md`; its prior-art half became [[agent-control-plane-prior-art]].
+
+⚠ **Two corrected premises, so nobody re-derives them:** the two bootstrap ZIPs in `~/Downloads`
+are **byte-identical** (SHA256 `BEE61D23…`) — there was never an older paid-API pack to guard
+against; and **`factory/certify.py` does not import `readiness`**, so the tempting "the suite
+invokes itself" reading of the hang below is wrong. There is no cycle.
+
+**Three findings, two found by running the suite from a fresh worktree rather than reading it** —
+see [[vacuous-verification]] shapes 7-9.
+
+| | |
+|---|---|
+| **F90 (b)** | `TeamSpec.repo` is inside the team version hash and **nothing read it**; `worktrees.REPO` is bound at import to this checkout. The controller now refuses a ticket naming an unreachable repo — before the worktree, the claim or the attempt. Proven RED first: without the guard `gp-329` scores **PASS** for a run recorded against `clients` that happened in `agent-factory`. |
+| **F91** | `readiness.py` computed the estate root from `__file__`, so from a lane `CONNECTORS` resolved to `.worktrees/prefect-connectors` — a path that does not exist. The `.data/` structural guard did not fire because a **sibling repository** is neither `.data/` state nor git-tracked content. |
+| **F92** | `g_output_is_certified` had no in-suite guard, and a **120s outer timeout against a 300s inner one** — `subprocess.run` kills only the direct child, so the grandchild outlived the parent that was meant to stop it. |
+| **F93** | **OPEN.** `filed_after` compares mtimes; `git worktree add` wrote `SYNTHESIS.md` and all 18 answers 5 ms apart, so any fresh checkout — including a first CI run — reports every answer outstanding. |
+
+```
+full suite        ~2100s -> 112s
+test_roadmap.py   never completed -> 39s, 20 passed
+tracker render    6m38s -> 155s
+```
+
+⛔ **The 15 remaining suite failures are not this repo's defect.** `prefect-connectors` had been
+parked on `chore/artefact-homes` since **2026-08-23** with 29 uncommitted files; the mutation
+anchors and `mutate_control_plane.py` exist only on its `main`. Suite red → the PASS-only suite
+cache never fills → every tracker render re-pays the full suite. Four consequences from one stale
+checkout, none visible in the repo where the failures appear — see
+[[session-contention-and-artefact-homes]] Part 3.
+
+⛔ **Still open, and the sharpest thing on the board:** an inventory of the evaluation system found
+**six readiness gates that go green on an absence**, of which `readiness.py:511`
+`g_success_means_correct` — the gate named for this estate's founding failure — returns
+`_pass("no completed run carried failures", [], src)` with an **empty evidence list and no
+population floor.** It passes when nothing ever completed, and the fix pattern is ten lines below
+it. **25 of 30 readiness gates have never been mutation-tested**, which is the structural reason
+all six survived. Separately, a blueprint that blanks three optional fields scores `PASS (PASS=12)`
+on the exact defect A3 exists to catch, because the evaluator's target floor checks four fields of
+twelve — and the shipped blueprint **already** ships two of them empty.
+
+`next:` **F90 remedy (a)** — thread the repository through `worktrees.ensure` and the providers.
+Both presets with a runnable verifier are `pbi_model` work in `~/repos/clients`, and remedy (b) now
+correctly refuses them, so the first supervised run is blocked by design until (a) lands. Boot
+prompt: `boot-prompts/bootstrap-and-instruments-2026-08-31.md`.
+
 ## See Also
 
-[[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]] · [[power-bi]]
+[[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-control-plane-prior-art]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]] · [[power-bi]]

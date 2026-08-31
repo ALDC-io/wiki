@@ -1647,3 +1647,53 @@ contract for a second case, run that case's own named defect through it and watc
 ⚠ **Honest scoreboard, recorded because the opposite is this estate's founding failure:** two
 verifiers are now wired, and **zero defects have been caught in a real run**. Both have only ever
 met test fixtures. "N verifiers wired" is an activity metric.
+
+## 2026-08-31 — ingest: a bootstrap pack declined, three instruments repaired, and prior art mined
+
+**Source:** agent-factory session, commits `d5c0af4` + `a5fb72c`; three external repos read at
+source (Paperclip, Super Simple Software Factory, Inkwell).
+
+**Written:**
+- **NEW** `concepts/patterns/agent-control-plane-prior-art.md` — the one genuinely homeless thing.
+  Three mature agent orchestrators, all MIT, read as source rather than READMEs. Indexed.
+- `concepts/patterns/vacuous-verification.md` — shapes **7, 8 and 9**. Six became nine.
+- `concepts/patterns/session-contention-and-artefact-homes.md` — Part 3, the slow version of
+  contention: a branch parked for eight days.
+- `entities/projects/agent-factory.md` — the session, the findings, and what is still open.
+
+**What made the page worth writing:** the prior-art mining existed **only in a session transcript**
+and would have died with it. Three deep source reads, and the highest-value output was not what to
+adopt but the **five patterns that let you delete machinery** — a Python function in place of a
+workflow engine, `kind="code"` phases in place of whole agents, post-hoc git change-set diffing in
+place of sandboxing, one envelope adapter in place of result-type dispatch, and SQLite + `rowid`
+polling in place of an entire streaming and replay stack.
+
+⭐ **The finding that shaped the session: an imported "autonomous bootstrap pack" was installed and
+deliberately left inert.** It proposed building, as novel, a programme this estate's own Wave 0 had
+falsified the day before — the category name is taken twice in 2026, and the organizational-compiler
+thesis was published five weeks ago as IMACS. The repo's own README gates that work behind *one
+certified team*, and the run ledger holds **0 PASS**. **A north-star document is not a build plan,
+and the gap between them is measured in ranks.**
+
+⭐ **Three of the nine vacuous-verification shapes came from one act: running the ordinary suite
+from a fresh git worktree instead of the primary checkout.** Nothing was wrong that day that had not
+been wrong for a week; the worktree simply asked the instruments a question nobody had asked. An
+instrument whose answer depends on where you are standing is the cheapest class of defect to find
+and the easiest to never find.
+
+⚠ **A structural guard for shape 7 already existed and did not fire** — it scans for `__file__`
+paths building `.data/`, on the principle that estate-wide state must be shared while git-tracked
+content may be checkout-relative. A **sibling repository** is neither. *A guard is only as wide as
+the relation it derives over; name the relation out loud, then ask what is estate-wide without
+being the thing you named.* Deliberately not widened — six other modules use the expression
+legitimately, and flagging six good uses to catch one defect is how a guard gets switched off.
+
+**Not written, deliberately:** no wiki inside `agent-factory`. It already has `docs/findings.d/`
+(61 findings, read as data by `factory/findings.py`, briefing agents by lane), `boot-prompts/` with
+a maintained router, and a sibling research repo with a documented boundary. A fourth home for the
+same knowledge is the duplicate-source-of-truth failure the whole session was spent avoiding.
+
+⚠ **Honest scoreboard:** the suite went ~2100s → 112s and a 19× speedup is real, but it is still
+**red at 15 failures**, and those belong to a `prefect-connectors` checkout parked since 2026-08-23
+that only its owner can safely move. The factory still has **zero real agent dispatches** and
+**0 PASS** in its ledger. Nothing here changes that; F90 remedy (a) is what would.
