@@ -1495,3 +1495,125 @@ have re-added an un-redacted client blueprint and reverted the corpus re-pin.
 ⛔ Open and not to be faked: gate `ceiling` fails on every branch; cost is recorded only on
 `stage_completed`, so fix the accounting before adding the comparison. The control-plane work
 carries **no ticket key** (verified) and shipped to a production default branch untracked.
+
+## 2026-08-30 — agent-factory: research separation, the fifth verdict, and three ways an instrument lied
+
+Split Agent Army research out of [[agent-factory]] into a sibling private repo
+(`github.com/russell94paul/agent-army-research`, `main` @ `ecbcdb0`, pushed). 150-file v5 pack
+committed byte-exact; two earlier packs — **never tracked in git, so one `git clean` from gone** —
+archived as SHA256-verified zips under `legacy/`. Nothing tracked was deleted from agent-factory;
+the bridge lives at `agent-factory/docs/agent-army/`.
+
+**Wave 0 research falsified the programme's founding premise, in a morning.** "Artificial
+Organization Engineering" is not a new discipline — it is organisation-oriented MAS (Moise+/JaCaMo,
+OperA, Gaia/Tropos), and **the category name is taken twice, both 2026**: *Artificial Organisations*
+(arXiv:2602.13275) and **IMACS** (arXiv:2607.25446, published five weeks earlier), which is the
+organizational-compiler thesis. Do not launch the category or claim novelty; the defensible position
+is a synthesis claim. Also corrected a number the estate had quoted three hops without its interval:
+the multi-agent **−3.5%** carries a 95% CI of **[−18.6%, +25.7%]** and σ=45.2%, from a paper whose
+actual conclusion is *architecture–task alignment determines collaborative success* (+80.8% to
+−70.0%).
+
+**Renamed `agent-factory` → `agentic-factory`, identity only** (`3e33a1a`) — deliberately NOT the
+`AGENT_FACTORY_*` env vars (a public interface `readiness.py` gates on), `~/.agent-factory/verdicts`
+(write-once evidence a rename orphans), or the generated artifact filename (8 script references).
+⛔ Directory and GitHub rename **not done**, which leaves lane briefs pointing at a path that does
+not exist yet.
+
+**`contract.py` gained a fifth verdict** (`0d4bdb1`). It was folding instrument-crash into
+UNMEASURABLE — collapsing two kinds of not-knowing inside the module that exists to prevent that,
+and one category coarser than **TTCN-3 / ISO/IEC 9646 (1991)**, whose lattice is
+`none < pass < inconc < fail < error`. Fixing it exposed a second live bug: `evals.py` scored a
+**crashed instrument as a caught mutation**. 423 executed / 420 passed / 0 failed.
+
+Three lessons written to [[vacuous-verification]] as its **sixth shape**: piping a command through
+`tail` reports the *pipeline's* exit code, so a suite with 15 failures read as exit 0 — twice;
+declaring components `ABSENT` across an estate after opening two of its four repos is `NOT-VISIBLE`,
+not absence (`conductor` had the enforcement point and the append-only log all along); and the
+verification distinction we were proudest of was standardised thirty-five years ago.
+
+⛔ Open and not to be faked: 14 mutation anchors match **no current branch** of
+[[prefect-connectors]] and its second harness exists on no branch, so those controls are UNTESTED
+while a 20-minute harness still reports green — **second occurrence of the exact failure that file
+was written to catch**. The published readiness board advertised **8 of 30** gates when the truth is
+**9 of 30**; regenerated and re-verified, but uncommitted. There is **no CI** in agent-factory
+(`.github/workflows` does not exist) and the tracker drift check runs only at lane handoff. Boot
+prompt: `aldc-launchpad/boot-prompts/agent-factory-research-separation-2026-08-30.md`.
+
+---
+
+## 2026-08-31 — a council refuted the wiki's own premise, and three instruments lied on the way
+
+**Operation:** review + tooling. Commissioned as *"get the wiki fully sorted"*; the honest answer
+turned out to be **do not sort it**, and the value was in the refutation.
+
+### The premise died on three independent measurements
+
+| claim | as briefed | measured |
+|---|---|---|
+| pages nothing links to | 37% (181) | **9% (30)** — mostly `daily/`, which should be unlinked |
+| broken links | 532 | **~38–109 real**; 223 are valid partial-paths, 151 are code-block examples |
+| corpus decaying | assumed | **refuted** — August is the busiest authoring month in the wiki's life (64 commits) |
+| old ⇒ wrong | assumed | **refuted** — 1.3% dangling refs; a 118-day runbook verified 5/5 claims still true |
+
+⭐ **Age does not predict wrongness in this corpus. An age-based staleness check would be mostly
+false positives** — and would train everyone to ignore it.
+
+### The real defect: lifecycle state is unrepresented
+
+Only **6 of 330** pages carry a `status:` field. The schema has `created:`/`updated:` — freshness —
+and no lifecycle, which is exactly why *a finished ticket and a rotted runbook are indistinguishable
+by design*. And the path convention lies: **50 of 54 pages under `active/` are frozen >90 days**,
+against 2 pages ever archived. Because 4 of the 12 largest authored pages sit in that abandoned Q2
+regime, the dead subtree **outranks the live corpus on retrieval**.
+
+⛔ `processes/` — the runbook layer — genuinely froze: **87 of 101 pages (86%) have no substantive
+change in 90+ days.** Two independent instruments (git `--numstat` ≥5 lines, and hand-maintained
+`updated:` stamps) agree on 86 of 88 pages, Jaccard **0.977**; both divergences investigated and git
+wins each time. In August there was exactly **one** maintenance edit to a pre-existing `processes/`
+page — the rest was three brand-new files. **The layer is accreting new runbooks on top of 87
+unrevised ones, which is worse than a clean freeze because it looks tended.**
+
+### Three defects with real exposure
+
+1. **`GP-293` is referenced 42× across 13 pages and was never written.** The global engineering rules
+   depend on its lesson (a repoint that passed DAX parity while every visual showed "Error loading
+   data"). Most-cited missing page in the wiki.
+2. **`potential-tickets.md` is 15-in / 0-out**, holding a live expired Azure AD client secret and a
+   committed `CORE_API_CLIENT_TOKEN`. `action-items.md` has **never** moved an item Open→Done — all
+   three "Done" were checked in its initial commit.
+3. **Live pages are cited constantly and silently unreachable.** 13% of resolved links hit a
+   multi-candidate key; `processes/operations/flight-check.md` has 59 bare citations and **zero**
+   unambiguous ones. The authors knew and wrote the disambiguation *in prose*, leaving the link
+   syntax ambiguous — invisible to anything that follows links.
+
+### Shipped: `scripts/wiki_lint.py`
+
+The check `CLAUDE.md` §Lint has always specified and which had **run once in 193 logged operations**,
+on wiki day 2. Read-only. Carries four exclusions each bought by a near-miss (code spans masked;
+`sources/` excluded as population but kept as targets; Zeus keys classified as external pointers;
+`log.md` never proposed for rewrite), a **declared tie-break policy printed beside every number**,
+and an **ambiguity check nothing else in the estate has**. `--self-test` proves each classification
+branch can fire (7/7); blinding the index produces 5 control failures and exit 2.
+
+### ⛔ The lesson, and it is about instruments not wikis
+
+**Every uncontrolled count of this corpus was wrong, and wrong by a plausible amount rather than by
+an error.** Broken links deflated `1,146 → 532 → 437 → 244 → 216 → 38`. Orphan rate deflated
+`37% → 9%`. The authored denominator went `491 → 335 → 331`. Nobody was careless; each figure came
+from an instrument that ran fine and could not see something. Specific traps, all earned:
+
+- A permissive normaliser silently rescued 16 of 17 trailing-backslash links — **a check that cannot
+  fail on the class it exists to catch.** Syntax must be validated *before* resolution.
+- **Never aggregate freshness by directory `max()`** — it is satisfied by anyone adding anything, and
+  stays green while every existing page rots. Report per-page, split created from modified.
+- **Filter mechanical edits by per-file line count, never by files-touched-per-commit** — the two
+  largest commits here (174 and 130 files) authored most of the corpus.
+- `git ls-files` quotes non-ASCII paths; 16 files were invisible until `core.quotepath=false`.
+
+**Verdict: write four pages, ship one instrument, decline the restructure** — whose own declared
+final safety step was *"run wiki lint"*, a tool that did not exist until now.
+
+⚠ Not done: nothing above is committed; `status:` is not in the schema; the four pages are unwritten;
+`concepts/architecture/cross-channel-marketing-dimensional-model.md` is linked from `index.md` and
+**has never been committed**, so any clone loses it and breaks that link.
