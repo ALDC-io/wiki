@@ -1,9 +1,9 @@
 ---
 tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
 aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
-sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81]
+sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81, agent-factory/docs/findings.d/F85-F89, agent-factory/factory/control.py, agent-factory/factory/verifiers.py, agent-factory/factory/redesign_contract.py, agent-factory/factory/events.py, agent-factory/factory/provider.py, agent-factory/boot-prompts/README.md]
 created: 2026-08-21
-updated: 2026-08-30
+updated: 2026-08-31
 ---
 
 # Agent Factory
@@ -26,8 +26,17 @@ definition can fail, then everything else.**
 ## The GreenContract
 
 Twelve assertions (A1–A12) a connector migration must satisfy end to end, executable, parameterised
-per connector from YAML. **Four verdicts, never collapsed** — `PASS` / `FAIL` / `UNMEASURABLE` /
-`NOT_RUN`. `UNMEASURABLE` is explicitly not a pass and exits non-zero.
+per connector from YAML. **Five verdicts, never collapsed** — `PASS` / `FAIL` / `UNMEASURABLE` /
+`ERROR` / `NOT_RUN`. `UNMEASURABLE` is explicitly not a pass and exits non-zero.
+
+> ⚠ **Corrected 2026-08-31 — this said "four verdicts" until today.** `ERROR` was added because
+> `UNMEASURABLE` was carrying two different things — a probe that *knows* it cannot look
+> (`raise Unmeasurable`) versus our own apparatus falling over (a bare exception). Those have
+> different remedies — *wire the instrument* versus *fix the harness* — and only the second says the
+> run itself is untrustworthy. Not our invention — ISO/IEC 9646 and TTCN-3 (ITU-T Z.140 §24.2) carry
+> the lattice `none < pass < inconc < fail < error`, where `error` is set by the test *system* rather
+> than the test case and **dominates `fail`**. So once the apparatus has broken we no longer claim
+> the failure we think we saw was real.
 
 - **Probes refuse by default.** An unwired harness returns 12× `UNMEASURABLE`, not 12× `PASS`.
 - **A mutation registry is a test.** `test_every_assertion_has_been_proved_able_to_fail` fails the
@@ -1414,6 +1423,123 @@ escape. 423 executed / 420 passed / 2 xfailed / 1 skipped / **0 failed**.
   files**, and `R2-answer-topology.md` — the source of the multi-agent topology decision — carries
   no arXiv id, DOI or URL at all. That is how a **−3.5%** figure travelled three hops without its
   95% CI of **[−18.6%, +25.7%]**.
+
+## 2026-08-31 — the assembly line runs, and five findings came out of running it
+
+RUN-03 — *ticket → preset → TeamSpec → agent in a worktree → verdict → ledger* — was found already
+built and **entirely uncommitted**. Verifying and landing it, then wiring what it revealed, produced
+five findings. **Every one came from running or wiring something. None came from a gate.**
+
+| id | what it was |
+|---|---|
+| **F85** | Two `--dry-run` calls spent the whole attempt cap and made a ticket permanently unrunnable |
+| **F86** | The findings ledger could not see its own last eight findings |
+| **F87** | The only preset claiming a `WIRED` verifier had no callable behind it |
+| **F88** | The tracker's reload button never reloaded the verdict enum or the retry cap |
+| **F89** | The PBI contract scored `PASS=12` on the exact defect its ticket type exists to find |
+
+### F85 — a plan-only run spent the cap that stops a real one
+
+`RepoDeployer.run_agent` called `ledger.record(key)` **above** the `if dry_run:` branch, so a plan
+consumed an attempt exactly like a dispatch. `max_attempts` is **2**, so two plan-only invocations
+exhausted the cap and every real dispatch afterwards was refused by a message forbidding the only
+obvious remedy — *"Escalate to a human — do not raise the cap to get past this."* Measured live, not
+hypothesised — the ledger held two entries both reading `detail: "dry run"`.
+
+⭐ **The suite could not catch it because the suite reached the cap the same way.** The existing
+cap test exhausted it with three `dry_run=True` calls, so it passed for the same reason the bug
+existed.
+
+⚠ **A worse defect sat behind the obvious fix.** `note_outcome()` writes to `attempts[-1]`, so
+moving `record()` while leaving `note_outcome` in the dry branch makes a plan stamp *ok* onto the
+**previous real attempt** — deleting a genuine failure from the retry context the next dispatch is
+handed. Confirmed by mutation.
+
+**Rule — reading a cap is free; writing to one is a dispatch.** Before code touches a counter that
+bounds spending, say what it counts as a sentence.
+
+### F86 — the correction ledger could not see its own corrections
+
+`_HEADING` matches `### F<n> — title` and nothing else. From F77 onward the convention drifted to a
+single `#`, and **eight consecutive findings parsed to nothing** — including the four the boot
+router calls "the corrections that outlived every prompt". None reached a lane, so a session
+starting `control-plane` was shown nothing about corrections concerning its own gates.
+
+⛔ **Nothing failed.** Both existing checks iterate `load()`, so both asked their question only of
+findings that had already parsed. **A file the parser drops is not malformed, it is ABSENT** — and
+absence was the one state with no assertion. The ledger reported 19 while holding 27, a plausible
+number rather than an error. Root cause was the format README, which specified every field and never
+the heading level.
+
+### F87 — the declaration had no mechanism
+
+`ui-control` was marked `verifier_state=WIRED` from the day the preset table was written. No code
+performed that check, and neither the CLI nor the tracker ever passed the controller a callable — so
+`ticket_verifier`, **the run contract's only assertion about the client's problem rather than the
+harness**, could not pass for any ticket type.
+
+⭐ The code was already honest about it. `control.py` had a dedicated branch printing *"the
+declaration and the wiring disagree"* on **every dispatch**, written in anticipation, and nobody read
+it — because a run ending UNMEASURABLE for six other reasons does not draw the eye to the seventh.
+**An honest diagnostic nobody reads is worth about as much as a silent one.**
+
+The mechanism already existed too. `factory/pbi_contract.py` — 12 assertions, ~460 lines — had **no
+importer**, and was precisely the check `add-measure` described in prose. Two halves of one mechanism
+in the same package, neither knowing about the other.
+
+### F89 — the contract certified the defect it was pointed at
+
+Wiring `model-redesign` looked like one more registry row. Two measurements said otherwise, and they
+are **opposite failures that coexisted**:
+
+- **Too strict.** `M4-additive-manifest` raises `Unmeasurable` whenever `additive_only` is false. A
+  redesign renames by definition, so the M-contract can **never** pass one. Wiring it that way would
+  have been a gate that cannot pass.
+- **Too blind.** Evidence where the slicer responds, all 14 visuals paint, every anchor holds, and
+  `ME Spend` returns **the grand total for every brand** scores **`PASS=12`**. The preset names that
+  exact defect in its own `model_why`. `M11` is satisfied by `responded: True`, which a repainting
+  visual reports whether or not the number changed.
+
+**`interact` asks whether the control responded. `slices` asks whether the numbers moved.** Only the
+second sees an inert axis — and the contract had no field in which the fact could be written down,
+which is why reading it never revealed the gap.
+
+`factory/redesign_contract.py` is M1–M12 with M4 replaced by **R2** (renames carry enumerated,
+rewritten dependents) plus **R1** (pre-state captured before the overwrite, over an enumerated
+population), **R3** (⭐ no declared axis is inert) and **R4** (every captured measure replayed —
+coverage, not values).
+
+⭐ **The rule worth carrying past this repo — care is not coverage.** This was the fifth blind
+instrument in eleven days and the first where the blind instrument was the *newest and most careful*
+file, one that opens by warning about certifying the wrong layer. **Before reusing a contract for a
+second case, run that case's own named defect through it and watch it fail.**
+
+⚠ **R3 is only as wide as the agent's `must_slice_by` declaration.** Declaring no axes is
+UNMEASURABLE rather than PASS, so the cheap route to green is closed — but the contract cannot know
+which axes *should* have been declared. Enumeration is the agent's obligation; the contract's job is
+refusing to pass without it. Same shape as M10's dependence on `bound_reports`.
+
+### The scoreboard, stated as an outcome
+
+Two presets now have a verifier the controller can actually run, of six. **But zero defects have been
+caught in a real run** — both verifiers have only ever met test fixtures. "N verifiers wired" is an
+activity metric wearing an outcome's clothes, which is this estate's founding failure in a new
+costume. See [[vacuous-verification]].
+
+### Two sessions, one checkout
+
+Both a second Claude session and this one committed to this repo throughout. The repo's gotchas warn
+that the index is shared and say to run `git worktree list` — **that is insufficient.** The primary
+tree's branch moved `fix/fifth-verdict-apparatus-error` → `docs/agent-army-research-separation` →
+`main` mid-session via plain `git checkout`, which `git worktree list` does not show. Uncommitted work
+then sits on somebody else's branch and `git add` puts it in their commit.
+
+The checks that hold — `git rev-parse --abbrev-ref HEAD` immediately before every add or commit;
+`git commit -F <msg> -- <explicit paths>` always; `git fetch` then
+`git log --branches --not --remotes` before believing anything is unpushed. Twice a push was
+requested and everything was already on the remote. ⭐ And it **inverts the usual advice** — in a
+contended checkout, committing promptly beats leaving work in the tree for review, because
+uncommitted work is the exposed state. See [[session-contention-and-artefact-homes]].
 
 ## See Also
 

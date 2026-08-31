@@ -1617,3 +1617,33 @@ final safety step was *"run wiki lint"*, a tool that did not exist until now.
 ⚠ Not done: nothing above is committed; `status:` is not in the schema; the four pages are unwritten;
 `concepts/architecture/cross-channel-marketing-dimensional-model.md` is linked from `index.md` and
 **has never been committed**, so any clone loses it and breaks that link.
+
+---
+
+## 2026-08-31 — ingest: agent-factory RUN-03 landed, and five findings from running it
+
+**Source:** agent-factory session on `fix/fifth-verdict-apparatus-error` → merged to `main`
+(`b5355ec`). Commits `31f3527`, `d364338`, `f8679b7`, `b92d3e5`, `3d8e725`, `c0a5192`, `c27320a`,
+`2adf9a2`, `6d9e94a`.
+
+**Updated:** `entities/projects/agent-factory.md`
+
+- New dated section *"2026-08-31 — the assembly line runs, and five findings came out of running
+  it"* covering F85–F89.
+- ⚠ **Corrected a stale claim in the page's own summary.** "The GreenContract" section said **four
+  verdicts** since 2026-08-21; there are **five** — `ERROR` was added because `UNMEASURABLE` was
+  carrying both *a probe that knows it cannot look* and *our apparatus falling over*, which have
+  different remedies. Follows TTCN-3 / ITU-T Z.140 §24.2, where `error` dominates `fail`.
+- Frontmatter `updated` → 2026-08-31; sources extended with F85–F89 and the new factory modules.
+
+**Not written, deliberately:** no new page. Everything belonged on the existing project page, and
+the schema says update rather than create.
+
+⭐ **The line worth keeping out of this ingest:** *care is not coverage.* F89's blind instrument was
+the newest and most careful file in the repo — one that opens by warning about certifying the wrong
+layer — and it scored PASS on the exact defect the ticket type exists to find. Before reusing a
+contract for a second case, run that case's own named defect through it and watch it fail.
+
+⚠ **Honest scoreboard, recorded because the opposite is this estate's founding failure:** two
+verifiers are now wired, and **zero defects have been caught in a real run**. Both have only ever
+met test fixtures. "N verifiers wired" is an activity metric.
