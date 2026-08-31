@@ -1,7 +1,7 @@
 ---
 tags: [pattern, verification, evidence, agents, review, quality, claude-code]
 aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return]
-sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md]
+sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md, agent-factory session 2026-08-30 (research separation; contract.py fifth verdict, commit 0d4bdb1), agent-army-research/research/synthesis/W0-foundations.md]
 created: 2026-08-14
 updated: 2026-08-30
 ---
@@ -13,11 +13,22 @@ verdict field says `CONFIRMED`; the reasoning field says `"test"`. Downstream, o
 read — so a verification that did no verifying is indistinguishable from one that did, and it
 propagates as fact.
 
-This is the generalisation of a failure ALDC has now hit in six different mechanisms: an agent
-return, a CI check, a mutation test, a guard-test battery, an exception-swallowing test helper —
-and, in the fifth shape below, a **scoring layer that discards a correct verdict**. In the first
-five the *container* of the evidence was healthy and the *content* was absent; in the fifth the
-content is present and correct and the **arithmetic downstream throws it away**.
+This is the generalisation of a failure ALDC has now hit across many mechanisms: an agent return, a
+CI check, a mutation test, a guard-test battery, an exception-swallowing test helper — and then two
+shapes where the content is **present and correct** and something downstream destroys it. In the
+fifth, the **arithmetic** throws it away (a scoring layer). In the sixth, the **transport** does —
+a shell pipeline replacing a failing exit code with `tail`'s.
+
+Six shapes, in the order they were found:
+
+| | Shape | Found |
+|---|---|---|
+| 1 | **Empty verdict** — healthy container, no content | 2026-08-14 |
+| 2 | **A gate that cannot fire** (and its inverse, one that cannot pass) | 2026-08-22 |
+| 3 | **An inert control** — correct, present, and doing nothing | 2026-08-27 |
+| 4 | **A test pinning a weaker property than its own name** | 2026-08-29 |
+| 5 | **The aggregate discards a correct verdict** | 2026-08-29 |
+| 6 | **The transport discards a correct verdict** | 2026-08-30 |
 
 ## The reference case — verifier agents, 2026-08-14
 
@@ -237,8 +248,12 @@ survive aggregation as a refusal**: not dropped from the denominator, not counte
 scored as failed, and **with no configuration path to defeat it**. Grafana ships the switch; pytest
 ships the default. [[agent-factory]]'s `readiness.py` keeps an UNMEASURABLE gate **in the
 denominator** so it holds the board below all-pass, and `contract.py` ranks
-`FAIL > UNMEASURABLE > PASS` with any instrument exception becoming UNMEASURABLE — *"a crash is not
-a pass."*
+`ERROR > FAIL > UNMEASURABLE > PASS` — *"a crash is not a pass."*
+
+⚠ **Corrected 2026-08-30.** This paragraph read *"ranks `FAIL > UNMEASURABLE > PASS` with any
+instrument exception becoming UNMEASURABLE"*, which was accurate then and was **itself a collapse**
+— an unhandled crash and a probe that declined to look are different claims. Fixed the same day;
+see the 2026-08-30 section below.
 
 **The same pass found the shape inside a candidate tool, in the classic form.** `datacontract-cli`'s
 `create_checks.py` (673 lines) has **seven** `logger.warning(...) → return []` paths — a declared
@@ -258,6 +273,85 @@ one is **NOT-VISIBLE, not ABSENT**. And `WebFetch` returns a *small model's summ
 pointed at raw source — it is a `DOCUMENTED`-tier instrument, and it produced a materially
 incomplete read that `curl` + `cat` settled as fact. Use `curl`/`gh api` for any claim that will
 carry a verdict.
+
+## 2026-08-30 — the sixth shape: the verdict was correct and the TRANSPORT discarded it
+
+The fifth shape is an *aggregate* that throws away a correct verdict. This is the same loss one
+layer lower and far more mundane: **the shell**. Three findings from one [[agent-factory]] session,
+the first of which produced two confidently wrong reports to Paul inside an hour.
+
+### ⛔ The pipe that eats the exit code
+
+```bash
+python -m pytest tests/ -q 2>&1 | tail -25     # reports exit 0 on a FAILING suite
+```
+
+The shell reports the **pipeline's** exit status — `tail`'s — not pytest's. A run with **15
+failures** was reported as "completed, exit code 0", twice, and believed both times. The failure
+list was in the output; the *verdict* was replaced by an unrelated process's success.
+
+The same trap wears a second costume: `timeout 300 <cmd>` kills the run at the limit, yielding exit
+143 **and an empty output file** — which reads as "nothing to report" rather than "no result".
+Three separate measurements were lost to this in one session.
+
+```bash
+python -u -m pytest tests/ -q > /tmp/out.txt 2>&1     # redirect, don't pipe
+echo "EXIT=$?"                                        # capture on its own line
+```
+
+⭐ **Any command whose exit code is the evidence must not be piped, and must not be wrapped in
+`timeout` unless the timeout itself is the measurement.** This is the fifth shape at shell
+granularity: the instrument was correct and the transport lost it.
+
+### An absence is only as wide as the repos you opened
+
+A fourteen-component ecosystem inventory declared four components **`ABSENT` across the estate**
+— having opened two of the four repositories that hold them. `conductor` was never opened, and it
+contains `engine/work_guard.py` (*"repo safety checks, session locks, and execution gating"*, driven
+by a declarative `config/work-guard-policy.json` with `blockedPaths` and `approvalRequiredFor`,
+whose `safe_to_run()` is an admission function) and `engine/audit.py`, an append-only evidence log.
+
+⭐ **A component audit must NAME the repositories it searched, and may record `ABSENT` only when
+every named repository was actually read.** Otherwise the verdict is `NOT-VISIBLE`. This is the
+`gh api search/code` instrument note above, generalised from one tool to a whole estate — and it was
+committed *inside the document defining the estate's component inventory*, hours after a research
+wave made the same class of error and caught it.
+
+### The distinction we were proud of was one category coarser than 1991
+
+[[agent-factory]]'s flagship property is *never collapse FAIL and UNMEASURABLE*. A prior-art pass
+found the discipline **standardised in ISO/IEC 9646 and carried by TTCN-3** (ITU-T Z.140 §24.2) as a
+monotone lattice with **five** verdicts:
+
+```
+none < pass < inconc < fail < error
+```
+
+`inconc` is UNMEASURABLE. **`error` is failure of the test apparatus itself** — set by the test
+system, never the test case, and overridable by nothing. `contract.py` had no such state: a bare
+exception became UNMEASURABLE, so *a broken probe and a probe that declined to look were the same
+verdict*. The module whose entire purpose is refusing to collapse two kinds of not-knowing was
+collapsing two kinds of not-knowing.
+
+Fixing it **exposed a second live bug**: `evals.py` folded every non-PASS into FAIL, so a mutation
+that **crashed the instrument scored as a mutation caught** — a broken probe counted as evidence the
+contract works, which is this page's reference shape exactly.
+
+⭐ **Before claiming a verification distinction is novel, check whether conformance testing
+standardised it decades ago.** The answer here was thirty-five years old, better shaped than ours,
+and free.
+
+### And the harness that certifies a tree that no longer exists — second occurrence
+
+`scripts/mutate_readiness_probes.py` holds anchors copied from production source in
+[[prefect-connectors]]. **Fourteen match no current branch**, and the second harness
+(`tests/orchestrator/mutate_control_plane.py`) exists on no branch at all. So fourteen mutation
+controls are UNTESTED while a twenty-minute harness still reports *"all mutations flipped their gate
+off PASS"* — true of a tree that no longer exists. The file's own docstring records this happening
+on 2026-08-22 and exists to prevent it. **A guard that fires only when someone runs it has not
+stopped being a mechanism.** It is caught in the ordinary suite now, but only because the suite was
+run — there is **no CI in that repo** (`.github/workflows` does not exist), and the strict tracker
+drift check runs only at lane handoff.
 
 ## See Also
 

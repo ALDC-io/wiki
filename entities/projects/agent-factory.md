@@ -1340,6 +1340,81 @@ tickets in two repositories, and only the `prefect-connectors` half can move tha
 ⚠ **The control-plane work carries no ticket key** — verified, not assumed (`GP-273/274/275` in the
 merged range belong to older pipeline commits). It shipped to a production default branch untracked.
 
+## 2026-08-30 — the research split, the rename, and a verdict we were missing
+
+### Research now lives in its own repo
+
+Agent Army research is **out of this repository**, in a sibling private repo
+`github.com/russell94paul/agent-army-research` (`main` @ `ecbcdb0`). The two research packs that
+were here had **never been tracked in git** — one `git clean` from gone — and are archived
+byte-exact as SHA256-verified zips under its `legacy/`. Nothing tracked here was deleted.
+
+The boundary that matters: **research is where the organization is imagined; agent-factory is where
+accepted concepts become tested software.** A bridge stays at `docs/agent-army/` —
+`CURRENT_STATE.md` is generated from repository evidence and classifies every concept
+IMPLEMENTED / PARTIAL / PLANNED / NOT IMPLEMENTED with file-and-line citations. Its headline finding:
+**not one Agent Army term appears in any Python module here** (term sweep re-run and confirmed), and
+that is deliberate — `README.md` records Agent Army as cut, unlocked by *"one certified team, plus
+evidence a tier helps"*. The precondition has not been met.
+
+⭐ `blueprints/orchestrator_team.yaml` — a three-agent team **built, tested and rejected on
+evidence, and kept rather than deleted** — is the single most important input this repo has for that
+research, and the research corpus did not contain it.
+
+### Renamed to `agentic-factory` — identity only
+
+`3e33a1a`. Renamed: `pyproject.toml`, docstrings, `Lane.repo` labels, prose paths. **Deliberately
+not renamed**, each for a stated reason: the `AGENT_FACTORY_*` env vars (a public interface
+`readiness.py:554` gates on — renaming breaks shells, CI and the evaluator deployment),
+`~/.agent-factory/verdicts` (write-once evidence a rename orphans), `docs/artifacts/agent-factory.html`
+(8 script references), and the historical records in `findings.d/`, `evidence/` and `boot-prompts/`.
+
+⛔ **The directory and GitHub rename are NOT done**, so the code says `agentic-factory` while disk
+says `agent-factory` — and `lanes.py`'s PREAMBLE now tells every lane to read
+`agentic-factory/docs/findings.md`, **a path that does not exist**. Finish it before launching a lane.
+⚠ `.git/hooks/pre-commit` hardcodes an absolute path to `repos/agent-factory`; **every commit fails
+until the hook is reinstalled** after the `mv`.
+
+### The GreenContract has five verdicts now, not four
+
+`0d4bdb1`. `contract.py` was mapping **any** unhandled exception to UNMEASURABLE, so *a broken probe
+and a probe that declined to look were the same verdict* — a collapse of two kinds of not-knowing
+inside the module that exists to prevent exactly that. Prior-art research found the answer already
+standardised in **ISO/IEC 9646 / TTCN-3** (ITU-T Z.140 §24.2):
+
+```
+none < pass < inconc < fail < error
+```
+
+`inconc` is UNMEASURABLE; `error` is failure of the **test apparatus**, set by the test system, never
+the test case, overridable by nothing. `Verdict.ERROR` added and **ERROR dominates FAIL** — once the
+apparatus has broken you do not know the failure you think you saw was real.
+
+Fixing it exposed a **second live bug**: `evals.py` folded every non-PASS into FAIL, so a mutation
+that *crashed the instrument* scored as a **mutation caught**. And it forced a third decision —
+an exception planted in a world fixture models the *environment* declining, not our apparatus
+breaking, so `connector_contract.CtxProbes._get` now declares `Unmeasurable` rather than letting it
+escape. 423 executed / 420 passed / 2 xfailed / 1 skipped / **0 failed**.
+
+### ⛔ What is NOT done, and must not be faked
+
+- **14 mutation anchors match no current branch of [[prefect-connectors]]**, and the second harness
+  `tests/orchestrator/mutate_control_plane.py` exists on **no branch at all**. Fourteen
+  readiness-probe controls are UNTESTED while the 20-minute harness would still report *"all
+  mutations flipped their gate off PASS"* — true of a tree that no longer exists. **Second
+  occurrence of the exact failure that test file was written to catch.**
+- **The published board advertised 8 of 30 gates when the truth is 9 of 30.** Regenerated and
+  re-verified (`build_tracker.py --check` → `up to date`), but **uncommitted**. Worse, the board is
+  stale at a second level: `.data/tasks.jsonl` had not been written since the previous evening, so
+  regenerating makes the board match the store, not reality.
+- **There is no CI.** `.github/workflows` does not exist, the pre-commit hook only checks imports,
+  and `build_tracker.py --check` runs *only* at lane handoff (`factory/handoff.py:70`). That is why
+  the drift survived.
+- **The citation chain is weak.** `docs/research/` cites via **1,388 opaque ChatGPT tokens across 7
+  files**, and `R2-answer-topology.md` — the source of the multi-agent topology decision — carries
+  no arXiv id, DOI or URL at all. That is how a **−3.5%** figure travelled three hops without its
+  95% CI of **[−18.6%, +25.7%]**.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]] · [[power-bi]]
