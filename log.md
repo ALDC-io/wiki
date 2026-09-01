@@ -1697,3 +1697,31 @@ same knowledge is the duplicate-source-of-truth failure the whole session was sp
 **red at 15 failures**, and those belong to a `prefect-connectors` checkout parked since 2026-08-23
 that only its owner can safely move. The factory still has **zero real agent dispatches** and
 **0 PASS** in its ledger. Nothing here changes that; F90 remedy (a) is what would.
+
+## 2026-09-01 — Delivery #001 forensic reconstruction, and the Artifact Generator P0
+
+**Ingested into [[agent-factory]].** Source: `agent-factory` @ working tree (uncommitted at time of
+writing), `docs/case-studies/delivery-001-marketing-model.md`,
+`docs/design/artifact-generator-proposal.md`, `factory/{projection,assertions,forensic_source,case_study,case_study_render}.py`.
+
+Reconstructed the Navira marketing model delivery forensically (37 issues across two tracks — the
+client work and the Factory mission that investigated it), then used it as the fixture that designed
+and tested a second artifact type. `factory/client_review.py` turned out to already be an artifact
+compiler with one type compiled into it, so two organs were extracted rather than a system built.
+
+⭐ **The load-bearing entry is a self-inflicted one.** A `TemporalAssertion` contract was fully designed
+before an inventory sweep found `factory/context.py` already carried it, invariant and all. The design
+process for the tool that documents `KNOWLEDGE_AVAILABLE_BUT_NOT_CONSUMED` committed that exact failure.
+Recorded in the artifact as issue `M-13` and scene 10 rather than quietly corrected, and classified
+`MANUAL INVENTORY INTERCEPTED` — **not** as evidence that a Known-Failure Preflight exists, because it
+does not.
+
+**Measured:** 769 passed / 2 xfailed (from 732/2), `tests/test_client_review.py` untouched, 17 negative
+controls each watched failing, 48 prose references validated, artifact 105 KB with zero external URLs.
+
+⚠ **Honest scoreboard.** The rendered surface was **never visually verified** — neither browser backend
+was reachable — so the consumer-layer rule is unsatisfied and no screenshots exist. 18 of 37 issues are
+in the fixture, not all. Three provenance defects the case study itself documents remain unfixed,
+including R1/R2 still naming superseded task ids in their own headers. Nothing is committed in
+`agent-factory`; the GP-319 correction is drafted and **unposted** at
+`boot-prompts/drafts/GP-319-comment-2026-09-01.md`.

@@ -1,9 +1,9 @@
 ---
 tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
 aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
-sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81, agent-factory/docs/findings.d/F85-F89, agent-factory/factory/control.py, agent-factory/factory/verifiers.py, agent-factory/factory/redesign_contract.py, agent-factory/factory/events.py, agent-factory/factory/provider.py, agent-factory/boot-prompts/README.md]
+sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81, agent-factory/docs/findings.d/F85-F89, agent-factory/factory/control.py, agent-factory/factory/verifiers.py, agent-factory/factory/redesign_contract.py, agent-factory/factory/events.py, agent-factory/factory/provider.py, agent-factory/boot-prompts/README.md, agent-factory/docs/case-studies/delivery-001-marketing-model.md, agent-factory/docs/design/artifact-generator-proposal.md, agent-factory/factory/case_study.py, agent-factory/factory/projection.py, agent-factory/factory/assertions.py, agent-factory/factory/forensic_source.py]
 created: 2026-08-21
-updated: 2026-08-31
+updated: 2026-09-01
 ---
 
 # Agent Factory
@@ -1599,6 +1599,106 @@ twelve — and the shipped blueprint **already** ships two of them empty.
 Both presets with a runnable verifier are `pbi_model` work in `~/repos/clients`, and remedy (b) now
 correctly refuses them, so the first supervised run is blocked by design until (a) lands. Boot
 prompt: `boot-prompts/bootstrap-and-instruments-2026-08-31.md`.
+
+## 2026-09-01 — the artifact compiler was already built, and designing its replacement reproduced the largest failure in the case study it renders
+
+**Delivery #001 (the Navira marketing model) was reconstructed forensically, then used as the fixture
+that designed and tested the Artifact Generator.** Two artifact types now exist, so the compiler shape
+is no longer a single example.
+
+⭐ **The finding that outranks everything else here, because it is about us and not about the code.**
+A `TemporalAssertion` contract was designed from scratch to fix *"a claim without an as-of"* — six of
+the thirty-seven issues in the case study. `factory/context.py` **already had it**, and had had it
+since it was written: `status` (CURRENT/STALE/UNVERIFIED), a `confidence` vocabulary, a required
+`source`, a `checked` date, and a constructor that **refuses to call a ref CURRENT without one**
+(`context.py:109`; its docstring says *"UNVERIFIED is the default status, not CURRENT"*). Three live
+consumers. An inventory sweep caught it before implementation; the contract was deleted from the
+proposal and replaced with a ~25-line additive extension.
+
+**So the design process for the tool that documents `KNOWLEDGE_AVAILABLE_BUT_NOT_CONSUMED` — 8 of 37
+issues, the largest family — committed it.** ⛔ **The honest classification is `MANUAL INVENTORY
+INTERCEPTED`, and a future automated preflight is `MAY_REDUCE_LIKELIHOOD`, not a save.** It is recorded
+in the case study as issue `M-13` and as scene 10, deliberately, rather than quietly fixed. Do not let
+it become a claim that Known-Failure Preflight exists — it does not; the findings ledger is machine-read
+and **nothing consumes it as a precondition**.
+
+### The architecture: nothing new was built
+
+`factory/client_review.py` was **already an artifact compiler** with one artifact type compiled into it
+— canonical state + an authored narrative → typed view model → allow-list projection → renderer emitting
+self-contained themed HTML. The proposal's five layers and the shipped code were the same shape; the gap
+was genericity, not architecture. Extracted `projection.py` (the allow-list boundary + leak backstop, now
+keyed by artifact) and `assertions.py` (grounding, freshness, guarded words); added `forensic_source.py`
+(prose boundary validator), `case_study.py` and `case_study_render.py`. **No service, no database, no
+template engine, no markdown parser, no artifact registry.**
+
+⚠ **Extraction hazard, met twice in one sitting:** `GUARDED_WORDS` and the `freshness()` boundary were
+both reconstructed *from memory* and both were wrong — the real list is a 17-member frozenset, and the
+`LAST_VERIFIED`/`STALE` boundary uses `<=` where memory supplied `>=`. Caught by diffing against the file
+before wiring. **An extraction is a copy, not a re-derivation; diff it.**
+
+### Contracts that earned their place
+
+* **`Counterfactual` has no `status` and no `grounding` field, and that is the design.** An outcome
+  renderer reads those two fields, so a counterfactual is not duck-type-compatible with an outcome and
+  *cannot* be passed to it. "A SIMULATED capability must not render in the same register as an observed
+  one" is enforced by the type rather than by a convention someone must remember.
+* **`maturity == EXERCISED` needs two independent halves**: `mechanism_refs` (the code exists) *and*
+  `exercised_proof` (it ran **here**). A fully built capability that no mission invoked is
+  `IMPLEMENTED_NOT_EXERCISED`. Of 27 counterfactuals in Delivery #001, **4 are EXERCISED**.
+* **`assertions.PROMOTABLE` is pinned by a test to stay `("MEASURED","DERIVED")`.** The new display
+  bases — `DOCUMENTED`, `INFERRED`, `SIMULATED`, `NOT_RECORDED`, `CONTRADICTORY` — must never enter it.
+  `DOCUMENTED` is one hop from measurement; inside the promotion gate, every claim read out of a document
+  would promote itself to VERIFIED. **Single most dangerous edit available in that file.**
+* **The compiler refuses a single-track case study.** Delivery #001 carries failures on both the client
+  work and the mission that investigated it; a record rendering only the client's would be an
+  advertisement. Made a mechanism because the gate decision required it not be an intention.
+
+### The prose boundary, and why it is not a Markdown parser
+
+The 2,206-line forensic reconstruction stays canonical for prose and is cited by `path#anchor`. The
+validator recognises **exactly one construct** — an HTML comment carrying an anchor id, on its own line —
+so prose can be reworded, re-headed and re-ordered freely, and the only way to break a citation is to
+delete the anchor it names. Explicit ids rather than slugified headings, because heading text is editorial
+and two headings can slugify to the same anchor invisibly. A **duplicate anchor raises**: a citation to one
+resolves to whichever came first and looks correct. 72 anchors, 48 references, all resolve.
+
+⚠ This is the `FIELDS.md` drift shape (a document transcribed from another and never re-checked) and it is
+only safe *because* the validator ships. Without it the boundary should be rejected and the structured
+input generated instead.
+
+### ⭐ The compiler caught its own fixture going stale, mid-build
+
+The authored record claimed R3 `open` and D1 `blocked`. **Another session closed both while this work was
+in progress.** The compiler re-checked every task-state claim against the live append-only store and
+reported `DIVERGED` with both values, rather than republishing a stale fact under a fresh timestamp — and
+it **reports without repairing**, because correcting a narrative belongs to its author. That is the
+second-truth-store test passing on live evidence rather than on a fixture.
+
+### Measured
+
+* **769 passed, 2 xfailed** (baseline 732/2) — +37, zero regressions. `tests/test_client_review.py`
+  passes **untouched**, which was the acceptance test for the extraction.
+* **17 negative controls, each watched failing before being written down** — dangling anchor, duplicate
+  anchor, `EXERCISED` without proof, contradiction with one side, unmeasured KPI carrying a number,
+  single-track record, `CURRENT` without a date, undeclared field, leak backstop, and eight more.
+* Artifact: `docs/artifacts/delivery-001-case-study.html`, 105 KB, **zero external URLs**, no backend.
+  Nine-scene walkthrough whose reveal path is **CSS only** — no JavaScript in it at all.
+* **4 of 15 KPIs carry a number.** The rest render `NOT_RECORDED` / `BLIND_INSTRUMENT` /
+  `REQUIRES_DELIVERY_002`. Publishing the gaps is the deliverable; a page of 15 green KPIs would be the
+  absence-rendered-as-a-number failure committed by the artifact documenting it.
+
+### Gotchas earned
+
+* ⚠ **The leak backstop cannot distinguish a credential from prose about one.** It fired twice on
+  legitimate narrative and the wording was changed rather than the guard weakened — it errs safe, which is
+  the correct direction, but authors will hit it.
+* ⚠ **Neither browser backend was reachable**: Playwright's browser cannot see this machine's localhost,
+  and the Chrome extension was not connected. **The rendered surface was never visually verified** —
+  structural checks only (balanced tags, every CSS var defined on bare `:root`, all three theme layers).
+  That does **not** satisfy the consumer-layer rule, and no screenshots exist.
+* `mechanism_refs` must be plain paths. A path with a line range cannot resolve on disk; the line number
+  belongs in prose.
 
 ## See Also
 
