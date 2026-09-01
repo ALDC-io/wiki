@@ -1748,3 +1748,17 @@ by a credential that cannot pass the read-only proof), and the dashboard suite (
 holds uncommitted changes in it). Branch is **unmerged and unpushed by decision** while the evidence
 boundary is settled — `agent-factory` pushes to a PUBLIC remote. Jira comment drafted and
 **unposted** at `agent-factory/boot-prompts/drafts/GP-319-comment-D3-D5-2026-09-01.md`.
+
+## 2026-09-01 — Switchboard P1 + Marketing Model finalization pass
+Ingested into [[GP-319]] (finalization section). Source: agent-factory branches `switchboard/p1`
+(`a732716`→`7ff0e1c`) and `mission/marketing-model-finalization` (`1ed4277`→`e7f92f3`), both
+**unpushed**. Nothing deployed; no credential retrieved this session.
+Headline: the client-review runbook's own regeneration command produced a document reporting four
+fully-evidenced outcomes as UNSUBSTANTIATED when run from any git worktree — a fail-closed
+mechanism firing spuriously at the point of delivery. Fixed at the default, the fallback and a new
+publication gate that inspects the finished document rather than its inputs.
+Also: two structural guards were aimed at the wrong checkout (`repo.primary()`/`R.FACTORY`), so a
+suite running in a worktree validated the primary's source — a lane could add a banned expression,
+watch the guard pass, and be reading someone else's files.
+⚠ Two Jira drafts remain unposted (Atlassian MCP unavailable): `boot-prompts/drafts/GP-319-comment-2026-09-01.md`
+and `boot-prompts/drafts/GP-319-finalization-comment-2026-09-01.md`.
