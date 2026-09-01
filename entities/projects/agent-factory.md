@@ -1700,6 +1700,112 @@ second-truth-store test passing on live evidence rather than on a fixture.
 * `mechanism_refs` must be plain paths. A path with a line range cannot resolve on disk; the line number
   belongs in prose.
 
+## 2026-09-01 — two published artifacts, and the first Zeus seam measurement
+
+Two self-contained HTML artifacts built and render-confirmed, plus one architecture question answered
+that had not been asked before. Nothing was deployed; nothing client-facing was published.
+
+### The Atlas — `docs/artifacts/agent-factory-atlas.html`
+
+An interactive capability map: 59 nodes, 107 edges, laid out era × track, hand-written SVG with no
+library. Five modes (Journey / Value / Zeus / Simulations / Frontier), a per-node inspector carrying
+basis-tagged evidence and a qualitative value signature, ⌘K palette, ten-chapter guided story.
+
+⭐ **The headline is a four-segment bar, not a percentage.** A live `python -m factory.readiness`
+(542.4 s, primary checkout, HEAD `ab13977`) returned **PASS 13 · FAIL 12 · UNMEASURABLE 4 ·
+NOT_RUN 1** of 30. Rendering that as "43%" would reproduce the aggregation defect the build-vs-adopt
+pass documented — six mature tools carry the state and all six destroy it at the score. The bar
+geometry is computed from the counts, so halving one changes the picture.
+
+⛔ **Measured, and it corrected the brief:** `grep -rniE "zeus|ccx|opentribe|cce_" factory/ scripts/
+evaluator_service/` returns **nothing**. Zeus Chat is live with **44 tools**
+(`grep -cE '^\s*name: "[a-z_]+"' src/tools/schemas.ts` in `zeus-chat-exp`), Zeus Memory is live and
+multi-tenant, and this session had a CCX MCP client connected — so the transport is real and the
+integration is **absent**. Every Zeus edge on the map is drawn dashed and labelled UNBUILT. The
+prompt had assumed a connection; the instrument said otherwise.
+
+### The Field Manual — `docs/artifacts/agent-factory-field-manual.html`
+
+The companion: how to build an agent, a team, an army, and the tier above an army. Seven modes.
+Uses **real NATO echelon marks** (Ø · ● · I · III · XXXX · XXXXXX) to encode the hierarchy, and the
+top tier deliberately has none — which is the honest answer to "what is above an army".
+
+- **Naming decided: NATION.** An army fights; a nation *gets better at fighting*. Alternates weighed
+  (Polity, Commonwealth); Dominion and Theater rejected with reasons in the artifact.
+- ⭐ **The army analogy is broken on purpose in one place.** "Army" here does **not** mean agents
+  commanding agents — R2 killed that on 180 configurations. A chart in the Doctrine section plots
+  *layers of management* as a flat dashed line at zero across all seven echelons.
+- **The Net** — a live dual-rail terminal: conversation left, the typed order assembling right with a
+  live hash and computed echelon. Four mechanics: dual rail, a **NOT_RECORDED key** (declining writes
+  `NOT_RECORDED` and holds the gate red — from `docs/specs/client-intake-portal.md`), a
+  refusal-aware prompt (`dispatch ⨯ blocked by: proof of done` *before* you press it), and **proof
+  asked second**, before scope, tools or budget.
+
+### ⭐ The Mesh — Paul's question, and the part that is actually novel
+
+Paul proposed an "Agentic Mesh": agents pulling knowledge from each other dynamically, as needed —
+and asked whether one vector DB is the alternative. **Both fail, in opposite ways**, and that is what
+identifies the real design:
+
+| | Failure mode |
+|---|---|
+| Pure peer-to-peer mesh | No ground truth. A confidently wrong agent becomes four agents' prior knowledge. **A rumour network.** |
+| Single vector store | Nearest-neighbour always returns something. **It cannot say "nothing here"** — which is UNMEASURABLE wearing retrieval's clothes. |
+
+**Answer: three layers, not one choice.** An append-only evidence **ledger** (canonical — already
+exists as `TaskStore` + `findings.d/` + evidence classes); a rebuildable **index** over it (this is
+where a vector store belongs — a projection, never a source, exactly like the Switchboard); and the
+**mesh** as the transfer fabric, *demand-paged* (borrowed from virtual memory: page in only the
+doctrine the declared task touches).
+
+⭐ **The one rule: knowledge moves with its verdict attached, or it does not move.** The mesh
+transfers an *evidence pointer* — finding id, basis, the discriminating test, what changed — never a
+conclusion.
+
+⚠ **And the honest part, because this estate has published a falsifiable novelty claim before.** A
+prior-art table went into the artifact: gossip protocols, blackboard architectures (Hearsay-II),
+stigmergy (already research branch R22), federated learning and hybrid RAG all cover parts of it.
+**The mesh is not the breakthrough — the refusal is.** A retrieval layer that returns `NOT_KNOWN` as
+a first-class verdict is a different class of object, and it is the same insight as UNMEASURABLE one
+layer up. Smallest first step, worth doing even if the mesh is never built: **give every finding a
+typed identity and a machine-readable scope.**
+
+### Render evidence, and two probe errors that were mine
+
+Both artifacts are `RENDERED_CONFIRMED` via new checkers driving the installed Chrome through
+Playwright (`scripts/atlas_render_check.py`, `scripts/manual_render_check.py`) — 6 viewport/theme
+combinations each, every mode exercised, plus reduced-motion and JS-disabled passes. Screenshots in
+`docs/evidence/atlas-2026-09-01/` and `docs/evidence/manual-2026-09-01/`.
+
+**Six defects were found by rendering that every static check passed over**, and they are the
+argument for the render gate:
+
+1. Figure `<text>` anchored at `x="0"` — glyph bboxes start at −5 and were clipped by the viewBox.
+2. Two-line node titles overlapped their own status label (card height too short).
+3. A floating legend occluded the entire frontier column.
+4. Fit-to-both-axes shrank every label below readable size; fit-to-width was correct.
+5. ⭐ **`display:none` on a grid item removes it from the grid entirely**, so hiding the 196px rail
+   made the content pane inherit the 196px track. Collapse the *track*, not the item.
+6. ⭐ **`[hidden]` loses to `.rail{display:flex}`.** The published artifact wrapper adds an
+   `!important` reset; a local render does not. Do not rely on the wrapper.
+
+⚠ **Two findings were my instrument, not the page** — the probe measured a hidden view's zero-size
+rects as defects, and flagged SVG internals inside an `overflow:hidden` canvas as page overflow.
+Both were fixed in the probe and disclosed. Same family as the render_pass errors already recorded
+here: **a probe is only as honest as the half it did not supply itself.**
+
+### Gotchas earned
+
+- **`impeccable`'s `hook-admin.mjs ignore-value` did not suppress the hook** for
+  `layout-transition` / `transition: width`. Rather than fight it, the progress bar was changed to
+  `transform: scaleX()` — GPU-composited, still lands on the exact measured fraction, and removes the
+  finding at source. The dead ignore was then deleted from `.impeccable/config.json`, because a
+  standing ignore for a condition that no longer exists will mask a genuine future hit.
+- **A background `python -c` with `> $TMPDIR/file` writes to the MSYS path, not the task output
+  file**, and Python cannot then open `/tmp/...`. Resolve with `cygpath -w`. The task-completion
+  notification reported exit 0 over a zero-byte output file, which reads exactly like a failed run.
+- `readiness.measure()` is **542.4 s** cold. Budget for it; do not put it behind a page refresh.
+
 ## See Also
 
 [[orchestrator]] · [[prefect-connectors]] · [[vacuous-verification]] · [[agent-control-plane-prior-art]] · [[agent-session-completion-signals]] · [[session-contention-and-artefact-homes]] · [[GEP]] · [[power-bi]]
