@@ -1726,3 +1726,24 @@ in the fixture, not all. Three provenance defects the case study itself document
 including R1/R2 still naming superseded task ids in their own headers. Nothing is committed in
 `agent-factory`; the GP-319 correction is drafted and **unposted** at
 `boot-prompts/drafts/GP-319-comment-2026-09-01.md`.
+
+## 2026-09-01 — GP-319 D3-D5 delivered (agent-factory `mission/marketing-model-v1` @ `0d62b19`)
+
+Design pass closed: D3 done, D4 falsification-tested H0 across nine categories and it survived
+amended, D5 recommendation delivered and **awaiting human sign-off**. Recommendation agrees with
+GP-319's 2026-08-25 decision — no new fact — and adds one conformed marketplace dimension.
+
+⭐ **Corrects the 2026-08-31 entry below on two points.** The rendered surface **has** now been
+visually verified (six tabs, real browser, screenshots committed, demo data), so the consumer-layer
+rule is satisfied for the dashboard. And "Sponsored Display absent" was wrong: it is present
+everywhere except the clone the dashboard reads.
+
+Two new findings worth the ticket: a NULL introduced to mark absence honestly propagated through an
+addition and voided seven measures for 22 of 27 months; and the dashboard's brand filter is inert on
+15 measures while looking fully operable, in a UI that marks five other inert controls correctly.
+
+⚠ **Not done:** sign-off, any PBI render, the deployed schema value, warehouse-mode render (blocked
+by a credential that cannot pass the read-only proof), and the dashboard suite (another session
+holds uncommitted changes in it). Branch is **unmerged and unpushed by decision** while the evidence
+boundary is settled — `agent-factory` pushes to a PUBLIC remote. Jira comment drafted and
+**unposted** at `agent-factory/boot-prompts/drafts/GP-319-comment-D3-D5-2026-09-01.md`.
