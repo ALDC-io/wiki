@@ -1,9 +1,9 @@
 ---
 tags: [pattern, power-bi, dax, data-modelling, navira, gep, correctness]
 aliases: [answerability guard, __ME Answerable, inert axis, silent grand total, guard measure, exact-zero blanking, NOT-RECORDED vs ZERO]
-sources: [GP-318 T5/T6/T7 2026-08-13, GP-319 2026-08-24, GP-329 2026-08-28, aldc-launchpad docs/evidence/gp318 + gp319 + gp329-widen-impact.md, conversation 2026-08-13, conversation 2026-08-24, conversation 2026-08-28]
+sources: [GP-318 T5/T6/T7 2026-08-13, GP-319 2026-08-24, GP-329 2026-08-28, GP-318 sales-model measurement pass 2026-09-02, aldc-launchpad docs/evidence/gp318 + gp319 + gp329-widen-impact.md + navira-sales-repair, conversation 2026-08-13, conversation 2026-08-24, conversation 2026-08-28, conversation 2026-09-02]
 created: 2026-08-13
-updated: 2026-08-28
+updated: 2026-09-02
 ---
 
 # Answerability guard — making a model refuse questions it cannot answer
@@ -300,7 +300,65 @@ UK does not run it.
 under them — and never publish `ZERO`, `NOT-RECORDED`, `NOT-VISIBLE` or `NOT-RETAINED` as if they
 were the same finding.
 
+## ⭐ 2026-09-02 — the column-level hole was already documented, and the Daily model still had 11
+
+**This is a process finding as much as a technical one.** A measurement pass over the Daily Sales
+Model `66151728` re-derived "a measure-level guard cannot close a column-level hole" from first
+principles, reading Heather Tabor's specimen workbook's `pivotCache` XML to prove her nine value
+fields were **columns** dragged as Excel implicit `Sum of`, not measures.
+
+**That mechanism was already on this page**, written from GP-319 on **2026-08-24** — eight days
+earlier. The grounding sweep at session start did not reach this page, so the finding was rebuilt
+instead of retrieved. ⚠ **When a defect's mechanism feels novel, check this page before writing the
+probe** — the section above it was the answer, and it named the remedy (hide the raw columns) too.
+
+What the pass *did* add is the measurement the earlier entry lacked, on the **other** model:
+
+| | |
+|---|---|
+| numeric fact columns examined on `66151728` | **138** |
+| still client-visible **and** repeating their grand total across `Product[Master SKU]` | **11** |
+| worst offender | `Budget[Forecast Gross Sales]` = **$95,016,664.29** on all 15,483 Master SKUs |
+| Heather's own nine columns | already `IsHidden` — her exact route is closed |
+
+So the GP-319 remedy was applied to the Marketing Model and **never carried across to the Daily
+model**. Two of the 11 are *percentage* columns being summed (19,877.7 and 26,436.6), which needs
+`SummarizeBy = None` rather than hiding.
+
+⭐ **A date-correct repeated total is more dangerous than an absurd one.** Heather's repeated
+$1,003,331.05 was not the column grand total ($87,547,935.40) — it was the **correct week-31
+total**, wrong only on the product split. It survives every sanity check a human would apply. An
+obviously silly number gets questioned; this one gets published.
+
+### Refinement to the single-member rule above: check populated members, not just members
+
+The rule at *"an axis with exactly ONE member correctly equals the grand total"* needs a sibling
+clause. A first classifier pass flagged all **16** `Marketplace Measures` as inert on
+`Marketplace[Marketplace Name]`. The axis has **30** members, so `rows > 1` passed — but only
+**1** of the 30 carries any `Traffic Activity` row, and a single *populated* member equals the grand
+total by the same arithmetic necessity.
+
+```
+members = 30   nonblank = 1   distinct_nonblank = 1   equals_grand_total = 1   ->  NOT a defect
+```
+
+**Rule: inertness requires `nonblank > 1`, not merely `members > 1`.** Verdict name used:
+`ONE_POPULATED_MEMBER`. Without it the pass would have overstated by 12 pairs and 3 measures
+(substantive offenders 247 → **235**, measures 41 → **38**).
+
+⭐ **And a guard is value-neutral at the grand total** — `IF([__X Answerable]=1, <expr>)` with no
+filter applied evaluates the guard to 1 and returns `<expr>` unchanged. So "the DAX differs because
+one model is guarded" can **never** explain a difference in an *unfiltered* total. A TEST↔PROD
+parity run labelled 26 measures `INTENTIONAL_CHANGE (DAX differs)` on exactly that reasoning and
+was wrong to; the gaps were data, not logic.
+
+Instruments (read-only, negative + positive controls, no `--apply` path in any):
+`aldc-launchpad/pbi_ops/_sales_repair_axis_probe.py` (measure × axis, full population),
+`_sales_repair_classify.py` (offline re-classification), `_sales_repair_heather_reproduce.py`
+(carries `assert_no_repeated_total()`, the deterministic regression — it **FAILS with 11 failures**
+today, which is what proves it can fail).
+
 ## Related
 
 [[GP-318]] · [[GP-319]] · [[GP-329]] · [[model-enablement-guide]] · [[consumer-layer-validation]] ·
-[[power-bi]] · [[pbi-xmla-automation]]
+[[power-bi]] · [[pbi-xmla-automation]] · [[vacuous-verification]]

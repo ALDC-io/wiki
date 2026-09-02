@@ -1784,3 +1784,71 @@ synthesis must answer. `GAP-01`.
 carries client-identifying content and the checkout is shared by five sessions.
 **No Jira ticket exists for this work** (internal R&D; Jira in this estate is client work only), and
 none was invented. Boot prompt: `agent-factory/boot-prompts/corpus-index-2026-09-02.md`.
+
+---
+
+## 2026-09-02 — GP-318 Daily Sales Model: a supplied repair pack, run as measurement, refuting its own brief
+
+Ingested from conversation 2026-09-02. Pages updated: [[GP-318]], [[answerability-guard]], `index.md`.
+No new page created — both targets already existed.
+
+Paul supplied `NAVIRA_SALES_MODEL_REPAIR_BOOTSTRAP_V1` (11-issue register, acceptance criteria) asking
+for the Daily Sales Model to be certified as the [[GP-319]] reference baseline. Run as a **read-only
+measurement pass**: TEST `66151728` and PROD `74a529b3` both **unchanged**, ten instruments read-only by
+construction, F1-F10 left proposed. `aldc-launchpad` commit `10d4959` (48 files, **unpushed**).
+
+⛔ **The pack's "0 inert fact/dimension combinations" is refuted — and so is this wiki's own 2026-08-25
+"zero inert axes" claim.** 1,152 measure x axis pairs over the FULL member population of nine axes:
+**277 INERT, 235 substantive across 38 measures**. The 08-25 figure was measured on a fact-group reach
+probe, not measure x axis, and does not survive the wider population. Five further pack figures
+corrected; **Agency is not an axis in this model at all**.
+
+⭐ **The Heather MasterSKU regression is a column-drag, not a defective measure** — her nine value
+fields are COLUMNS of `Marketing Efficiency` pulled in as Excel implicit `Sum of`, proven from her
+workbook's own `pivotCache` XML; that table has no Product relationship so the measure layer is never
+invoked and **no DAX guard can close it**. Paul's decision: do not implement one.
+⚠ **That mechanism was already in [[answerability-guard]] from [[GP-319]] 2026-08-24 and was rebuilt
+from first principles rather than retrieved** — the session's grounding sweep did not reach the page.
+Its remedy had been applied to the Marketing Model and **never carried across to the Daily model**,
+leaving **11 of 138 numeric fact columns client-visible and still repeating their grand total** across
+all 15,483 Master SKUs (worst: `Budget[Forecast Gross Sales]` = **$95,016,664.29**).
+⭐ **Her repeated $1,003,331.05 was date-correct**, not the column total of $87,547,935.40 — the right
+week (CY2026 W31), wrong product split, vendor filter inert 9/9, six spend columns reproducing to the
+cent. A date-correct repeated total survives every sanity check a human applies.
+
+**SALES-003 confirmed to the cent and decomposes exactly:** $261,274.99 vs $237,585.33, delta
+**$23,689.66 = CY2024-01..05 Google spend**, nothing else contributing, and Google is the only route
+divergence of five platforms.
+
+⭐ **A counting basis moved one answer by 6x** — Sponsored Brands product grounding reads as ~93%
+coverage by distinct IDs and **14.3% by dollars**, because 85.7% ($203,307.40) of SB spend carries no
+product ID. Conforming ASIN->SKU recovers at most $34,055.67.
+
+🔴 **A separate PROD defect, found while answering parity: PROD sums raw `Marketing Activity[COST]`
+while TEST sums `COST_USD`** (same split on Ad Sales), so **PROD aggregates GBP, CAD and USD together
+and publishes the result.** Needs its own owner and gate; deliberately not folded into GP-318. PROD
+untouched. TEST<->PROD recorded as `MEASURED_NOT_CERTIFIED`: 128 visible measures vs 76, 11 of 72
+shared differing in real logic, row counts diverging in BOTH directions, and the +9.64% marketing gap
+**confounded** between recency and currency basis.
+
+Traps earned:
+⛔ **`INFO.*` DAX does not work over the PBI REST `executeQueries` endpoint on this tenant** (HTTP 400,
+`AnalysisServicesErrorCode 3239575574`) — metadata must come from TOM over XMLA, and
+`pbi_ops/_gp318_pathway_fieldlist.py`'s stored evidence is **entirely `__error__` rows**: it recorded
+the failure as data. [[vacuous-verification]] again.
+⭐ **A guard is value-neutral at the grand total**, so a guard-only DAX difference can never explain an
+unfiltered value gap — 26 parity rows were mislabelled `INTENTIONAL_CHANGE` on that reasoning.
+⭐ **Inertness requires `nonblank > 1`, not `members > 1`** — a single *populated* member equals the
+total by arithmetic; 12 false positives, now folded into [[answerability-guard]].
+⚠ **Every money anchor from 2026-08-25 is stale** (marketing cost 2,949,914.38 -> **2,993,201.43** in
+eight days), and ⚠ **a closed week is not closed** — CY2026 W31 gross sales moved **-2.59%** since the
+08-25 capture while all six spend columns held to the cent, so ME sales history is being restated
+**undeclared**.
+
+⛔ **Sales Model NOT certified as the [[GP-319]] baseline.** Blockers: the 235 substantive inert pairs
+and the 11 draggable columns. Jira **not posted** (Atlassian MCP unavailable; draft at
+`boot-prompts/drafts/gp318-jira-sales-model-measurement-2026-09-02.md`, and **the ticket key was not
+verified** for this pack). Raw client workbooks/PDF (~2 MB) deliberately **not committed** — sha256
+hashes and a source->measurement dependency map kept instead, `.gitignore` rule proven with
+`git check-ignore`. Boot prompt:
+`aldc-launchpad/boot-prompts/navira-sales-model-repair-2026-09-02.md`.
