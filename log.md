@@ -1762,3 +1762,25 @@ suite running in a worktree validated the primary's source — a lane could add 
 watch the guard pass, and be reading someone else's files.
 ⚠ Two Jira drafts remain unposted (Atlassian MCP unavailable): `boot-prompts/drafts/GP-319-comment-2026-09-01.md`
 and `boot-prompts/drafts/GP-319-finalization-comment-2026-09-01.md`.
+
+## 2026-09-02 — Agent Factory corpus indexed (`docs/_index/`, 10 artifacts + a research backlog)
+
+An indexing and classification layer over 719 corpus files in [[agent-factory]] — 168 artifact
+records, 86 concepts, 13 duplicate clusters, 28 contradictions, a 112-row built-vs-proposed matrix,
+42 gaps, 26 candidate research missions. Nothing summarised away, merged, moved or deleted; zero
+deletions, full suite green (exit 0).
+⭐ **Six of the eight CRITICAL gaps are not research** — the corpus holds 26 filed answers (~1.9 MB)
+and 19 unactioned conclusions, 0 of 19 closed; the binding constraint is measurement, not knowledge.
+⭐ **Five of nine inbound packs carry the same source file byte-for-byte** (22 exact-duplicate groups
+measured), so "nine sources converge" is one source reformatted nine times.
+⭐ **`factory/assertions.py` already had the built-vs-proposed vocabulary** (EXERCISED /
+IMPLEMENTED_NOT_EXERCISED / SIMULATED / PROPOSED, enforced by a dataclass that raises) and nobody had
+used it as one; the matrix uses it rather than inventing a seventh.
+⚠ The indexer's own import-graph instrument was blind to `from . import x as _x` and reported 38
+unused modules instead of 14 — [[vacuous-verification]] again, third instance in this repo.
+⛔ 635 KB of the corpus (two `.docx`) has still never been read; their titles name the two questions a
+synthesis must answer. `GAP-01`.
+⛔ `agent-factory-research-review-pack.zip` (3.4 MB, 616 entries) built and **gitignored** — it
+carries client-identifying content and the checkout is shared by five sessions.
+**No Jira ticket exists for this work** (internal R&D; Jira in this estate is client work only), and
+none was invented. Boot prompt: `agent-factory/boot-prompts/corpus-index-2026-09-02.md`.

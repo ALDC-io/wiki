@@ -1,9 +1,9 @@
 ---
 tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
-aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract]
-sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81, agent-factory/docs/findings.d/F85-F89, agent-factory/factory/control.py, agent-factory/factory/verifiers.py, agent-factory/factory/redesign_contract.py, agent-factory/factory/events.py, agent-factory/factory/provider.py, agent-factory/boot-prompts/README.md, agent-factory/docs/case-studies/delivery-001-marketing-model.md, agent-factory/docs/design/artifact-generator-proposal.md, agent-factory/factory/case_study.py, agent-factory/factory/projection.py, agent-factory/factory/assertions.py, agent-factory/factory/forensic_source.py]
+aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract, corpus manifest, concept index, counterfactual maturity ladder, EXERCISED, research review pack]
+sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81, agent-factory/docs/findings.d/F85-F89, agent-factory/factory/control.py, agent-factory/factory/verifiers.py, agent-factory/factory/redesign_contract.py, agent-factory/factory/events.py, agent-factory/factory/provider.py, agent-factory/boot-prompts/README.md, agent-factory/docs/case-studies/delivery-001-marketing-model.md, agent-factory/docs/design/artifact-generator-proposal.md, agent-factory/factory/case_study.py, agent-factory/factory/projection.py, agent-factory/factory/assertions.py, agent-factory/factory/forensic_source.py, agent-factory/docs/_index/corpus_manifest.yaml, agent-factory/docs/_index/concept_index.yaml, agent-factory/docs/_index/current_vs_proposed.md, agent-factory/docs/_index/contradictions.md, agent-factory/docs/_index/repo_snapshot.md, agent-factory/docs/research/backlog.yaml, agent-factory/factory/assertions.py, agent-factory/.agent-platform/RECONCILIATION.md]
 created: 2026-08-21
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 # Agent Factory
@@ -1805,6 +1805,113 @@ here: **a probe is only as honest as the half it did not supply itself.**
   file**, and Python cannot then open `/tmp/...`. Resolve with `cygpath -w`. The task-completion
   notification reported exit 0 over a zero-byte output file, which reads exactly like a failed run.
 - `readiness.measure()` is **542.4 s** cold. Budget for it; do not put it behind a page refresh.
+
+## 2026-09-02 — the corpus was indexed, and the index found the corpus is not short of research
+
+**`docs/_index/` (10 artifacts) + `docs/research/backlog.yaml` + `dependency_graph.md`, built against
+`fc78074`.** An indexing and classification layer **over** 719 corpus files — 168 artifact records,
+86 concepts, 13 duplicate clusters, 28 contradictions, a 112-row built-vs-proposed matrix, 42 gaps
+and 26 candidate research missions. Nothing was summarised away, merged, moved or deleted; zero
+deletions in `git status`, full suite green (exit 0, 954 tests).
+
+⭐ **The headline is not a gap list. It is that six of the eight CRITICAL gaps are not research at
+all.** This corpus holds **26 filed research answers (~1.9 MB)** and a 19-row backlog of conclusions
+nobody actioned, **0 of 19 closed**. Its binding constraint is measurement: convert two `.docx`
+files, score a second connector, complete one real run, ask a client two questions. Only two of the
+eight genuinely need a research pass. They are filed in the backlog as `type: NOT_RESEARCH`
+specifically so they cannot be dispatched as passes by accident — buying an answer to a question
+that measurement would settle is a failure this estate has already paid for twice (SYNTHESIS §17.7,
+absorption-backlog AB-05).
+
+⭐ **The corpus already had the vocabulary for "built vs proposed" and nobody had used it as one.**
+`factory/assertions.py` defines `EXERCISED` / `IMPLEMENTED_NOT_EXERCISED` / `SIMULATED` / `PROPOSED`,
+enforced by a dataclass that **raises**: a maturity claiming code must name `module:line`; a maturity
+claiming it *ran* must cite the evidence of it running; anything below `EXERCISED` has its basis
+**forced** to `SIMULATED`, *"whatever the authored file said"*. `Counterfactual` deliberately has no
+`status` and no `grounding` field, so it is **not duck-type-compatible** with a delivered outcome and
+cannot be passed to the component that renders one — *a SIMULATED capability must not be rendered in
+the same visual register as an observed one* is enforced by the **type**, not by review. It is scoped
+to one artifact type and generalises to at least three more (`readiness.py`, `presets.py`,
+`registry.py`). The matrix used it rather than inventing a seventh vocabulary.
+
+⛔ **Five of the nine inbound research packs carry the same source file byte-for-byte.**
+`Agent Factory Vision.txt`, 21,179 bytes, **six identical copies**; the 56 KB ZEUS pack, **three**.
+A byte-level sweep found **22 exact-duplicate groups**. So *"nine packs converge on Org-IR, a
+Collective Cognition Fabric and an Evolution Chamber"* is **one source, reformatted nine times** —
+and the bootstrap pack's own manifest states the rule it violates,
+`repeated_ai_claims_are_not_independent_evidence`. ⭐ **The single most important reading rule for
+this corpus, and applying it honestly moves most of the inbound material from evidence to volume.**
+
+⭐ **The instrument written to describe this repo was blind in exactly the way F84 describes — third
+instance of the class.** An AST scan of the import graph handled `from .x import y` and missed
+`from . import bus as _bus`, so it reported **38 modules with zero consumers** when the true figure
+is **14** (and those fourteen are entry points, not dead code — 20 modules carry a `__main__`
+block). Corrected, and the method note is kept in `repo_snapshot.md` §4 rather than quietly fixed:
+*treat any "unused module" claim about this codebase with suspicion unless the counter is shown to
+see the aliased form.* Same family as [[vacuous-verification]]; the estate has now produced this
+defect in `findings.py`, in a consumer count, and in its own corpus indexer.
+
+⚠ **A de-duplication trap that would have destroyed evidence.** Five byte-identical PNG pairs sit in
+`docs/evidence/` — `client-review-nojs-1100.png` equals `client-review-standard-light-1100.png`, and
+four more. **The identity IS the proof**: a no-JS capture byte-identical to its JavaScript-enabled
+sibling is the strongest possible demonstration that static rendering is complete and JS adds only
+enhancement. A dedup pass would delete half of every negative control. **Any future de-duplication
+script must exclude `docs/evidence/`.**
+
+⛔ **635 KB of the corpus has never been read.** `Beyond_Agent_Armies_Frontier_Architectures.docx`
+(431 KB) and `Agent_Factory_Frontier_Architecture_Prioritization_Pack.docx` (204 KB) are binary and
+no text instrument in the pass could open them. ⭐ **Their titles name precisely the two questions an
+architecture synthesis must answer**, and the first bears directly on the corpus's biggest live
+contradiction (is the organizational-compiler category open — refuted by the sibling repo's Wave 0,
+which found Moise+/JaCaMo and `arXiv:2607.25446` IMACS already occupy it). Every deliverable carries
+this as a stated limit, `GAP-01`. **Converting them is an hour of work and it gates any claim that
+the corpus has been read.**
+
+⚠ **`docs/corpus/` has never existed.** `docs/CORPUS-AND-DESIGN-PROMPT.md` (28 KB) asks for
+`OBJECTIVE.md` and `GAPS.md` there and the pass was never run. **Three separate prompts asked for a
+corpus index** — that one, the bootstrap pack's `CLAUDE_CORPUS_PREPARATION_PROMPT.md`, and the R&D
+pack's `12_CLAUDE_REPO_PACK_PROMPT.md` — each specifying a different deliverable shape, and **none
+of the three had run.** The bootstrap pack's scaffolding is still empty: `artifacts: []`,
+`concepts: []`, a 0-byte `claims.jsonl`, five ~180-byte `## Status` stubs.
+
+**What the matrix says, in one line.** 112 capability rows: **34 validated ●**, 11 partially, 6
+implemented-never-exercised, 8 partial, 36 designed-or-specified-only, 17 research-only. The
+distribution is sharply bimodal — **nearly everything validated is a measurement or a control**
+(verdict lattice, negative controls, evidence classes, gates, rendered validation, the findings
+ledger, the failure preflight), and **almost nothing about doing the work is validated**, because
+`.data/runs.jsonl` still holds 10 rows with **zero `PASS`** and all 7 `agent_returned` events carry
+`dry_run=True`. ⭐ **The instruments are real and the subject has not yet been measured.**
+And none of that measurement discipline appears in any of the nine inbound packs — it was invented
+here, mostly in response to specific measured failures.
+
+### The review pack, and one `.gitignore` line
+
+`agent-factory-research-review-pack.zip` — 616 entries, 3.4 MB, integrity-verified, leak-checked.
+Excluded and enumerated in its `REVIEW_CONTEXT.md` §5: the `LOCAL_ONLY` PBI capture,
+`boot-prompts/drafts/`, 57 MB of screenshots, 2.05 MB of regenerable evidence packs, 11 redundant
+`.zip` archives, and the source tree (two scripts are `NEEDS_SANITIZATION` per AF-RELEASE-GATE-01
+§4.3). `code-inventory/module-docstrings.md` substitutes — in this codebase the docstrings carry the
+design reasoning.
+
+⛔ **The zip was added to `.gitignore`, and that is the only source file this pass modified.** It
+carries the client-identifying content AF-RELEASE-GATE-01 §4.1 enumerates, and an
+untracked-but-not-ignored artifact in a checkout shared by five sessions is precisely the hazard §5
+item 6 calls *"a live hazard, not a hypothetical"* — one `git add -A` would stage 3.4 MB of client
+content into a repo whose remote is **public**. Same shape as the live PBI capture, same remedy.
+
+### Gotchas earned
+
+- ⚠ **A bash heredoc mangled a backslash again**, exactly as CLAUDE.md warns: `.replace('\\','/')`
+  inside `<<'PYEOF'` arrived as an unterminated string literal. Second confirmed instance. The fix
+  is the same one CLAUDE.md prescribes — write the script with the Write tool, not a heredoc — and it
+  worked first time.
+- ⚠ **A filter bug that silently dropped 80 of 128 table rows**: `set(cells[1]) <= set('-: ')` is
+  **True for an empty cell**, because the empty set is a subset of everything. The recount looked
+  plausible (48 rows, all marked "research only") and was wrong. *A summary statistic parsed from
+  your own document needs a row-count check against the raw line count.*
+- **`readiness.measure()` is 542 s cold and `pytest -q` exceeds a 120 s foreground timeout** — both
+  need `run_in_background`. Already recorded; re-confirmed.
+- **`rsync` does not exist in this Git Bash.** Use Python `shutil` for any tree copy.
 
 ## See Also
 
