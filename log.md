@@ -1852,3 +1852,32 @@ verified** for this pack). Raw client workbooks/PDF (~2 MB) deliberately **not c
 hashes and a source->measurement dependency map kept instead, `.gitignore` rule proven with
 `git check-ignore`. Boot prompt:
 `aldc-launchpad/boot-prompts/navira-sales-model-repair-2026-09-02.md`.
+
+## 2026-09-03 — GP-318: the TEST data model is current, and the reader role goes blind on every refresh
+
+Read-only session against TEST (`og35375`, `TEST_DG1_GEP`). Jira comment `36270` posted to
+[[GP-318]] (the correct ticket — [[GP-319]] is `Customer Cancelled` as of 2026-09-02, and two
+comments drafted for it were never posted).
+
+**Cleared:** TEST marketing-data currency. All six objects the Navira dashboard reads are present
+and current to the measurement day — 916,051 activity rows to 2026-09-02. The "greenfield in TEST"
+worry does not apply to them. ⭐ And a client-facing fact nobody had measured: **Meta spend begins
+2026-04-20 against Google's 2024-06-01**, so any range before April shows Meta as zero *correctly*.
+
+**Found:** warehouse-mode rendering returns **HTTP 500** before the first tile — not the silent
+blank that was expected. Cause is grant decay, which is
+[[gep-snowflake-pbi-deployment]] PD-2's known failure (a 14-hour outage in May) arriving on a
+*reader* role instead of the task service role. `SELECT ON ALL` is point-in-time and dies with the
+object when a task does `CREATE OR REPLACE`; measured, **0 of 34** visible objects post-date the
+grant. Written up as **PD-3** in that runbook with the three-reading test that separates
+"under-granted" from "data deleted".
+
+**Corrected in-session:** the first published diagnosis said the sales fact was absent from TEST.
+Retracted within the hour — two dependent views return 12,378 and 10,418 rows, and a secure view
+runs with its owner's rights, so a dependent succeeding while the caller fails means the *caller*
+is under-granted. Snowflake conflates the two verdicts by design, so the error text can never
+settle it. Same family as [[vacuous-verification]].
+
+Evidence: `agent-factory` commits `d9a0c5f`, `70a4f0d`, `86a1dff` +
+`docs/evidence/marketing-model-v1/deployed-surface-and-warehouse-lane-2026-09-02.md`, with three
+reusable probes under `scripts/probe_*.py`. ⚠ **Unpushed.**

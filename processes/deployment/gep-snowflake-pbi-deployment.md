@@ -318,6 +318,66 @@ GRANT SELECT ON ALL VIEWS IN SCHEMA PROD_DG1_ALDC_LIBRARY.WAREHOUSE TO ROLE PROD
 
 See [[GP-PENDING-sales-data-outage-2026-05-22]] for full incident context.
 
+### PD-3: Verify READER roles too — `SELECT ON ALL` dies with the object it was granted on
+
+*Added 2026-09-03 from [[GP-318]]. PD-2 covers the **task service** role. The same failure hits
+**reader/reporting** roles, and it is quieter because nothing gets suspended — a dashboard just 500s.*
+
+**Measured in TEST (`og35375`, `TEST_DG1_GEP`), 2026-09-02/03.** A read-only role created 2026-09-01
+with `GRANT SELECT ON ALL TABLES/VIEWS IN DATABASE` **plus** `ON FUTURE` could not resolve
+`WAREHOUSE.SALES_FCT_ORDERLINE`:
+
+```
+SQL compilation error:
+Object 'TEST_DG1_GEP.WAREHOUSE.SALES_FCT_ORDERLINE' does not exist or not authorized.
+```
+
+⭐ **The discriminating measurement.** Of the **34** objects that role could see in `WAREHOUSE`,
+**zero were created after its grant date** — the 27 views top out at 2026-08-12, the 7 base tables at
+2026-07-08. The role sees exactly the objects that have **not** been refreshed since it was granted.
+
+`WAREHOUSE_SOURCE` copies into `WAREHOUSE` via a task chain, and a task doing `CREATE OR REPLACE`
+**drops the object and takes its grants with it**. `SELECT ON ALL` is point-in-time, so it covers
+nothing created afterwards:
+
+> **Every refresh blinds every reader role granted with `ON ALL`.** The service role has PD-2 to
+> catch it. Reader roles had nothing.
+
+⚠ **`ON FUTURE` at database level did not save it** — worth knowing before relying on it. A
+schema-level future grant takes precedence over a database-level one, so a database-level `ON FUTURE`
+can be silently inert for a given schema. **Not confirmed** as the mechanism here (confirming needs
+`ACCOUNT_USAGE`, which a reader role cannot read); recorded as the leading candidate.
+
+**The verdict trap that makes this expensive.** Snowflake returns `does not exist or not authorized`
+for both worlds deliberately, so it cannot leak hidden objects. Good security, terrible diagnosis:
+**an under-granted role is indistinguishable from deleted data at the point of failure**, and the two
+have entirely different owners. This produced one wrong published conclusion before it was caught.
+
+*Separate them like this — a dependent secure view executes with its OWNER's rights, so it reads what
+the caller cannot:*
+
+```sql
+-- 1. can the READER see it?  (role-visible only)
+SHOW VIEWS LIKE 'SALES_FCT_ORDERLINE' IN SCHEMA TEST_DG1_GEP.WAREHOUSE;
+-- 2. does a dependent view still return rows?   -> if yes, the object EXISTS
+SELECT COUNT(*) FROM TEST_DG1_GEP.REPORT_COMMON.MARKETING_EFFICIENCY;
+-- 3. decisive, needs privileges above the reader:
+SELECT REFERENCED_SCHEMA, REFERENCED_OBJECT_NAME
+FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_DEPENDENCIES
+WHERE REFERENCING_OBJECT_NAME = 'MARKETING_EFFICIENCY';
+```
+
+Reading 2 returned **12,378** rows while reading 1 returned **nothing** — only possible if the object
+exists and the reader is under-granted.
+
+- [ ] After any task-chain refresh, confirm each reader/reporting role can still `SELECT` the
+      refreshed objects — not only the service role
+- [ ] Prefer a **schema-level future grant**, or a **grant step inside the task chain**, over
+      re-granting after each incident. `ON ALL` alone guarantees this recurs
+
+⛔ **Do not diagnose this from the error text.** Run readings 1 and 2 before concluding anything about
+whether data is missing.
+
 ## Pitfalls / Gotchas
 
 These were all encountered during real deployments and cost significant debugging time. Read them before deploying.
