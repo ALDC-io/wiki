@@ -3,7 +3,7 @@ tags: [concept, architecture, snowflake, naming, star-schema]
 aliases: [star schema, naming convention, warehouse naming]
 sources: [clients repo __TEMPLATE_ACCOUNT/snowflake/readme.txt, GEP/snowflake/warehouse/*.sql, Confluence TECH/1238499340 (Warehouse Standards)]
 created: 2026-04-16
-updated: 2026-07-08
+updated: 2026-09-03
 ---
 
 # Star Schema Convention
@@ -85,6 +85,40 @@ GBP, etc., so a raw sum silently blends currencies.
 - **Lectric agency fact** — `SALES_GROSS_TRANSACTION` is native (=USD today, US-only), **no
   `*_CONSOLIDATED` column**. Fine while US-only; **adding a non-USD Lectric marketplace requires the
   consolidated triple first**, or its sales will blend currencies into Navira totals.
+  - ⭐ **Measured 2026-09-03 — the risk is latent, not live, and is further from firing than this
+    bullet implies.** In the unified fact the Lectric UNION branch copies the local amount straight
+    across (`sales_fct_orderline.sql:788` — `L.SALES_GROSS_TRANSACTION AS SALES_GROSS_CONSOLIDATED`,
+    no FX multiply, vs `:203` for Navira which multiplies by `CONSOLIDATED_RATE`), and
+    `SALES_NET_CONSOLIDATED` is the same copy, so **net == gross for Lectric** (no returns
+    deducted). But the trigger cannot currently fire: the all-orders report **ignores
+    `filter_marketplace` for this account** and the live template is single-US ([[GP-254]]), so a
+    non-USD Lectric marketplace is not reachable via these credentials at all. `REPORT_COMMON`
+    protects itself independently — `MARKETING_EFFICIENCY.sql:83-107` filters the orderline view to
+    `ENTITY_CODE='NAVIRA'` and rebuilds Lectric from the base table with an explicit FX join, i.e.
+    **our own canonical view deliberately does not trust the orderline view's Lectric dollars.**
+  - ⚠ A cheap structural guard that removes the class of bug at source, if it is ever worth doing:
+    `IFF(L.LINE_CURRENCY_ID = 'USD', L.SALES_GROSS_TRANSACTION, NULL)` — non-USD becomes NULL
+    (visible) instead of a wrong number (invisible).
+
+### ⭐ Inert measure columns — census before you share or model (measured 2026-09-03)
+
+`PROD_DG1_GEP.WAREHOUSE.SALES_FCT_ORDERLINE` has 117 columns, 78 of them numeric. On the
+**3,067,775 real sales rows** (`LINE_STATUS <> 'Unknown'`, i.e. excluding the [[GP-311]]
+cost-allocation placeholders), **32 of the 78 are structurally inert — never non-zero, ever**:
+
+- the **entire `*_SUBSIDIARY` family (9)** — so the "three flavours of every money column"
+  mental model is wrong; there are **two** live flavours, `_TRANSACTION` (native) and
+  `_CONSOLIDATED` (USD)
+- all `REVENUE_*` (12) and `SALES_REVENUE_*` (3) — hardcoded `0.0` in the source SQL
+- all `SALES_MARKDOWNS_*` (4), `NOSALE_ADVERTISING_FEE_*` (2), `SALES_DISCOUNTS_QUANTITY`,
+  `SALES_TAX_SUBSIDIARY`, `SALES_COGS_SUBSIDIARY`
+- plus `SALES_OPEN_*` at 0.0% populated — effectively dead
+
+**Rule: never expose a hardcoded-zero column to a client or a semantic model.** An all-zero column
+asserts *"this happened and the value was zero"*; that is a claim about the client's business, not
+an absence. 41% of the numeric surface of this fact would ship as `$0.00` facts if handed over
+unfiltered. The census is one query — `COUNT_IF(col IS NOT NULL AND col <> 0)` across every numeric
+column — and it belongs in front of every share, extract and new model table.
 
 **Exchange-rate caveats:** `SHARED_FCT_EXCHANGE_RATE` carry-forward fills **forward only** (interior gaps
 must be healed — the Jan-2026 gap was patched manually), the ALDC Library feed **stopped 2026-03-03**
