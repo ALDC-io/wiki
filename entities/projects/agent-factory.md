@@ -1,9 +1,9 @@
 ---
 tags: [project, agent-factory, prefect-connectors, evaluation, greencontract, readiness, research, power-bi]
-aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract, corpus manifest, concept index, counterfactual maturity ladder, EXERCISED, research review pack]
+aliases: [Agent Factory, golden workflow, ContextPack, evidence classes, GreenContract, Zeus Pantheon Suite, readiness gates, PBI GreenContract, corpus manifest, concept index, counterfactual maturity ladder, EXERCISED, research review pack, CELL OS, CELL//OS, Command Deck, Business Genome, Unit Economics Contract, launch-narrative, launch-film]
 sources: [github.com/ALDC-io/agent-factory, agent-factory/docs/reviews/build-vs-adopt-2026-08-29.md, agent-factory/docs/BUILD-VS-ADOPT-PROMPT.md, agent-factory/docs/research/SYNTHESIS.md, agent-factory/factory/readiness.py, agent-factory/factory/pbi_contract.py, agent-factory/docs/research/answers/R16-answer-decision-review-and-order.md, agent-factory/docs/research/answers/R17-answer-data-engineering-external-survey.md, agent-factory/docs/research/answers/R18-answer-our-factory-internal-audit.md, agent-factory/docs/findings.d/F70-F75, agent-factory/scripts/local_tracker.py, agent-factory/docs/specs/, prefect-connectors/orchestrator/data/audits, agent-factory/docs/specs/golden-workflow-fit.md, agent-factory/factory/evidence.py, agent-factory/factory/context.py, agent-factory/docs/findings.d/F77-F81, agent-factory/docs/findings.d/F85-F89, agent-factory/factory/control.py, agent-factory/factory/verifiers.py, agent-factory/factory/redesign_contract.py, agent-factory/factory/events.py, agent-factory/factory/provider.py, agent-factory/boot-prompts/README.md, agent-factory/docs/case-studies/delivery-001-marketing-model.md, agent-factory/docs/design/artifact-generator-proposal.md, agent-factory/factory/case_study.py, agent-factory/factory/projection.py, agent-factory/factory/assertions.py, agent-factory/factory/forensic_source.py, agent-factory/docs/_index/corpus_manifest.yaml, agent-factory/docs/_index/concept_index.yaml, agent-factory/docs/_index/current_vs_proposed.md, agent-factory/docs/_index/contradictions.md, agent-factory/docs/_index/repo_snapshot.md, agent-factory/docs/research/backlog.yaml, agent-factory/factory/assertions.py, agent-factory/.agent-platform/RECONCILIATION.md]
 created: 2026-08-21
-updated: 2026-09-02
+updated: 2026-09-03
 ---
 
 # Agent Factory
@@ -1912,6 +1912,77 @@ content into a repo whose remote is **public**. Same shape as the live PBI captu
 - **`readiness.measure()` is 542 s cold and `pytest -q` exceeds a 120 s foreground timeout** — both
   need `run_in_background`. Already recorded; re-confirmed.
 - **`rsync` does not exist in this Git Bash.** Use Python `shutil` for any tree copy.
+
+## 2026-09-03 — the product deck, and the finding that the object model has no money in it
+
+Two published artifacts for **CELL//OS** (the product name for the agent-factory thesis), plus two
+new invocable skills, plus one finding that outranks both artifacts.
+
+### The artifacts
+
+| Artifact | Path | Gate |
+|---|---|---|
+| **Command Deck** — 7 tabs | `docs/marketing/cell-os-launch-v1/cell-os-deck.html` | `render_check_deck.py` PASS at 1400/1100/760 |
+| **Launch film package** — 10 files, 90.0s master | `docs/marketing/cell-os-launch-v1/` | committed `48fae74`, pushed to public `main` |
+| **Previz bay** — watchable timeline | `docs/marketing/cell-os-launch-v1/previz.html` | `render_check_previz.py` PASS |
+
+Built from four sources, all read in full: the two `docs/diagrams/` PNGs, Product Technical Design
+v0.1 and Master R&D&O User Guide v0.2 (both `.docx`, converted with the existing
+`scripts/docx_to_md.py`).
+
+### ⭐ The finding — CELL OS cannot currently create a business, only staff one
+
+The object model is Mission · AI Operative · Worker · Cell · Organism · Federation. It models
+**cost** — budgets, resource envelopes, token ceilings — and models **revenue, price, customer and
+settlement nowhere.** An autonomous revenue-generating business is not expressible in those six
+nouns, which means the platform can staff a business someone else defined but cannot compile one.
+
+Seven proposed additions, ordered by leverage-per-build, are specified in the boot prompt. The two
+that matter most:
+
+- **Unit Economics Contract** — a sibling of the Mission Contract declaring price floor, cost
+  ceiling and target margin *before* the run. The Kernel already checks `budget?` on every
+  capability call; this makes it check **margin** and refuse below the floor. Highest
+  leverage-per-unit-of-build because it reuses the existing gate machinery.
+- **Business Genome** — the framework the rest imply. Cell Genome compiles a team; Business Genome
+  compiles a company (offers, pricing, ICP, channels, delivery Cell Images, treasury policy,
+  authority ceilings), and it is forkable and shadowable like any other genome.
+
+### Measured
+
+- Run ledger still **10 rows, 0 `PASS`**; all 7 `agent_returned` events carry `dry_run=True`. Every
+  claim in both artifacts is chipped against this.
+- `grep VERIFIED_SUCCESS` across the repo → **0 hits**. The token the film brief specified as its
+  climax does not exist; cut and replaced with the real five-verdict lattice from
+  `factory/contract.py` (`NOT_RUN < PASS < UNMEASURABLE < FAIL < ERROR`, ISO/IEC 9646 + TTCN-3).
+- Film brief arithmetic: header asked 75–90s, its own timecodes summed to **118s**, its narration
+  was **234 words** needing 101.7s of speech. Cut to 90.0s / 156 words / 25.0s designed silence.
+- Deck: 7 tabs, 7 architecture layers, 47 service tiles, 160 KB including a 34 KB embedded logo.
+- Skills library now **36 invocable** (was 34) — added `launch-narrative` and `launch-film`, routed
+  in `INDEX.md`. Its counts had drifted again: claimed 307/86,184/34, measured **309/86,577/36**.
+
+### Gotchas earned
+
+- ⛔ **`git log --not --remotes` with no positive ref measures nothing and prints nothing.** It
+  reported "0 unpushed" while 2 commits were genuinely unpushed and on no remote ref. Always pass
+  `HEAD` or `--all`. This produced a false clean bill of health immediately before a push to a
+  **public** repo — the same shape as the compound-command trap in [[claude-code-and-mcp-gotchas]],
+  produced by git rather than by the shell.
+- ⛔ **`str.replace("", new)` inserts at position 0 rather than erroring.** A mis-anchored
+  `str.index` returned an empty slice and silently prepended 24 lines onto a working script.
+- **The Playwright MCP browser runs in a container** (`ccx_default`), so `127.0.0.1` is the
+  container, not the host — `ERR_CONNECTION_REFUSED` against a host `http.server` while `curl` got
+  200. `http://host.docker.internal:<port>/` works. Two earlier sessions wrongly recorded rendered
+  validation as unreachable from the MCP.
+- **Docker Desktop's GUI and its engine are separate.** Force-closing the dashboard in Task Manager
+  left `com.docker.backend` on its original PIDs and all 14 containers on unbroken 8-day uptime.
+  Diagnosing it surfaced a real issue: **11 of 14 containers have no log rotation** (`map[]` on a
+  `json-file` driver) and `~/.docker/daemon.json` had no default `log-opts`. Default added
+  (10m × 3), **not yet in effect — needs a Docker restart**, and it applies to newly created
+  containers only.
+- **A rounded score is not a discriminating instrument.** Two different rosters both scored 76;
+  the assertion "score changed" could not separate *not computed* from *coincidentally equal*.
+  Assert on the component vector.
 
 ## See Also
 

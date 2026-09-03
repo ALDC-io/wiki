@@ -1881,3 +1881,20 @@ settle it. Same family as [[vacuous-verification]].
 Evidence: `agent-factory` commits `d9a0c5f`, `70a4f0d`, `86a1dff` +
 `docs/evidence/marketing-model-v1/deployed-surface-and-warehouse-lane-2026-09-02.md`, with three
 reusable probes under `scripts/probe_*.py`. ⚠ **Unpushed.**
+
+## 2026-09-03 — CELL//OS product deck, launch film package, two marketing skills
+Ingested into [[agent-factory]]. Published two private artifacts: the **Command Deck** (7 tabs —
+overview, clickable 7-layer architecture, first-operative walkthrough, an interactive Cell Studio
+prototype, nine money-making use cases, operator guide, launch film) and the **previz bay** for a
+90.0s launch film. Full film package (10 files) committed `48fae74` and pushed to public `main`;
+the deck itself, `scripts/render_check_deck.py` and its evidence folder are **not yet committed**.
+Both artifacts render-checked PASS in real Chrome at three widths, with no-JS and reduced-motion
+gates. Two new invocable skills — `launch-narrative` and `launch-film` — routed in
+`~/.claude/skills/INDEX.md` (library now 36 invocable; its stated counts had drifted again).
+⭐ The finding worth keeping: **CELL OS models cost and does not model revenue, price, customer or
+settlement anywhere**, so it cannot compile a business, only staff one. Seven proposed
+entities/frameworks specced in `agent-factory/boot-prompts/cell-os-deck-2026-09-03.md`; the two
+highest-leverage are the **Unit Economics Contract** (Kernel refuses a mission below its margin
+floor, reusing the existing budget gate) and the **Business Genome**. **No Jira ticket** — venture
+product work, not client delivery. Boot prompt:
+`agent-factory/boot-prompts/cell-os-deck-2026-09-03.md`.
