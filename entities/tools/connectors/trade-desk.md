@@ -147,8 +147,55 @@ Trade Desk enforces per-partner schedule limits. Delete unused/test schedules re
 - Create Report Schedule: https://partner.thetradedesk.com/v3/portal/reds/doc/AggregatedReports#create-report-schedules
 - Delete Report Schedule: https://partner.thetradedesk.com/v3/portal/reds/doc/AggregatedReports#delete-report-schedule-by-id
 
+## ⚠ Corrections measured during [[FU92-427]] (2026-09-03) — this page overstated two things
+
+**1. Backdating is not limited to ~30 days.** A template comment claiming *"appears to have a short
+30ish day limit back dating"* has been quoted as fact and is refuted by our own warehouse: one load
+session on **2024-09-24 wrote 268 continuous days, zero gaps — a 272-day backdate**. Unique
+Impressions separately backdated 40 days *two days before* that comment was written. The comment's
+own git history shows a **measured** successor (*"30-45 day limit"*, `b32153a9`) that merge
+`c5cd9818` silently reverted. Treat any backdating limit as **unmeasured** until the
+`ScheduleStartDate` in a create-schedule response says otherwise.
+
+**2. "Executions expire 2-3 days after completion" is stated too strongly here.** The connector only
+enforces `DownloadURLExpirationUTC` (`trade_desk_my_reports.py:254-259`). In the 2025-08 outage a
+partition completed **~5 days** after its execution was delivered. The real duration is unmeasured;
+do not plan a recovery window on the "2-3 days" figure.
+
+**3. This page says backdating *"creates executions for Jan 1 through today, all immediately
+available."*** The script's own docstring — written by whoever ran it — says the opposite:
+*"this does not always generate for all of the days. The response will provide a start date that
+will indicate how far back reports were generated for."* **Trust the script, not this page.**
+
+## Auth — 365-day static token
+
+`TTD-Auth` header, base64 protobuf (58 bytes), **365-day lifespan**, no refresh logic anywhere.
+Connection `2aa7e056-28f9-4bf9-9758-3fdc7217409d`, account `0fc00e34`, whose `connection` sub-dict
+holds exactly one key (`auth_token`) and no `encryption`. Expired 2026-08-05 and took the connector
+down 29 days; the same thing happened in August 2025. Full runbook, gotchas and the rotation
+procedure: [[connector-token-refresh]].
+
+## Recovery behaviour during an outage (measured)
+
+- TTL retirement fires **only on a completed run** (`core_api/v1/route_work.py:1259`), so **nothing
+  retires while the connector is broken** — stuck partitions stay `active` / `in_queue` and retry
+  ~3×/day indefinitely. Fixing the credential re-attempts them automatically; **no manual re-queue.**
+- The retry queue drains **oldest-first**, so permanently-dead old partitions are attempted before
+  recent ones on every sweep. If a sweep truncates, the *newest* dates starve. Purging dead
+  partitions may be a precondition for a clean backfill.
+- ⛔ **Never `work_template_delete` to change a `schedule_id`** — it calls `warehouse_reset` →
+  `DROP TABLE` / `DROP VIEW CURRENT_` / `DROP VIEW COMBINED_`. On the Performance template that is
+  **14,665,166 rows / 935 days**, of which at most ~45 could be regenerated. Use
+  `work_template_update`, and send the **complete** `options` object (top-level keys are replaced
+  wholesale, and the type guard passes `raise_exception=False` — a wrong payload returns HTTP 200
+  having written nothing).
+- A replacement schedule must keep `lookback_days = 5`: `_report_matches_dates` demands an **exact**
+  window match, so any drift fails as *"no COMPLETED report executions"* — which reads like missing
+  data and is actually a config error.
+
 ## See Also
 
 - [[eclipse]] — connector platform
 - [[fusion92]] — primary client using Trade Desk connector
 - [[connector-development-standards]] — attribute hierarchy and parameter patterns
+- [[connector-token-refresh]] — the 365-day lifespan, rotation runbook, and the silent-failure rule

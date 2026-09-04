@@ -201,7 +201,82 @@ The Seller Central (SP-API) connector authenticates with an **LWA app client sec
 
 > **Security debt — secret is still committed to the `clients` repo.** This rotation is like-for-like; it does not remove the secret from git. The proper fix (KV holds values → repo holds only references → runtime resolves from Key Vault → purge git history) is tracked under **ALDC-302** (parent incident, In Progress): **ALDC-318** (rotate ad-platform/Amazon tokens), **ALDC-319** (migrate active secrets to Key Vault + sanitize files at HEAD), **ALDC-320** (git-history purge), plus the GEP-scoped design ticket **GP-280**. Confirmed 2026-07-06: **neither `core_api` nor the `connector` repo has any Key Vault integration** — secrets are read inline from CosmosDB, so KV runtime-resolution is net-new code, and it must land *before* the repo files are sanitized (ALDC-319 coupling constraint). Precedent for the KV layout: Lectric SP-API creds live in `aldc-vault-prod` as `lectric--amazon-spapi--*` (naming `{client_code}--{provider}--{credential_type}`).
 
-## Trade Desk + Viant — Unknown Lifespan ([[FU92-416]])
+## ⭐ The rule this runbook exists to enforce (learned the expensive way, 2026-09-03/04)
+
+**A credential refresh needs a watched success signal, not a log line.** Three concurrent Fusion92
+outages, three different silent-failure mechanisms, one identical outcome — nobody acted for weeks:
+
+| Outage | Mechanism | Silent for |
+|---|---|---|
+| [[FU92-427]] Trade Desk | alerted **31 times** to Slack; templates outside `critical: []` so default severity, read as noise | 29 days |
+| [[FU92-431]] Microsoft Ads | timer catches every exception and calls `logging.error` — nothing alerts, retries, or escalates | ~5 months |
+| FU92-432 Viant R&F | alerting since 2026-04-25, never escalated | 4+ months |
+
+Three corollaries, each paid for:
+
+1. **Creating a secret in the provider is not a rotation.** FU92-431: a new Azure AD secret was
+   created 2026-05-22T19:17:37Z and a refresh token minted **59 seconds later** — but the Function
+   App's `MICROSOFT_ADS_CLIENT_SECRET` was never updated. The app kept presenting the *expired*
+   secret, failed daily for 90 days, and the fresh token died of inactivity unused.
+   **→ Rotation checklist must end with: update every consumer's configuration, then prove the
+   consumer used it.**
+2. **When an audit finds an unknown expiry, ship the staleness alarm FIRST and investigate second.**
+   [[FU92-416]]'s 2026-05-21 audit was correct and thorough; its first Trade Desk step was
+   *"check CosmosDB `_ts` on connection doc `2aa7e056` to determine token age"* — one query that
+   returns 2025-08-05 and puts a dated wall on the calendar eleven weeks out. It was never run,
+   because the output was a *Medium investigation ticket* rather than a dated risk. Worse, the
+   audit's own alarm phase was scoped **last, behind the investigation** — so the one control that
+   did *not* depend on knowing the answer was gated on knowing the answer.
+3. **An emergency rotation must record its issue date and computed expiry somewhere with a
+   calendar.** The 2025-08-05 Trade Desk fix worked perfectly and left behind nothing that could
+   warn us. It recurred to the hour, twelve months later.
+
+## Trade Desk — 365-day lifespan (**ANSWERED** 2026-09-03, [[FU92-427]])
+
+**The `TTD-Auth` token lifespan is 365 days.** Proven by three independent instruments after the
+token expired and took the connector down for 29 days:
+
+- Cosmos `work_connection/2aa7e056…` `_ts` = `1754427269` → written **2025-08-05T20:54:29Z**
+- The token's own embedded protobuf issuance field → **2025-08-05T20:45:51Z** (it is a base64
+  protobuf, not an opaque string — 58 bytes, field 1.1 is a 100 ns-since-epoch issuance stamp)
+- git `clients@f31f0113` *"Add new Trade Desk Token."* → **2025-08-05T21:14:37Z**
+
++365 days lands **inside** the observed bracket (last success 16:22:56Z, first 401 22:24:18Z on
+2026-08-05). **Expired, not revoked** — nothing else lands on an anniversary to within 90 minutes.
+
+This was the **second annual instance**; the same outage ran 2025-08-01→08-05 and was fixed by
+minting a replacement, which set the 2026 timer.
+
+### Gotchas worth keeping
+
+- **There is no code anywhere in the estate that calls `/v3/authentication`.** Every token has been
+  minted by hand through the partner portal. There is no prior art to copy for automated refresh.
+- **TTD issues a short-lived (~24h) *and* a long-lived form.** Confirm the token-lifetime parameter
+  while logged in — minting the short form by accident re-breaks the feed the next day.
+- **The credential was absent from Key Vault, every repo, and the wiki vault** (all three measured
+  with proven-live instruments). It had not survived the original engineer's offboarding.
+- **Recovery self-arms.** TTL retirement is gated on a *completed* run (`route_work.py:1259`), so
+  nothing retires during an outage — stuck partitions stay `active`/`in_queue` and retry themselves
+  once a token works. The 2025 outage recovered **12/12** dates with `schedule_id` unchanged.
+- ⛔ **Never `work_template_delete` to repoint a `schedule_id`** — it calls `warehouse_reset`, which
+  issues `DROP TABLE`. That is 14.6M rows / 935 days on the Performance template. Use
+  `work_template_update` only.
+- 🔴 **The live prod token is committed in plaintext** to
+  `clients/FUSION_92/eclipse/connections/trade_desk_my_reports.json` (repo value == prod value,
+  verified by hash). Editing that file rotates nothing — Eclipse reads Cosmos.
+- **Next expiry: 365 days after whatever date the replacement is minted.** Diarise it.
+
+## Viant — measured healthy, lifespan still unknown
+
+Measured 2026-09-03: `viant_dsp_reporting_v1` is **healthy** — Campaign Performance 40/40 complete,
+Campaign ROAS 40/40, Conversion Report 39/40 (one report-polling timeout, unrelated to auth). No auth
+error anywhere. So [[FU92-416]]'s pairing of Trade Desk with Viant does **not** currently hold.
+
+Caveat: healthy ≠ has refresh logic. Connection `a73a6943…` has been unchanged for ~24 months. One
+`connectiondescribe` on its `_ts` would settle whether it is on the same annual clock — the identical
+five-minute check that would have prevented [[FU92-427]].
+
+## Trade Desk + Viant — original investigation ticket ([[FU92-416]])
 
 Both connectors use non-standard static credentials with undocumented lifespans. Investigation ticket [[FU92-416]] tracks determining whether these need automated refresh.
 
