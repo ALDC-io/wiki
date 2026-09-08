@@ -2257,3 +2257,91 @@ calls (one free question to the client, and it upgrades outage 1 to PROVEN); wha
 unmeasurable from here**); and whether Cloudflare has more than one origin for `api.aldc.io`. A
 Cosmos-key-gated instrument could settle the route server-side — **awaiting Paul's approval, not
 requested implicitly.** See [[ALDC-1175]].
+
+### 2026-09-08 (later) — credential rotation + the ALDC-1002 finding
+
+⚠ **`ALDC-1002` is marked Done but is NOT functionally complete.** `ACCOUNT_USAGE.SESSIONS` over 14
+days on `wj66376` shows **~386,000 password authentications from non-human users that all have RSA
+keys registered**: `PROD_DG1_CORE_SVC_DA8904DB` 242,797; `_9AC36447` 51,245; `_703433FF` 40,492;
+`_0FC00E34` 25,711; `_8B28D977` 21,655; `SERVICE_POWER_BI` 4,862. The bulk workload runs on
+**PythonConnector 3.7.0 with passwords**; every key-pair session is **PythonConnector 4.7.2 in counts
+of 2-4** — verification runs, not production traffic. The keys were registered and proven, and the
+running clients were never switched. Only `PROD_DG1_CORE_SVC_F49F9AA3` and
+`PROD_DG1_PREFECT_SVC_DA8904DB` are genuinely migrated. **Five Core API service accounts break at
+Phase 3 enforcement.** Remediation is upgrading the connector clients, not registering more keys.
+
+⭐ **`has_rsa_public_key = true` is a configuration flag, not evidence of use.** Auditing it instead
+of `ACCOUNT_USAGE.SESSIONS.AUTHENTICATION_METHOD` reports a migration complete when it is not. This
+is the same shape as every other blind instrument this session.
+
+⛔ **Live state change mid-investigation.** `SERVICE_POWER_BI.has_rsa_public_key` was `false` at
+~16:25 PT and `true` at ~17:05 PT — someone registered a key while we were measuring
+(`TAMARAKRASNOVAADMIN` was running key-pair sessions all afternoon). Power BI is still on password
+(4,862 sessions, last 16:01). **`ALTER USER SERVICE_POWER_BI SET TYPE = SERVICE` would take GEP Prod
+and FUSION_92 Prod down within the hour.** Correct order: key registered → switch the PBI connection
+to KeyPair → verify a refresh → only then change TYPE.
+
+**Rotation completed** (both passwords had been exposed in a session transcript by a bad masking
+regex — see the earlier entry). `MIKESTUART` @ wj66376 (0 sessions in 90 days) and
+`TEST_DG1_CORE_ADMIN` @ og35375 (370 sessions 2026-07-20 → 2026-08-25, PythonConnector 4.0.0, then
+idle). Both `ALTER USER ... SET PASSWORD` → verified by logging in with the new value → vault rows
+updated (lines 483 and 467). File integrity confirmed: 2 lines changed, cell counts preserved, no
+malformed rows. ⚠ Whatever ran those 370 non-prod sessions will need the new password — or better,
+key-pair, since `TEST_DG1_CORE_ADMIN` already has one registered.
+
+Jira comments 36342 (investigation) and 36343 (urgent + audit) posted to ALDC-1164.
+
+### 2026-09-08 (upgrade) — ALDC-1175: the instrument I twice said didn't exist
+
+⭐ **Azure platform metrics answered every question I had written off as unmeasurable.**
+`FunctionExecutionCount` on a Function App carries a per-`Instance` dimension and **93-day
+retention**, needs no Application Insights, and is free. Three verdicts moved:
+
+1. **The outage window is independently re-derived from traffic shape** — baseline 19–48 exec/min
+   through 20:58, **collapse to 6 at 20:59**, zero-minutes at **21:15** and **21:36**, recovery
+   **21:50=22 / 21:51=54**. Collapse starts 34s–3min after the 20:56:25Z restart; recovery 4–6 min
+   after the 21:47:45Z corrective restart. **Two independent instruments now bracket the same
+   ~51-minute window.**
+2. **Frequency = ZERO prior occurrences in 86 days** (was published as NOT-VISIBLE). Basis declared
+   first: one clock-hour per unit, flag hours below 62% of their own **hour-of-day median** (the app
+   is strongly diurnal; a flat threshold flags every night). 2,064 datapoints, no gaps, no zero
+   hours; exactly **1** flagged — 21:00Z at 703 vs hod-median 1737. Same-hour week control
+   2542/1732/1823/1738/1670/1718/1721 → **703**, 58% below the lowest. Pre-2026-06-11: NOT-RETAINED.
+3. **Population measured: 12 distinct instances in the incident hour**; a 300-request burst reached
+   **4 provably distinct instances**, all clean → 534 probes are a **measured ZERO**.
+
+⛔ **DANGER, and the best lesson of the whole case: two metrics on this app read green and are
+blind.** For an hour containing **200+ known HTTP 200s of our own**, `Requests` = **0.0** and
+`Http5xx` = **0.0** while `FunctionExecutionCount` = 2400 — **the App Service HTTP metrics are not
+populated on Consumption-plan Function Apps.** Without holding our own traffic as a control the
+natural finding is *"Requests=0, nobody called, nothing else broke"* — plausible, quotable, wrong.
+And **`InstanceCount` read 1.0 max/avg for every minute** of the incident hour, which would have
+"confirmed" a single instance; it is a *concurrent* gauge and undercounts churn by **12×**.
+**Always hold a known non-zero against a metric before believing its zero.**
+
+⛔ **Another published claim withdrawn:** "no dashboard complaints = genuine ZERO". Refuted
+positively — **689 executions did occur** in the broken hour across 12 instances (consumers called,
+and produced exactly **one** report); the failure returns HTTP 200 `"success"` so a caller has
+nothing to complain *about* unless it inspects the payload; **1,034 normally-occurring executions
+did not happen** (silence is the symptom, not the absence of one); and the window was
+**16:59–17:49 EDT on a Tuesday**, inside the client's business day. Complaint-count is a broken
+instrument for this population.
+
+⚠ **Eclipse's immunity is data-path only.** `eclipse.aldc.io` = `aldcprodwbapportal1c01` carries
+`CORE_API_URL` + `CORE_API_TOKEN`, so the portal backend *is* a core_api client: a dashboard's
+*definition* is fetched through core_api even though its *numbers* come from PBI. **Immunity of the
+data path does not confer immunity on the page.**
+
+⚙ **Shell traps that each produced a wrong conclusion, all recorded on [[core_api]]:** in Git Bash an
+`az` argument beginning `/subscriptions/...` is **rewritten by MSYS path translation** and rejected
+with a *usage* error that looks like your own syntax mistake (`export MSYS_NO_PATHCONV=1`) — this is
+why the metrics API appeared unavailable for hours; an unquoted var holding `"Production 2"`
+word-splits and **az writes its error text into the file you were about to parse as JSON**;
+`--filter "Instance eq '*'"` **silently defaults to `--top 10`** (caught only because the split sum
+335 disagreed with the unsplit total 689); and KQL through the PowerShell tool breaks on `|`.
+
+Also kept: a **negative result** — predicting the in-window executions were cheap fail-fast deaths
+was refuted (`units/exec` 672,871, **26% ABOVE** the highest baseline hour). The test is void, not
+inverted: `func_common.py` catches the `ValueError` at :98 then **continues** to :100-120 building the
+`CosmosClient`, so import cost is identical either way and cold-start over 12 instances dominates.
+See [[ALDC-1175]].
