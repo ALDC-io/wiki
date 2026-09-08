@@ -681,17 +681,85 @@ be genuinely absent from the process environment — which rules out `docker com
 
 **4. It is sticky per process, and served as HTTP 200 "success".** `environment_error` is a
 module-level global evaluated **once at import**; `v1/__init__.py:302` gates on it as the first
-statement of the request `try`, **before auth and before route dispatch**. So a bad-config worker
-fails everything until it restarts. And `v1/__init__.py:1244-1247` returns
-`form_response(..., 200, "success", "success", environment_error)` — status **200**, the literal word
-**"success"**, error in the payload. **Any monitor watching status codes sees green during a total
-outage.** This is a sibling of the generic-500 masking gotcha in *Debugging workflow* above: both
-turn a real fault into a misleading response.
+statement of the request `try`, **before route dispatch and before every per-route
+`check_auth_*` guard** (⚠ precise wording: `CurrentAuth` *is* constructed earlier at lines 96-99, so
+authentication is evaluated first — what's missing is any *early rejection* of an unauthenticated
+caller). So a bad-config worker fails everything until it restarts — and it does **not** crash out
+and get replaced: the Cosmos client at `func_common.py:112-115` still builds fine, so the worker
+stays alive serving errors indefinitely.
+
+⭐ **And EVERY v1 response is HTTP 200 — not just this one.** `status_code` appears **exactly once
+in the whole 74KB `v1/__init__.py`**, at line 1281, hardcoded `status_code=200`. The 400 "client
+error" and 500 "server error" branches return HTTP 200 too. **A status-code monitor is blind to
+100% of v1 errors.** On the env-error path specifically, `:1247` *additionally* overwrites the
+body's `code`/`type`/`message` with `200`/`"success"`/`"success"`, so a body-parsing monitor is
+blinded as well — two independent cannot-fail layers. Sibling of the generic-500 masking gotcha in
+*Debugging workflow* above.
+
+⚠ **If you fix this:** correct **line 1247** first (a config failure is not `"success"` —
+unambiguously wrong). Treat **line 1281** as a separate, coordinated change: making it honour
+`response_dict["code"]` is a **breaking change for every existing caller**, including client-side
+daemons we do not control (see [[ALDC-1175]]).
+
+Also note `api/__init__.py:59-65` (`get_global_config()`) calls **`os.abort()`** on validation
+failure — SIGABRT at import, a crash-loop. Loud rather than silent, so better, but it is a **third
+distinct behaviour** for the same condition in one codebase.
 
 **5. Corollary for triage — an error surfaced by a client's system is not an error owned by it.**
 ALDC-1175 arrived as a client-side Python traceback and was first assessed as "not us"; the string
 came from `func_common.py:92`. **Grep the repos for the literal error text before assigning
 blame** — the client's daemon had merely interpolated our response body into its own exception.
+
+### ⛔ `AZURE_CLIENT_ID` cannot be both present and absent — the ALDC-1002 / `func_common` deadlock
+
+Surfaced by [[ALDC-1175]]. **`DefaultAzureCredential()` requires `AZURE_CLIENT_ID` to be UNSET to
+use a Function App managed identity, while `func_common.py` requires it to be SET or the whole v1
+API returns errors.** The two cannot be satisfied at once, and ALDC-1002 (`v1/keyvault_client.py`,
+merged to `eclipse-2.1` 2026-09-05 as `9caded0`) shipped code that needs the managed-identity side.
+
+Why, in the installed SDK (`azure/identity/_credentials/default.py`):
+
+- `:149` — `EnvironmentCredential` is appended **first** in the chain, so with
+  `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_CLIENT_SECRET` all present (all three are in
+  `func_common`'s mandatory list, so they *must* be) the **service principal wins** and the managed
+  identity granted "Key Vault Secrets User" is never used.
+- `:121-122` — `managed_identity_client_id` **defaults to `os.environ.get(AZURE_CLIENT_ID)`**, and
+  `:162-164` passes it to `ManagedIdentityCredential(client_id=...)`. So the fallback is *also*
+  poisoned: it asks IMDS for a **user-assigned** identity whose client ID is a service-principal
+  app ID, which does not exist.
+- The SDK states it plainly in `azure/identity/_credentials/azure_arc.py:52`:
+  *"DefaultAzureCredential ensure the AZURE_CLIENT_ID environment variable is not set."*
+
+⚠ **So the two obvious fixes are each other's cause.** Removing `AZURE_CLIENT_ID` to unblock Key
+Vault detonates the env loop and takes the API down; re-adding it to restore the API silently
+re-breaks Key Vault — `get_private_key()` swallows failures to `None`
+(`keyvault_client.py:73-74, 84-86`), Snowflake falls back to password auth, and **ALDC-1098**
+(password-fallback removal) would then hard-fail on deploy. **Neither layer alone is a fix.** The
+resolution has to make the env contract and the credential strategy consistent in the same change —
+e.g. pass an explicit `ManagedIdentityCredential`, or `exclude_environment_credential=True`, rather
+than relying on `DefaultAzureCredential`'s chain order.
+
+**General rule:** `DefaultAzureCredential`'s chain order is configuration, not a detail. Any service
+that sets `AZURE_*` service-principal vars **cannot** also use a managed identity through it.
+
+### ⚠ Deploy gotcha — the container tag is mutable, so prod changes code without a swap
+
+Measured on [[ALDC-1175]]: both the prod and `stage` slots reference the **same mutable tag**
+`ghcr.io/aldc-io/core-api:2.0.0-eclipse-2-1.1` — byte-identical across three separate build runs
+(2026-09-02, 09-05, 09-08). Two consequences:
+
+1. **Prod picks up new code on any restart or scale-out, with no slot swap.** Combined with the
+   import-time-per-process `environment_error` above, this creates **mixed worker populations** —
+   some workers on old code/old config and healthy, some on new and broken. That is why a client can
+   fail at 21:46 while 25 sequential probes come back clean at 23:00, and it is why *a single clean
+   probe never proves the fleet is healthy.* Probe per-instance, or don't claim a population.
+2. **The rollback-safety gate cannot fail.** `deploy_az_webapp_container.yaml:73` gates on
+   `[ "$STAGE_IMAGE" != "$PROD_IMAGE" ]`, but since the tag never changes it compares a constant to
+   itself — it reported success on `push` runs with `force_deploy=false` and would do so even if
+   stage genuinely held a rollback version. Remove what it guards and it stays green.
+   ⚠ Pinning to an immutable digest without also fixing the comparison makes the gate block *every*
+   deploy (differing digests become normal), which reads as "the gate broke" and invites
+   `force_deploy=true` as a habit. Fix both together. Tracked by [[ALDC-994]].
 
 ## Architecture & Language Stack
 

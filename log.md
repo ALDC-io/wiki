@@ -2042,3 +2042,54 @@ config, code path, consumer route, falsifier). Ticket **ALDC-1175** created, ass
 S11. Also re-confirmed the existing generic-500 masking gotcha on [[core_api]] — the probe's
 `JSONDecodeError: Expecting value: line 1 column 1` was already documented there, so it is a known
 incidental, not a new finding. See [[ALDC-1175]].
+
+### 2026-09-08 (later) — ALDC-1175 CORRECTION: the premise I published was wrong, twice over
+
+⛔ **My own ranked hypothesis #4 was false and I had already published it** to the ticket: I wrote
+that ALDC-1002 / PR #255 was "an open PR branch, likely not deployed". **It merged to `eclipse-2.1`
+at 2026-09-05T04:23:45Z as `9caded0` and shipped the same minute.** Verified independently
+(`gh pr view 255` → MERGED; `gh api .../branches/eclipse-2.1` → `9caded0`). The thing I set aside as
+not-live was the thing that mattered. Correction posted to ALDC-1175 rather than quietly amended.
+
+⭐ **The durable lesson is a deadlock, and it is now on [[core_api]]: `AZURE_CLIENT_ID` cannot be
+both present and absent.** `DefaultAzureCredential()` requires it **UNSET** to use a Function App
+managed identity — `EnvironmentCredential` is first in the chain (`default.py:149`) so the service
+principal wins, *and* `managed_identity_client_id` defaults to `os.environ.get(AZURE_CLIENT_ID)`
+(`:121-122` → `:162-164`) so the fallback asks IMDS for a user-assigned identity whose client ID is
+an SP app ID. The SDK says it out loud: *"DefaultAzureCredential ensure the AZURE_CLIENT_ID
+environment variable is not set"* (`azure_arc.py:52`). Meanwhile `func_common.py:89-93` requires it
+**SET** or every route fails. **So the two obvious fixes are each other's cause** — remove it and the
+API dies; re-add it and Key Vault silently dies (`get_private_key()` swallows to `None` → Snowflake
+password fallback → ALDC-1098 would hard-fail on deploy). Neither layer alone is a fix.
+
+⭐ **Two measurement lessons, both of which changed a conclusion:**
+(1) **The mutable container tag is why one clean probe proved nothing.** Both slots reference
+`core-api:2.0.0-eclipse-2-1.1`, identical across three builds — so prod changes code on any restart
+with **no slot swap**, and since `environment_error` is import-time-per-process this generates
+**mixed worker populations**. That is the concrete generator for "client fails 21:46, 25/25 probes
+clean 23:00". My "healthy aggregate, not healthy population" caveat was right for a reason I had not
+yet found. (2) **The rollback-safety gate compares a constant to itself and cannot fail** —
+`deploy_az_webapp_container.yaml:73`, green on `push` runs with `force_deploy=false`. A vacuous gate,
+same family as the vacuous-review-checks lesson. Reinforces [[ALDC-994]].
+
+⭐ **The ordinal argument turned out to be a weapon, not just a diagnostic.** Verified
+programmatically (30 keys; `azure_client_id` #21, `environment_location` #6), it **refutes** the
+on-prem-container hypothesis outright: `compose_on_prem.yaml` declares only 21 vars and omits
+`ENVIRONMENT_LOCATION`, so it could only ever name *that*. It also narrows the host — naming #21
+requires all 20 preceding nullable keys populated, i.e. an App Service-style settings blob.
+⚠ Spin-off finding nobody has checked: **if that on-prem container is running, it has been returning
+`environment_location improperly set` as HTTP 200 "success" to every request since deployment.**
+
+⭐ **And the HTTP-200 masking is total, not path-specific:** `status_code` appears **exactly once in
+the whole 74KB `v1/__init__.py`** (line 1281, hardcoded 200), so the 400 and 500 branches return 200
+as well — **a status-code monitor is blind to 100% of v1 errors.** Fix `:1247` first; `:1281` is a
+breaking change for every caller including the client daemon we cannot modify.
+
+Also refuted: the unresolved-Key-Vault-reference hypothesis (leaves the setting **present** carrying
+the literal `@Microsoft.KeyVault(...)` string, so the loop passes — the symptom needs genuine
+absence), and half my own §2e (`keyvault_client.py` reads only `KEY_VAULT_URL` and
+`ENVIRONMENT_LEVEL`, never `azure_client_id`; the dependency is the *implicit* SDK one). Census
+confirms `azure_client_id` has **zero** reads on the dataset/warehouse/report/explorer/capacity/
+schedule paths — all three runtime reads are in `route_setup.py`'s `setup_azure_*`. Still open: the
+prod app-settings check that would convert the code coupling into a proven incident cause.
+See [[ALDC-1175]].
