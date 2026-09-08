@@ -3,7 +3,7 @@ tags: [entity, repo, core-api, aldc, eclipse, api, azure-functions]
 aliases: [core_api, core-api, core api]
 sources: [daily/2026-04-17.md, ~/.claude/CLAUDE.md, CORE/1467940876, CORE/1048248321, CORE/238387201, CORE/7929869, CORE/886603777, CORE/885620774, CORE/909737996, CORE/892796955, TECH/1777106945 (Steven Offboarding)]
 created: 2026-04-17
-updated: 2026-07-27
+updated: 2026-09-08
 ---
 
 # core_api
@@ -655,6 +655,43 @@ Source: Confluence CORE/886603777 (2022-07).
 | `MAILJET_EMAIL` / `MAILJET_KEY` / `MAILJET_SECRET` | Mailjet email credentials | → vault |
 
 Full `local.settings.json` for each environment: `vault/core-api-local-settings.md`.
+
+### ⚠ Gotcha — ONE absent env var disables every route, and it reports HTTP 200 "success"
+
+Surfaced by [[ALDC-1175]] (2026-09-08, GEP/Navira SALES DETAIL SYNC). Four properties of
+`v1/func_common.py`'s env handling that together make config failures both catastrophic and
+invisible. Read this before diagnosing *any* `Environment variable setup failed` report.
+
+**1. Every variable in the glossary above is validated as MANDATORY.** `func_common.py` builds one
+dict and loops `if variable_value == None: raise`. So `PUSHOVER_TOKEN`, `TWILIO_*`, `GPT_KEY`,
+`GPT_ORG` and the `AZURE_*` set are hard prerequisites for **every** request — including routes that
+never touch them. The FastAPI rewrite (`api/__init__.py` → `GlobalConfig`) already models these
+correctly as `Optional`; the legacy path does not.
+
+**2. ⭐ The error names the FIRST absent variable — so it hands you a free diagnostic.** Python
+preserves dict insertion order, so `Environment Variable <X> improperly set` proves **every nullable
+key before `<X>` was populated**, and says **nothing** about the keys after it. Read the dict order
+in `func_common.py` and split it at `<X>`: prefix = healthy, suffix = UNKNOWN and needing separate
+verification. Do not treat such an error as "the environment is empty" — a config missing exactly
+one variable looks identical to a total wipe unless you use the ordering.
+
+**3. `== None` tests absence, not blankness.** An empty string `""` **passes**. So the variable must
+be genuinely absent from the process environment — which rules out `docker compose`
+`KEY: ${VAR}` with `VAR` unset (that yields `""`). Useful for eliminating mechanisms fast.
+
+**4. It is sticky per process, and served as HTTP 200 "success".** `environment_error` is a
+module-level global evaluated **once at import**; `v1/__init__.py:302` gates on it as the first
+statement of the request `try`, **before auth and before route dispatch**. So a bad-config worker
+fails everything until it restarts. And `v1/__init__.py:1244-1247` returns
+`form_response(..., 200, "success", "success", environment_error)` — status **200**, the literal word
+**"success"**, error in the payload. **Any monitor watching status codes sees green during a total
+outage.** This is a sibling of the generic-500 masking gotcha in *Debugging workflow* above: both
+turn a real fault into a misleading response.
+
+**5. Corollary for triage — an error surfaced by a client's system is not an error owned by it.**
+ALDC-1175 arrived as a client-side Python traceback and was first assessed as "not us"; the string
+came from `func_common.py:92`. **Grep the repos for the literal error text before assigning
+blame** — the client's daemon had merely interpolated our response body into its own exception.
 
 ## Architecture & Language Stack
 

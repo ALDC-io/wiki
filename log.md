@@ -2005,3 +2005,40 @@ Amazon and Google.
 ⛔ **Jira comment refused by the auto-mode classifier** — draft at
 `aldc-launchpad/boot-prompts/drafts/gp319-jira-design-options-and-two-corrections-2026-09-08.md`,
 needs pasting. Ticket key verified in Jira, not guessed. See [[GP-319]].
+
+## 2026-09-08 — ingest-bug — ALDC-1175 core_api env-var outage (GEP/Navira SALES DETAIL SYNC)
+
+GEP/Navira forwarded a `Routine Error: SALES DETAIL SYNC` from their client-side `InsiteDaemon`
+(2026-09-08 21:46:34 UTC), first assessed as *"I don't think this is us."* **Refuted:** the string
+is emitted by our own `core_api/v1/func_common.py:92` + `:98`, and appears in **no other repo**.
+The daemon had interpolated our HTTP response **body** into its own exception, which is what made a
+core_api fault present as a client-side Python traceback. ⭐ New triage rule recorded on
+[[core_api]]: **grep the literal error text before assigning blame** — an error surfaced *by* a
+client's system is not an error owned by it.
+
+Four compounding properties established by executed evidence, all now on [[core_api]] §Environment
+Variables as a gotcha: the validation loop treats **every** glossary var as mandatory (so
+`PUSHOVER_TOKEN`/`TWILIO_*`/`GPT_*` gate routes that never touch them, while the FastAPI
+`GlobalConfig` already models them `Optional`); it raises on the **first** absent key, which makes
+the error a **free diagnostic** — the named variable proves the dict prefix before it was populated
+and says nothing about the suffix (`azure_client_id` is #21, so Cosmos/Twilio/Pushover were all
+set, and keys #22+ remain UNKNOWN); `== None` tests **absence not blankness** so `""` passes,
+eliminating `compose` `KEY: ${VAR}` with `VAR` unset; and `environment_error` is a module global
+evaluated **once at import**, gated at `v1/__init__.py:302` **before auth and route dispatch**, then
+returned by `:1244-1247` as **status 200 with the literal word "success"** — so a total
+configuration outage is invisible to status-code monitoring, and sticky until the worker restarts.
+
+⚠ Honest limits recorded rather than papered over: the symptom **does not currently reproduce**
+(25/25 credential-free probes of `api.aldc.io` clean 1h14m later) but that is likely **one warm
+worker** — a healthy aggregate, not a healthy population, so the state is **UNKNOWN, not ZERO**.
+Occurrence frequency is **NOT-VISIBLE** (the routine mails the client's own addresses, not ALDC).
+And the **consumer route is unproven** — ≥3 Function Apps (`aldcprodfnapcore1c01` / qa / test) plus
+a possible on-prem `core-api-2.1` container all run this code and emit the identical string, so the
+failing instance cannot be named from the message alone.
+
+Ranked cause #1 is stage↔prod slot-swap config drift — precisely the risk [[ALDC-994]] exists to
+remove (linked in Jira). Ran as an [[inquest-bug-resolution]] council of five (symptom/scope, Azure
+config, code path, consumer route, falsifier). Ticket **ALDC-1175** created, assigned Paul, sprint
+S11. Also re-confirmed the existing generic-500 masking gotcha on [[core_api]] — the probe's
+`JSONDecodeError: Expecting value: line 1 column 1` was already documented there, so it is a known
+incidental, not a new finding. See [[ALDC-1175]].
