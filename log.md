@@ -1980,3 +1980,28 @@ with sidecars, under `repos\_cellos_reconciliation_runs\20260908T060128Z\`. **No
 venture governance work, not client delivery. `agent-factory` untouched (`3c876fd`/11/5). Governance
 repo: nothing staged, committed or pushed. **Open: founder disposition §1–§11 corrective pass
 (00G / v0.3) not started.**
+
+## 2026-09-08 — GP-319: three designs from the reach matrix, and two of our own claims refuted
+
+Read-only synthesis for the Navira 13:00 call. **Nothing deployed; no queries run.** Built three
+semantic-model designs for the Marketing Model `2d8587b5` from the measured dim x fact reach matrix
+rather than from schema preference — the only missing capability is a product axis on all-platform
+spend, and there are exactly three honest answers. Recommended the conformed **Narrow Core**,
+because clone `66fd0f42` already carries 13 verified measures.
+
+**Two corrections to claims we had published.** (1) "Google spend has no product grain" was false —
+we cited `GOOGLE_ADS.GOOGLE_ADS_PRODUCT` at 0 rows, but the built object
+`MARKETING_GOOGLE_PRODUCT_SPEND` holds **181,896 rows** with `OFFER_ID`, so it is a wiring gap not a
+missing source. (2) "One credential blocks three measurements" was false — two were already answered
+on 2026-08-24; only the Amazon UK source shape is open, and that is answerable from the ad account.
+⭐ Also established that **Meta carries no destination field at all** (18 non-system columns), so
+Heather's pointer ask needs an aggregator field-set request for Meta and is deliverable now for
+Amazon and Google.
+
+⭐ New argument nobody had made: the Marketing Model is **70.6% sales tables by VertiPaq weight**
+(`Order Line` 1,087 MB + `Order` 952 MB of 2.89 GB) carrying a 33.4 MB marketing fact — and
+`Order Line` is the table pinned at 1 August, so removing it from the model retires that defect class.
+
+⛔ **Jira comment refused by the auto-mode classifier** — draft at
+`aldc-launchpad/boot-prompts/drafts/gp319-jira-design-options-and-two-corrections-2026-09-08.md`,
+needs pasting. Ticket key verified in Jira, not guessed. See [[GP-319]].
