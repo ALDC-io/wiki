@@ -2188,3 +2188,72 @@ raises, so a blank environment would say `invalid literal for int()`, not this m
 `microsoft.insights/components`; no instrumentation key among its 39 settings), so the request log
 that would show the client's failing call **does not exist — NOT-RECORDED**. With every v1 response
 being HTTP 200 as well, a client email was structurally the only possible detector. See [[ALDC-1175]].
+
+### 2026-09-08 (final) — ALDC-1175 SETTLED: two outages, and Gate 3 measured the wrong host
+
+⭐ **The discriminating query that only one candidate could pass.** `v1/__init__.py:299` prints the
+request dict including `"url"`, which lands in App Insights as a trace. Enumerating every URL
+`aldcprodfnapcore1c03-appsvc` served in 21:40–21:55Z returns **one distinct URL, n=92** — all
+`/v1/work/pick?debug=none`, ALDC's own connector work-dispatch poll, **zero client traffic**. That
+**excluded `-appsvc` as the client's hop by enumeration** and reversed a conclusion already published
+twice. Two real outages, not one:
+
+| | Outage 1 (reported) | Outage 2 (ours, live) |
+|---|---|---|
+| host | `aldcprodfnapcore1c01` = `api.aldc.io` | `aldcprodfnapcore1c03-appsvc` |
+| confidence | **LIKELY** (elimination + Activity Log; `1c01` has no telemetry) | **PROVEN** |
+| healed | by hand 21:47:45.710Z | **no**, since 19:04:38Z |
+| impact | one client sync | **~368 agent polls/hour** |
+
+⚠ `/v1/work/pick` is the same route as the known TEST agent-dispatch failure
+([[project_test_eclipse_pick_bug]], "core_api `work_pick_agent` bug") — **was that ever this?**
+
+⛔ **The timing inference I published was false, and the correction is reusable.** I read the
+21:47:38Z config write as "remediation 64s after the client's alert". The client's mail went to
+`lcerrito@`/`jshuster@` **only**; Justin forwarded to ALDC at **22:49:49Z** — 62 minutes *later*.
+**Temporal proximity to an alert means nothing until you check when the alert actually reached you.**
+
+⭐ **Gate 3's real failure mode, worth more than the incident.** The 25/25 clean probes were not "one
+warm worker": `api.aldc.io` → `aldcprodfnapcore1c01`, which **holds** `AZURE_CLIENT_ID` and so
+*provably cannot* emit this message. **The host was probed for being findable, not for being
+implicated — a healthy non-member of the population.** What worked was the **ordinal used as a
+filter** across all 15 core Function Apps in 4 subscriptions: it isolated a unique match and excluded
+the three f92 apps by *predicting a different message* (missing all 16 predecessors → would name
+`cosmos_database`). Ordinal-as-filter is the technique to keep.
+
+⭐ **Remedy analysis — the counter-intuitive result.** Ship **B + D**. **C (stop returning HTTP 200)
+does not fix the reported symptom at all**: the client's daemon already detected the failure and
+emailed within the minute — **the 200 blinded *us*, not them** — and if `InsiteDaemon` retries a 5xx
+silently we would **lose our only working detector**, since `1c01` has zero telemetry. C is a
+monitoring fix mislabelled as a correctness fix. **A** is already done for outage 1 and its worst case
+re-points `DefaultAzureCredential` to the SP → silent Snowflake password fallback. **B** is the only
+remedy that removes the coupling (loop gates **25** keys, **12** safe to demote) but **must not use
+`GlobalConfig` as its template** — that marks `environment_level` optional, the single most dangerous
+demotion (12 call sites incl. `route_auth`, plus `keyvault_client.py:96` builds a secret **name** from
+it → wrong secret, silent `None`). **D** must assert on **response-body content per host**, never on
+status codes (line 1281 hardcodes 200, so such a monitor *cannot fail*); rail already exists
+(`SLACK_BOT_TOKEN`/`SLACK_AUTH_ALERT_CHANNEL` slot-sticky on `1c01`, `_send_slack_alert()` live), and
+there is **no unauthenticated health route** to point it at.
+
+Also settled: prod has **six** core_api surfaces (not the one the [[core_api]] page implied);
+`api.aldc.io` is a **static 1:1 ARM binding**, not a fan-out; `api-test.aldc.io` →
+`aldctestfnapcore1c01` (fills the page's "name not captured"); Eclipse 2.1 is **structurally immune**
+because prod points at `api.eclipse.analyticlabs.io/v2/` (FastAPI, 404s `/v1/*`, `azure_*` Optional) —
+**right conclusion, wrong reason** replaced (my PBI-binding argument was a wrong-layer exoneration,
+since the gate precedes dispatch). `EXTRACT_SALES_DETAIL` object confirmed but the route is
+**`POST /v1/dataset/query` → `route_portal.portal_data()`**, not Explorer — `route_explorer` serves
+only dashboards/widgets/catalog, and the v2 surface (62 routes) serves data **by id** only, so a
+by-name view fetch has exactly one option in either API generation.
+
+⛔ **Two security items needing their own tickets:** a **live prod core_api master bearer in plaintext
+in a tracked file** (`aldc-launchpad/boot-prompts/fusion92-flight-check-sync-hardening.md:161`, commit
+`e7bf448`, duplicated under `.wt-merge/`), and lower-severity `clients/GEP/eclipse/capacity/data_model.json`
+carrying a Fernet-encrypted PBI service-principal secret whose key is core_api's `ENCRYPTION_KEY`.
+
+**Nothing was deployed or changed — diagnosis only, all read-only.** Open: which URL `InsiteDaemon`
+calls (one free question to the client, and it upgrades outage 1 to PROVEN); what the 20:56:16Z and
+19:04:38Z writes contained (**NOT-RECORDED** — ARM keeps no key names/values); the sync schedule
+(**NOT-RECORDED**, client-side only); what `InsiteDaemon` does with a 5xx (**pivotal for remedy C,
+unmeasurable from here**); and whether Cloudflare has more than one origin for `api.aldc.io`. A
+Cosmos-key-gated instrument could settle the route server-side — **awaiting Paul's approval, not
+requested implicitly.** See [[ALDC-1175]].
