@@ -1900,3 +1900,83 @@ highest-leverage are the **Unit Economics Contract** (Kernel refuses a mission b
 floor, reusing the existing budget gate) and the **Business Genome**. **No Jira ticket** — venture
 product work, not client delivery. Boot prompt:
 `agent-factory/boot-prompts/cell-os-deck-2026-09-03.md`.
+
+## 2026-09-06 — CELL // OS Gate 1: controlled read-only environment-parity diagnostic
+Ingested into [[agent-factory]] (new dated section), plus two new pages:
+[[controlled-readonly-diagnostic]] (`processes/operations/`) and [[cell-os-governance-gates]]
+(`concepts/architecture/`). Executed Gate 1 of the founder-approved gate sequence
+(`DEC-20260906-001`) end to end: all four control-input SHA-256 digests matched on first
+measurement, the prior 101-entry verification ZIP verified against its internal ledger (100/100),
+both source repositories treated as **read-only** throughout.
+
+**Measured result — `ASSIGNMENT_STATUS: COMPLETE`, `PARITY_RESULT: PARTIAL_CONFIRMATION`.** Each
+suspected dependency was introduced **alone** in its own disposable snapshot so the two could not
+be conflated: all **17** connector-coupled baseline failures pass with only a sibling
+`prefect-connectors` checkout at `0195e59c…`; the **1** authorized task-store-dependent failure
+passes with only the screened `.data/tasks.jsonl`; **18 of 19** environment hypotheses closed with
+zero residual and zero partially-supported rows. ⭐ **So of the 21-failure baseline, 19 were the
+environment and only 2 are real code findings** (both F101, untouched by authority). 9 of 10 gated
+skips became passes; the 10th stayed skipped for a **different** reason (a mission worktree, a
+third prerequisite) and was recorded honestly rather than unblocked by copying another artefact.
+The 19th failure stays `BLOCKED_NOT_MEASURED` — `COR-20260906-001` names the file it needs
+(`.data/missions/marketing-model-reconstruction-v1.json`) and deliberately does not authorize it,
+so the receipt reports the exact permission required instead of improvising access.
+
+**Four ⭐ lessons captured, all reusable.** (1) The safety boundary held by **one keyword
+argument** — `live_probes.WindsorAiGepProbes` defaults `test_paths=[]`, which runs the *entire*
+`prefect-connectors` suite, and only a static preflight could have caught it because the run goes
+green either way. (2) **A revision named in a handoff is a hypothesis, not a pin** — no committed
+test/config evidence names a connector revision, the three short SHAs live only in narrative, and
+of 115 local candidates exactly **one** is eligible. (3) **A JUnit `classname` is not an import
+path** — two wrong reconstructions produced a confident, entirely spurious node-set mismatch; the
+tell was counts reconciling while every name missed. (4) **Reissue, never rewrite, once a digest is
+published** — a final leakage sweep hit this diagnostic's own `re.compile` detector literal, so a
+newly timestamped result was issued carrying the disclosure and the first archive preserved in
+place with a supersession record, no measurement differing between them.
+
+**Gotchas filed:** `git -c protocol.allow=never` blocks git's own local `file:` transport (deny by
+default, re-permit `file` only); `git status --untracked-files` must precede `--ignored=matching`
+or git refuses the combination.
+
+**Source integrity PASS.** Both working trees were **dirty before this began** — no cleanliness was
+claimed — and every recorded git field is identical across the before/after captures, with the
+authorized fixture byte-identical (`b7f8c052…`, 293 records) before, after and around each run.
+`SECRET_VALUES_REPRODUCED: 0`. Deliverable
+`CELL_OS_Gate_1_Controlled_Environment_Parity_Result_2026-09-06T130324Z.zip` (100,552 bytes, 52
+members, SHA-256 `aa41d212…74be89d8`) plus sidecar, under
+`repos\_cellos_gate1_runs\2026-09-06T123849Z\`, returned unchanged to ChatGPT. **No Jira
+ticket** — venture governance work, not client delivery. No fix, migration, Gate 2, research or
+implementation was begun.
+
+## 2026-09-08 — CELL // OS Gate 2 reconciliation `CELL-G2-RECON-WO-v2`, RUN_ID `20260908T060128Z`
+
+Ingest: session execution record. Page updated: [[cell-os-governance-gates]].
+
+Executed the bounded Gate 2 specification reconciliation across six checkpoints (00A–00F). Verified
+the v2 transport package (`b83f4024…`), the reviewed handoff (21/21), the seven governing records
+(**7/7 identical**, no drift) and both Mission-evidence archives against work-order-pinned hashes.
+Confirmed `specifications/release-one/` is **58/58 byte-identical** to the Gate 2 result — the
+corpus is unmodified since Gate 2.
+
+Ran one authorized provider invocation (`CELL-POC-TRACE-001`) through the unmodified
+`RunController` via a run-local safe adapter: `COMPONENT_CHAIN_PROVEN`, exit 0, token
+`CELL_OS_POC_OK`, model `claude-haiku-4-5-20251001`, durable `runs.jsonl` row, **zero repository
+changes**. Controller verdict `FAIL` was correct — the ticket contract expected `work_landed` while
+mutation was prohibited. Billing: Max subscription, **$0.00 incremental**.
+
+Founder approved directions **A1–A9**. Notable reversals of my own recommendations: universal
+`mutation_declaration: NONE` withdrawn (conflicts with settled Q2-007/Q2-012); strip-extensions
+rejected for preserve-and-project; canonical-hash result downgraded to
+`PARTIAL / NOT_SUFFICIENT_FOR_Q2_011`. Invariant enforcement moved 11/17 → 17/17 registered.
+
+**Three published conclusions of mine were wrong** and are recorded as superseding evidence, not
+overwrites — provider bytes not preserved, fixture bindings already declared in `fixture-bundle`,
+and a mis-specified "schemas accept arbitrary JSON" claim. Details and the reusable lessons on the
+page.
+
+Deliverables: `…Review_Pack_20260908T060128Z.zip` (`8dadcdbe…`) and
+`…Reconciliation_Candidate_20260908T060128Z.zip` (114,652 bytes, 30 payloads, `259afcdc…`), both
+with sidecars, under `repos\_cellos_reconciliation_runs\20260908T060128Z\`. **No Jira ticket** —
+venture governance work, not client delivery. `agent-factory` untouched (`3c876fd`/11/5). Governance
+repo: nothing staged, committed or pushed. **Open: founder disposition §1–§11 corrective pass
+(00G / v0.3) not started.**
