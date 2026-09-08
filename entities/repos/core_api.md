@@ -742,24 +742,70 @@ than relying on `DefaultAzureCredential`'s chain order.
 **General rule:** `DefaultAzureCredential`'s chain order is configuration, not a detail. Any service
 that sets `AZURE_*` service-principal vars **cannot** also use a managed identity through it.
 
-### ⚠ Deploy gotcha — the container tag is mutable, so prod changes code without a swap
+### ⛔ Which resource serves `api.aldc.io` — two apps with near-identical names, different codebases
 
-Measured on [[ALDC-1175]]: both the prod and `stage` slots reference the **same mutable tag**
-`ghcr.io/aldc-io/core-api:2.0.0-eclipse-2-1.1` — byte-identical across three separate build runs
-(2026-09-02, 09-05, 09-08). Two consequences:
+Established on [[ALDC-1175]] and worth checking before *any* core_api diagnosis:
 
-1. **Prod picks up new code on any restart or scale-out, with no slot swap.** Combined with the
-   import-time-per-process `environment_error` above, this creates **mixed worker populations** —
-   some workers on old code/old config and healthy, some on new and broken. That is why a client can
-   fail at 21:46 while 25 sequential probes come back clean at 23:00, and it is why *a single clean
-   probe never proves the fleet is healthy.* Probe per-instance, or don't claim a population.
+| Hostname | Resource | Kind / runtime | Codebase |
+|---|---|---|---|
+| **`api.aldc.io`** | **`aldcprodfnapcore1c01`** (`aldcprodrsgp1c`) | `functionapp,linux`, `sku: Dynamic` (Y1 Consumption), `PYTHON|3.11` | **legacy `v1/`** — the one that can emit the env error |
+| `api.eclipse.analyticlabs.io` | `aldcprodwbapcore1c01` | web app, container | **FastAPI `api/`** rewrite — `POST /v1/account/list` → `404 {"detail":"Not Found"}` |
+
+⚠ **No *web* app carries `api.aldc.io`.** Anyone running `az webapp list` / `az webapp config …`
+alone targets the wrong resource and gets empty or misleading output — and an empty result there
+looks exactly like a missing setting. Use `az functionapp …` for the `api.aldc.io` host. The DNS
+A-records point at **Cloudflare**, so DNS never names the origin; the **ARM hostname binding** does.
+
+Consequence for the [[ALDC-1175]]-class defect: the **two prod deployments of the same service
+disagree about which variables are mandatory.** `aldcprodwbapcore1c01` holds 23 settings and **no**
+`AZURE_CLIENT_ID` (consistent with `GlobalConfig`'s `Optional`); `aldcprodfnapcore1c01` needs all 25
+nullable keys. `aldcprodfnapcore1c03` also 404s on `/v1/` and is not a casualty either.
+
+### ⚠ Deploy gotcha — the container tag is mutable (Web App pipeline only)
+
+Measured on [[ALDC-1175]]: prod and `stage` on the **container Web App** pipeline reference the
+**same mutable tag** `ghcr.io/aldc-io/core-api:2.0.0-eclipse-2-1.1` — byte-identical across three
+build runs (2026-09-02, 09-05, 09-08). Two consequences:
+
+1. **That app picks up new code on any restart or scale-out, with no slot swap.** Combined with the
+   import-time-per-process `environment_error` above, that can produce **mixed worker populations**
+   — some workers on old code/config and healthy, some on new and broken.
 2. **The rollback-safety gate cannot fail.** `deploy_az_webapp_container.yaml:73` gates on
    `[ "$STAGE_IMAGE" != "$PROD_IMAGE" ]`, but since the tag never changes it compares a constant to
    itself — it reported success on `push` runs with `force_deploy=false` and would do so even if
    stage genuinely held a rollback version. Remove what it guards and it stays green.
-   ⚠ Pinning to an immutable digest without also fixing the comparison makes the gate block *every*
-   deploy (differing digests become normal), which reads as "the gate broke" and invites
+   ⚠ Pinning to an immutable digest *without* fixing the comparison makes the gate block **every**
+   deploy (differing digests become the normal state), which reads as "the gate broke" and invites
    `force_deploy=true` as a habit. Fix both together. Tracked by [[ALDC-994]].
+
+⛔ **Scope correction, and it is the reason this heading names the pipeline:** this does **not**
+apply to `aldcprodfnapcore1c01` / `api.aldc.io`, which is a Python 3.11 Consumption **Function App**
+with no `DOCKER_CUSTOM_IMAGE_NAME`, deployed by zip/publish (signature in the activity log:
+`ListPublishingCredentials` + `Sync Web Apps Function Triggers` + Stop/Start). On [[ALDC-1175]] this
+mechanism was initially published as the explanation for the outage timing and had to be withdrawn —
+the real trigger was an explicit operator `Stop`/`Start`. **Check `kind`/`sku`/`linuxFxVersion`
+before attributing anything to the container pipeline.**
+
+### ⚠ Measurement traps when diagnosing this app (each one produced a false conclusion)
+
+1. **`az monitor activity-log list` silently caps at 50 events.** On [[ALDC-1175]] a filtered run
+   returned a timeline that looked complete and **began 51 minutes after the causal event**. Pass
+   `--max-events 2000`. A truncated log reads exactly like a quiet one.
+2. **Cloudflare 403s `urllib` but passes `curl`.** 70/70 Python-client requests to `api.aldc.io`
+   returned `HTTP 403` while identical `curl` requests returned 200. A Python-scripted probe would
+   report a total outage that does not exist. Use `curl`, or set a browser UA, and probe the
+   `*.azurewebsites.net` origin separately to bypass the edge.
+3. **On Y1 Consumption there is no worker identity at any layer.** `az webapp list-instances`
+   returns empty, `clientAffinityEnabled` is null so there is no `ARRAffinity` cookie, and
+   direct-origin responses carry no `x-azure-ref`/`Request-Context`. So *no number of probes proves
+   the fleet healthy* — argue the population structurally instead (last config write + a Stop/Start
+   destroying every process + a full enumeration of required keys).
+4. **The `"client id"` in the response body is NOT an instance fingerprint** — it is a fresh
+   `str(uuid.uuid4().hex)` per request (`v1/route_auth.py:8`). It looks like one. It isn't.
+5. **Useful discriminator once you are probing:** `code: 500` + a `JSONDecodeError` in the payload =
+   healthy config (that is the generic-500 masking path); `code: 200` + `"payload": "Environment
+   variable setup failed…"` = broken config. A monitor should key on the latter, never on the HTTP
+   status.
 
 ## Architecture & Language Stack
 

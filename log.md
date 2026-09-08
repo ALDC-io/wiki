@@ -2093,3 +2093,98 @@ confirms `azure_client_id` has **zero** reads on the dataset/warehouse/report/ex
 schedule paths — all three runtime reads are in `route_setup.py`'s `setup_azure_*`. Still open: the
 prod app-settings check that would convert the code coupling into a proven incident cause.
 See [[ALDC-1175]].
+
+## 2026-09-08 — ALDC-1164 investigation (read-only)
+
+Ran a 5-lens `prospect` council (claimant / scout / canvasser / operator / devil) plus direct
+measurement of the Power BI REST API, the Fabric Connections API and Snowflake `wj66376`.
+Nothing mutated in Power BI, Fabric or Snowflake — every call was a GET.
+
+Headline: `SERVICE_POWER_BI` is the **last** `LEGACY_SERVICE` user on prod without an RSA key
+(16 of 17 already have one), so [[ALDC-1002]]'s scope-gap framing is confirmed. Real migration
+scope is **2 live models on 1 credential object**, not the 9 prod bindings the ticket implies —
+7 have disabled schedules and last refreshed 2022–2025.
+
+Three ticket premises refuted with evidence: PBI *does* support Snowflake key-pair (connector
+impl 2.0, ADBC, GA Jul 2025 / key-pair GA Feb 2026, and our tenant declares it); Entra External
+OAuth is the *weakest* path, not the recommended one (Snowflake's partner matrix says "No" for
+`TYPE=SERVICE` on PBI Cloud, and OAuth via REST expires in an hour); and "38 NAVIRA dashboards"
+is false — the whole estate has **1** dashboard, and NAVIRA is one sandbox dataset on non-prod.
+
+Method lessons worth keeping: a first enumeration returned "Snowflake datasources: 0" with zero
+errors because modern connectors report `datasourceType: Extension` with NULL `.server` — a blind
+zero, fixed with a positive control. `targetStorageMode: Abf` does **not** mean Import (no
+documented enum). `refreshSchedule.enabled=False` is not a lock — `ViaApi` and `OnDemand`
+refreshes were observed against a schedule-disabled prod model. And "has a key" is not "uses a
+key": `PROD_DG1_CORE_SVC_DA8904DB` has an RSA key registered and authenticated by **Password**
+today, which puts ALDC-1002's completeness in question.
+
+Incidental findings raised separately: `ALDC_FINANCE / Profitability Model` failing since
+2026-05-29 with `MailOnFailure` enabled and ~3 months of no response; `CORE_API_CLIENT_TOKEN`
+stored as a plaintext dataset parameter; and Power BI auto-disabling a schedule after 4 failures,
+so the alarm falls silent exactly when the outage becomes permanent.
+
+⚠ Self-inflicted: an insufficient masking regex while inspecting `vault/infra-credentials.md`
+echoed two passwords into the session transcript (`TEST_DG1_CORE_ADMIN`, `MIKESTUART`). Rotation
+required. Fix adopted: mask by **column header**, never by guessing at value shapes — see
+`scratchpad/sf_vault_locate.py`.
+
+Jira comment posted to ALDC-1164 (id 36342). See [[ALDC-1164]].
+
+### 2026-09-08 (resolved) — ALDC-1175 ROOT CAUSE: a hands-on prod config session, 51m14s outage
+
+**Not drift, not a swap, not Key Vault, not a deploy.** `api.aldc.io` = Function App
+**`aldcprodfnapcore1c01`**, and `tamara.krasnova@aldc.io` ran a hands-on prod config/deploy session
+on it ~19:03–22:19 UTC (71 non-policy ARM events). `Update web sites config` at **20:56:16.846Z** →
+Stop 20:56:19.75 → Start 20:56:25.59 brought up workers whose environment lacked `AZURE_CLIENT_ID`;
+the client's routine fired at **21:46:34Z**, 50m09s into that process lifetime; the remediation write
+at **21:47:38.6Z** + Stop/Start restored service **64 seconds after the client's alert email**.
+**Outage 20:56:25Z → 21:47:39Z = 51m14s.** PROVEN on bracketing + actor; **LIKELY** that this write
+is what removed the key — ARM activity-log `properties` carry no key names or values, so the write's
+content is **NOT-RECORDED**.
+
+⭐ **The deadlock explains the operator's action.** `KEY_VAULT_URL` *is* present on this app, so
+ALDC-1002's KV config was being applied here and the operator hit the `DefaultAzureCredential`
+collision head-on (KV needs `AZURE_CLIENT_ID` **gone**, `func_common` needs it **present**).
+⚠ **Live now:** both are present, so the deadlock rests in the *"API works, Key Vault silently
+broken"* state — **Snowflake is on password fallback today** and ALDC-1098 would hard-fail on deploy.
+
+⭐ **The defect demonstrated its own cost, live:** `aldcdevfnapcore1c01` is broken **right now**,
+serving `HTTP 200 / "code": 200 / "message": "success"` with
+`"payload": "…Environment Variable mailjet_email improperly set…"`, and nobody has noticed. That
+doubles as the **positive control** (proves the detector registers a non-zero, so clean prod probes
+are a real zero on capability) and as **ground-truth validation of the insertion-order inference**
+(five keys absent, only the earliest named; absent `LOG_SYSTEM_ENABLE` provokes no error, confirming
+bool keys can never be `None`).
+
+⛔ **Two of my own published claims had to be withdrawn, both for the same reason — wrong resource /
+untested premise:**
+(1) I published the **mutable container tag** as the "why 21:46" mechanism. It belongs to the
+container **Web App** pipeline; the incident host is a `PYTHON|3.11` **Consumption Function App**
+with no `DOCKER_CUSTOM_IMAGE_NAME`. Real trigger = an explicit operator Stop/Start. The tag and the
+**vacuous rollback gate** (`STAGE_IMAGE != PROD_IMAGE` compares a constant to itself) remain true
+against the Web App pipeline and still reinforce [[ALDC-994]].
+(2) Earlier I had ALDC-1002 as "not deployed" — it merged 2026-09-05. Both lane verdicts turned out
+compatible: the PR merged **and** nothing container-deploys this Function App.
+**Lesson: check `kind`/`sku`/`linuxFxVersion` before attributing anything to a deploy pipeline —
+two prod apps here have near-identical names, different kinds, and different codebases.**
+`api.aldc.io` → `aldcprodfnapcore1c01` (legacy `v1/`); `api.eclipse.analyticlabs.io` →
+`aldcprodwbapcore1c01` (**FastAPI**, 404s on `/v1/`). **No *web* app carries `api.aldc.io`**, so
+`az webapp …` alone silently targets the wrong box.
+
+⭐ **Four measurement traps recorded on [[core_api]], each of which produced a false conclusion:**
+**`az monitor activity-log list` silently caps at 50 events** (my first run's timeline began 51
+minutes *after* the causal event and looked complete — use `--max-events`); **Cloudflare 403s
+`urllib` while passing `curl`** (70/70 Python requests "failed", a scripted probe would report an
+outage that doesn't exist); **Y1 Consumption exposes no worker identity at any layer** (no
+`list-instances`, no `ARRAffinity`, no `x-azure-ref`) so *no number of probes proves the fleet
+healthy* — argue the population structurally; and the response body's **`"client id"` is a fresh
+`uuid4().hex` per request**, not an instance fingerprint. Also refuted: slot swap (stage's 39 names
+are identical to prod's and *include* the key; zero swap ops) and the KV reference (zero references;
+`Cannot find ApiKVReference`). Third independent refutation of the on-prem container: `int("")`
+raises, so a blank environment would say `invalid literal for int()`, not this message.
+
+⛔ **Standing gap: `aldcprodfnapcore1c01` has NO Application Insights** (absent from
+`microsoft.insights/components`; no instrumentation key among its 39 settings), so the request log
+that would show the client's failing call **does not exist — NOT-RECORDED**. With every v1 response
+being HTTP 200 as well, a client email was structurally the only possible detector. See [[ALDC-1175]].
