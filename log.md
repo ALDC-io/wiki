@@ -2400,3 +2400,65 @@ Permanently unanswerable: the **contents** of the 20:56:16Z write — Activity L
 body, ARG tracks only 3 property names, and **Change Analysis is unavailable** (RP unregistered,
 `InvalidGatewayHost`); and per-worker state on Y1 Consumption (`/instances` returns empty). Asking
 Tami what changed at 20:56 and 21:47 is the only route to PROVEN. See [[ALDC-1175]].
+
+### 2026-09-08 (fix) — ALDC-1183 remedy B built: the env contract, and why it was Tami's prerequisite
+
+⭐ **Reviewing the colleague's work before touching anything was the highest-value move of the day.**
+ALDC-1143 / PR #257's own body says *"expired SP secret removed"* and *"AZURE_CLIENT_SECRET removed
+from Function App"* — so the missing settings that caused [[ALDC-1175]] were **deliberate and
+correct**, part of migrating Key Vault auth to a system-assigned managed identity. My earlier framing
+of it as an operator slip is withdrawn. She had also independently made the same
+`DefaultAzureCredential` → `ManagedIdentityCredential` fix I was about to recommend.
+
+⭐ **The clearest statement of the defect, from two real hosts in opposite both-broken states:**
+`1c01` **had** `AZURE_CLIENT_ID` → API served, but Key Vault failed in *both* credential legs
+(`EnvironmentCredential` first with an **expired** SP secret; the MI leg poisoned because
+`managed_identity_client_id` defaults to that same var, so IMDS is asked for a *user-assigned*
+identity that doesn't exist). `-appsvc` **lacked** it → Key Vault worked (system MI, `client_id=None`)
+and **every route died**. **Neither host could have both while `func_common` required the variable.**
+So remedy B is a **prerequisite for her migration, not a conflict** — PR #257 touches *none* of the
+files this change touches (verified, zero matches), and without it every Function App she cleans up
+next dies the same way, including `1c01`, and ALDC-1098 cannot land.
+
+⛔ **Corrected again:** my "Snowflake is on password fallback today" was over-claimed — her production
+proof is **52 consecutive RSA_KEYPAIR logins, zero PASSWORD**. It holds by inference for `1c01` only;
+her measurement is of a different path. Both are compatible.
+
+**The fix** (branch `fix/aldc-1183-env-required-optional`, off `origin/eclipse-2.1` @ `9caded0` =
+verified deployed SHA): contract extracted to a **dependency-free `v1/env_contract.py`** —
+**9 REQUIRED / 16 OPTIONAL / 5 NEVER_NONE** — plus `require_environment()` guards at 9 point-of-use
+sites. Dependency-free was forced by a discovery: **`func_common` cannot be imported under test at
+all** (it builds a `CosmosClient` at import and re-raises), which is why no test for it has ever
+existed. ⚠ And the **existing `v1/test` suite cannot be collected either** without a gitignored
+`.env` supplying real credentials ([[ALDC-1046]]) — so *"the surrounding suite passes"* has never been
+an honest claim for that directory, before or after any change.
+
+⭐ **Two structural tests worth reusing elsewhere:** a **partition test** that parses `func_common`'s
+source and fails the build if any variable is read but left unclassified (so the next added variable
+cannot be silently ungoverned), and a **guard test** that scans every `route_*.py` and fails if an
+OPTIONAL variable is read in a file with no point-of-use check — which is the change's *own* main
+risk (trading a loud startup failure for a silent runtime one). Informational readers are exempted
+**explicitly with a reason**, not by omission.
+**Mutation-proven:** restoring the pre-fix blanket loop → **19 failed / 19 passed**; restored →
+**38 passed**, file md5-verified identical. The 19 that stayed green under the mutant are the
+REQUIRED/partition/guard tests, correctly insensitive to that particular mutation.
+
+⚠ **`environment_level` stays REQUIRED deliberately** — `api/__init__.py` `GlobalConfig` marks it
+Optional and would be the natural "align the two" template, but `keyvault_client` builds the
+Snowflake secret **name** from it, so a `None` silently requests the WRONG secret and returns None on
+the 404. Documented at the point of decision in `env_contract.py`, not only in a ticket.
+
+⛔ **Rollback reality, now recorded in `aldc-launchpad/docs/evidence/aldc1183/ROLLBACK.md`:** `v1/` has
+**no deploy rollback** — `deployments` returns `[]`, no `WEBSITE_RUN_FROM_PACKAGE`, no CI workflow, and
+a publish **overwrites `/home/site/wwwroot` in place**; Azure also keeps **no app-setting history**. So
+a wwwroot capture (SCM zip API, needs publishing credentials) must precede any publish. ⭐ **But this
+change touches no app settings, no Azure config and no data** — so the config-rollback problem, the
+one that made ALDC-1175's causal write unrecoverable, is out of scope by construction and git is the
+only rollback the code needs.
+**Staged rollout uses `-appsvc` as a genuine positive control:** already in the fault state, **zero
+client traffic** (92/92 requests were our own agent poll), working Key Vault auth, and currently 100%
+failing so it cannot get worse — the one host that can prove **both halves at once**. Verification
+must read `FunctionExecutionCount`, never `Requests`/`Http5xx` (0.0 always on Consumption).
+
+Nothing pushed, nothing deployed, no secret retrieved. Publish sequencing is Tami's — she holds the
+manual `v1/` deploy channel. See [[ALDC-1183]] and [[ALDC-1175]].
