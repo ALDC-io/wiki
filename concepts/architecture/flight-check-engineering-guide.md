@@ -641,7 +641,80 @@ Follows the [[eclipse-azure-deployment]] pattern.
 2. In Azure Portal → Function App → Configuration, set env vars per § 6.2.
 3. On the **staging slot**, add each `AzureWebJobs.<timer>.Disabled=true` as **slot-scoped** (the "Deployment Slot" checkbox) so a swap doesn't propagate to prod.
 4. Twice a year: edit `function_app.py` to swap commented-in cron strings (summer ↔ winter) and redeploy.
-5. Rollback = redeploy previous commit.
+5. Rollback = **swap back**, not "redeploy previous commit" — see § 7.1.
+
+### 7.1 Deploying from the CLI — what the tooling gets wrong (measured 2026-09-09, prod)
+
+A full prod deploy of both tiers was done from the command line rather than VS Code. Four things bit,
+all worth knowing before the next one.
+
+**⛔ The app name in `workflows/README.md` is wrong.** It lists `aldcprodfnapfn921c01`; the resource is
+**`aldcprodfnapf921c01`** (no `n` after `fnap`). The README's own test URLs are correct. RG is
+`aldcprodfnapf921c01`; plan is **Y1 / Dynamic** (Linux Consumption). The frontend is
+`aldcprodwbapflightcheck1c01` in RG `aldcprodrsgp1c` — take it from the Production environment
+variable `AZURE_APP_SERVICE_NAME`, not from memory.
+
+**⛔ `func azure functionapp publish --slot` reports the OPPOSITE of the truth, in both directions:**
+
+```
+Resetting all workers for aldcprodfnapf921c01-stage.azurewebsites.net
+Reset all workers endpoint responded with ... 404 (Site Not Found).
+Deployment Failed. ... Remote build failed!
+[exited with code 0]
+```
+
+The exit code said success while the output said failure — *and the failure was itself false*: the
+remote build had completed, the squashfs artifact was uploaded, and the code was serving. The only
+genuine failure is the final worker-reset call, whose endpoint **does not resolve for a slot on a
+Y1/Dynamic plan**. Treat that specific message as expected noise here; **verify by what the host
+serves, never by the exit code or the log.**
+
+**⭐ The credential-free way to tell which build a Function App is serving.** Azure Functions returns
+**404 for an undeclared HTTP method** on a matched route and **401 for a declared method without a
+key** — so a status code alone reveals whether a new verb exists, with no function key needed:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "https://<app>.azurewebsites.net/api/<route>"
+#   401 -> the method is declared (new build)      404 -> undeclared (old build)
+```
+
+Always run the *old* host first as a control, to prove method mismatch really does yield 404 in that
+app — otherwise a 401 proves nothing. This also verifies the rollback artifact: after a swap the stage
+slot should flip back to 404, which *measures* that the previous build is parked and revertible.
+
+**⛔ The frontend Actions workflow deploys to `stage` and health-checks it — it never swaps.** A green
+run does **not** mean production changed. The swap is a separate deliberate step (step 5 above), and it
+is the easiest thing in this pipeline to forget.
+
+### 7.2 Rollback — one command per tier, seconds, no rebuild
+
+Because both tiers deploy to `stage` and then swap, the swap itself *preserves the previous production
+build in the stage slot*. That, not a redeploy, is the rollback:
+
+```bash
+# backend
+az functionapp deployment slot swap --subscription "Production 2" \
+  -g aldcprodfnapf921c01 -n aldcprodfnapf921c01 --slot stage --target-slot production
+# frontend
+az webapp deployment slot swap --subscription "Production 2" \
+  -g aldcprodrsgp1c -n aldcprodwbapflightcheck1c01 --slot stage --target-slot production
+```
+
+**Prod is untouched until the swap**, so up to that point the rollback is "do nothing". Verify the
+artifact is really parked (§ 7.1) rather than assuming it.
+
+### 7.3 Pre-deploy checks that are cheap and have paid off
+
+- **Does the change add or remove functions?** The README's key-swap failure mode is pinned to exactly
+  that. Enumerate with `az functionapp function list` and compare — prod ran **20** functions in
+  Sept 2026. A change that only adds an HTTP verb adds none, and is therefore the low-risk shape.
+- **Are all `AzureWebJobs.*.Disabled` settings slot-scoped?** Confirmed yes in prod (all 7), so they
+  correctly do not travel on a swap. ⚠ Project **names only** when listing app settings —
+  `starts_with(name,'AzureWebJobs')` also matches `AzureWebJobsStorage`, whose value is a live storage
+  account key. Use `'AzureWebJobs.'` **with the dot**.
+- **Verify the key path after swapping, without a session:** call the frontend proxy with a *bogus*
+  job id. A **500** means the request reached application logic, so the server-side key still
+  authenticates; a **401** means the keys swapped. No client data is returned either way.
 
 ---
 

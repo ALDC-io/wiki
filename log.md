@@ -2505,3 +2505,44 @@ it from the upload when the warehouse does not need it.
 Shipped: `workflows` PR #33 @ `54e71c5` (the `EXCLUDED_FLIGHT_FIELDS` entry). **Not merged, not
 deployed, no client contact.** Read-only probes with predictions pre-registered in-file live in
 `aldc-launchpad` `sf_ops/_fu92_429_{schema_version,consumer_route}_probe.py`.
+
+## 2026-09-09 — FU92-428 shipped to prod; the deploy tool reported the opposite of the truth, twice
+
+**Page updated:** [[flight-check-engineering-guide]] § 7.1–7.3 (CLI deploy gotchas, rollback, pre-deploy
+checks). No new pages.
+
+**Shipped to PROD:** `workflows` main @ `b948de9` (backend, `aldcprodfnapf921c01`) and `flight-check`
+main @ `3452c8f` (frontend, `aldcprodwbapflightcheck1c01`), backend first — it accepts POST *and* GET,
+so the pair was never in a broken combination. FU92-429's `manual_metrics_entry` flag rode along and is
+**inert** (nothing sets it).
+
+**⛔ `func azure functionapp publish --slot` printed "Deployment Failed. Remote build failed!" and
+exited 0.** Both signals were wrong in opposite directions: the exit code claimed success over a
+failure message, and the failure message was itself false — the build completed and the code was
+serving. Only the final worker-reset call failed, and that endpoint does not resolve for a **slot** on a
+Y1/Dynamic plan. A false *failure* costs an evening re-deploying something that already worked.
+
+**⭐ The reusable technique: tell which build a Function App serves, with no function key.** Azure
+Functions answers **404** for an undeclared HTTP method and **401** for a declared one without a key.
+Run the *old* host first as a control to prove the app really does 404 on method mismatch — without
+that control a 401 proves nothing. This also *measures* the rollback artifact: after the swap the stage
+slot flipped back to 404, proving the previous build was parked and revertible rather than assumed.
+
+**FU92-428 proven on prod, both sides, no client data** (bogus job id, 200 fabricated ids — bigger than
+the largest real job at 207 flights): GET with ids in the query string → **431**, the reported symptom
+reproduced live; POST with the same ids in an 8,070-byte body → **500**, i.e. reached app logic. Left
+**in QA, not Done** — the Export *button* using POST is still inferred from the deployed commit, because
+the bundle carrying that code sits behind auth.
+
+**Also measured:** the README's app name is wrong (`aldcprodfnapfn921c01` vs the real
+`aldcprodfnapf921c01`); the frontend Actions workflow deploys to `stage` and health-checks it but
+**never swaps**, so a green run does not mean prod changed; all 7 prod `AzureWebJobs.*.Disabled`
+settings are correctly slot-scoped; and `f92_flight_check_full_reconcile` is deployed in prod with no
+disable setting, so the 09:10 UTC reconcile is live.
+
+**⚠ Self-inflicted:** filtering app settings with `starts_with(name,'AzureWebJobs')` also matches
+`AzureWebJobsStorage`, printing a live storage account key into the transcript. Use the dotted prefix.
+Paul reviewed and chose not to rotate.
+
+Not done: the UI click-through on job `7d9b5cc1`; the client email (drafted, unsent); ALDC-1064 and
+ALDC-1185 both still To Do.
