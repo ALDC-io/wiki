@@ -169,6 +169,27 @@ Synchronizing an Eclipse **Dataset** (`type:data_model`) over the deployed HTTP 
 
 **Fix:** set `capacity_options.dataset_name` on the Cosmos `dataset` doc to the model's **exact** live workspace name, then re-load. Tooling: `aldc-launchpad/pbi_ops/_gp293_fix_dataset_name.py` (verify/fix/rollback). **Rule: whenever creating or repointing an Eclipse dataset, verify `capacity_options.dataset_name` == the model's live PBI name, not just the GUID.** (GP-293 example: doc said `"Navira Marketing Model (Test)"`; live name was `"Marketing Model"`.)
 
+### Logging outside `api/` is silently discarded under uvicorn (affects every new shared package)
+
+**Symptom:** a module outside the `api/` package logs at INFO and **nothing reaches App Service logs**. No error, no dropped-message warning — the call simply produces no output. Only WARNING and above appear.
+
+**Root cause (measured 2026-09-08, ALDC-1184):** uvicorn's default `LOGGING_CONFIG` configures **only** the `uvicorn`, `uvicorn.error` and `uvicorn.access` loggers and has **no `root` key at all** — it never attaches a handler to the root logger. `Dockerfile`'s `CMD ["uvicorn", "api.main:app", ...]` passes no `--log-config`, so any `logging.getLogger(__name__)` outside those three names has no handler anywhere in its chain and falls through to `logging.lastResort`, whose level is **WARNING**.
+
+```
+LOGGING_CONFIG loggers: ['uvicorn', 'uvicorn.error', 'uvicorn.access']
+'root' key present:     False
+root handlers:          []
+effective level for 'common.snowflake_connector': WARNING
+--- emitting INFO  --> no output
+--- emitting ERROR --> output appears (via logging.lastResort)
+```
+
+**Why it hides:** `api/__init__.py:10` uses `logging.getLogger("uvicorn.error")`, which *is* configured at INFO. So everything in `api/` logs correctly and the defect is invisible until someone adds a package that doesn't follow that undocumented convention.
+
+**Where it bit:** the `common/` package added by [ALDC-1143](https://analyticlabsdc.atlassian.net/browse/ALDC-1143) / core_api PR #257 logs the Snowflake key-pair → password downgrade at INFO in two places (`common/snowflake_connector.py:74` and `:84`). A container running entirely on password auth therefore emits **nothing at all**, which matters because that fallback is the control ALDC-1098 (password-fallback removal) is meant to rely on. Tracked as [ALDC-1184](https://analyticlabsdc.atlassian.net/browse/ALDC-1184).
+
+**Rule: any package outside `api/` must either use `logging.getLogger("uvicorn.error")`, or the app must attach a root handler.** Until one of those is done, treat INFO as unreachable outside `api/` — and never make an INFO line the only record of a security-relevant state change. Same class of defect as [ALDC-1175](https://analyticlabsdc.atlassian.net/browse/ALDC-1175) (a real fault served as HTTP 200 "success"): a genuine condition that no instrument reports.
+
 ## Eclipse-2.1 Explorer backend — code location & branch grounding (READ FIRST before touching Explorer)
 
 **The Explorer feature** (Datasets / DataViews / Visuals / Dashboards / Catalog, plus RBAC and per-client data
