@@ -53,6 +53,68 @@ Defined in `__REPORT_COMMON_VIEWS` and per-client `snowflake/report_common/` dir
 - `RETAIL_DAILY_SALES_FACT.sql` — unions budget and actual sales data
 - `RETAIL_DAILY_SALES_LOCATION.sql`
 
+### ⭐ Snowflake connector auth — corrected 2026-09-08
+
+**Supported auth types** (MS Learn Power Query Snowflake connector, updated 2026-07-31):
+*Snowflake (Username/Password), Microsoft account (Microsoft Entra ID), **Key Pair Auth (ADBC)**,
+**Service Principal (SPN)***; Fabric adds **Workspace Identity**.
+
+⭐ **The belief that "Power BI's ODBC connector cannot do Snowflake key-pair" is FALSE and has been
+since 2025** — connector implementation 2.0 (GA July 2025) swapped Simba ODBC for the Arrow **ADBC**
+driver, and key-pair went GA Feb 2026. Verified against our own tenant, which is stronger than any
+doc — `GET https://api.fabric.microsoft.com/v1/connections/supportedConnectionTypes` returns:
+
+```
+"type": "Snowflake",
+"supportedCredentialTypes": ["Basic","OAuth2","KeyPair","ServicePrincipal","WorkspaceIdentity"],
+"supportedConnectionEncryptionTypes": ["NotEncrypted"],
+"supportsSkipTestConnection": false,
+"creationMethods": [{"name": "Snowflake.Databases", ...}]
+```
+
+Of **325** connection types in the tenant, only **two** declare `KeyPair`: `SFTP` and `Snowflake`.
+
+**Reading credential state.** The legacy PBI API renders these as `datasourceType: "Extension"`
+with NULL `.server`/`.database` — connector identity is in `connectionDetails.kind`, target in
+`.path`. ⚠ **An enumeration filtering on `datasourceType == "Snowflake"` or reading `.server`
+returns 0 rows with 0 errors — a blind zero.** Always carry a positive control. The Fabric API
+types the same objects as `"Snowflake"`; `"Extension"` is a legacy rendering artefact, and the
+`datasourceId` and Fabric `connectionId` are the **same GUID**.
+
+⚠ `GET /gateways` returns **0 with HTTP 200** for cloud connections — that is not "no gateways".
+Virtual cloud gateway IDs come only from the dataset → datasources walk.
+
+**Useful signals:**
+- `lastCredentialUsedDateTime` on `/v1/connections` — "this credential last authenticated at T",
+  in one GET, without triggering a refresh. Better health check than polling refresh history.
+- `supportsSkipTestConnection: false` for Snowflake means **every credential write performs a real
+  authentication attempt** — so a 200/201 *is* proof, not merely a stored setting. This makes
+  `POST /v1/connections` (unbound `ShareableCloud`) a **zero-blast-radius** validation path.
+
+⛔ **Key-pair forces ADBC** — *"the ADBC driver is always used regardless of this setting"* — which
+**deletes** the documented self-mitigation (`remove Implementation="2.0"` to fall back to ODBC) and
+inherits two open connector defects: *`count distinct` returns incorrect result* and a memory
+regression. The first **Completes** rather than failing, so `MailOnFailure` cannot fire on it.
+Always run an old-vs-new **numeric parity check** on cutover — a green refresh is not evidence of
+correct numbers. See [[ALDC-1164]], and [[GP-318]] for the same failure shape.
+
+### ⚠ Refresh alerting does not mean refresh detection
+
+- Power BI **disables a schedule after 4 consecutive failures**, at which point failure emails stop
+  — *the alarm goes quiet exactly when the outage becomes permanent*. Alarm on **staleness**
+  (no new `Completed` within 2× the interval), not just on `status == Failed`.
+- Measured on this estate: `ALDC_FINANCE / Profitability Model` failed 2026-05-29 with
+  `notifyOption = MailOnFailure` **enabled** and ~3 months passed with no response;
+  `FUSION_92 Test Models / Activation Model` reads `enabled: true` and has been silent since
+  2026-08-23. **`enabled` is not a health signal.**
+- `refreshSchedule.enabled = False` is **not a lock** — `ViaApi` and `OnDemand` refreshes were
+  observed against a schedule-disabled prod model.
+- ⚠ `targetStorageMode: "Abf"` does **not** mean Import — MS documents the field only as
+  "The dataset storage mode", with no enum. Use `ContentProviderType` to settle Import vs Composite.
+
+⚠ **`CORE_API_CLIENT_TOKEN` is stored as a plaintext M parameter** on every parameterised model,
+readable via `GET /datasets/{id}/parameters` by any principal with ordinary dataset read access.
+
 ## Power BI Workspaces (Fusion92)
 
 | Workspace | Model | Owner | Refresh Cadence | Notes |

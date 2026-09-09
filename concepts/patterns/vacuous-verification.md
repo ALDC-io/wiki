@@ -438,8 +438,94 @@ out — and it is why shape 9 stayed invisible.
 > An mtime is a fact about a checkout, not about the work. If a claim must survive a clone, it has
 > to be recorded *in* the content or derived from git, never inferred from the filesystem.
 
+## 2026-09-08 — the tenth shape: the CONFIGURATION flag standing in for the BEHAVIOUR ([[ALDC-1164]])
+
+Five instances in one session, one estate, one species: **a field describing intent read as evidence
+of practice.**
+
+### 10 — ⭐ `has_rsa_public_key = true` proves a key is REGISTERED, never that it is USED
+
+[[ALDC-1002]] migrated the `PROD_DG1_*` Snowflake service accounts to key-pair and was closed.
+`SHOW USERS` on `wj66376` agrees — **16 of 17 `LEGACY_SERVICE` users carry
+`has_rsa_public_key = true`.** Audited against that flag, the migration is done.
+
+Audited against `SNOWFLAKE.ACCOUNT_USAGE.SESSIONS.AUTHENTICATION_METHOD` — the *events* — it is not:
+
+| User | Password sessions (14d) | Key-pair | Client doing the volume |
+|---|---:|---:|---|
+| `PROD_DG1_CORE_SVC_DA8904DB` | **242,797** | 21 | PythonConnector **3.7.0** |
+| `PROD_DG1_CORE_SVC_9AC36447` | **51,245** | 3 | PythonConnector 3.7.0 |
+| `PROD_DG1_CORE_SVC_703433FF` | **40,492** | 3 | PythonConnector 3.7.0 |
+| `PROD_DG1_CORE_SVC_0FC00E34` | **25,711** | 4 | PythonConnector 3.7.0 |
+| `PROD_DG1_CORE_SVC_8B28D977` | **21,655** | 3 | PythonConnector 3.7.0 |
+| `SERVICE_POWER_BI` | **4,862** | 0 | ODBC 3.2.2 |
+
+**~386,000 password authentications in 14 days from accounts that all "have keys".** Every key-pair
+session is `PythonConnector 4.7.2` in counts of 2–4 — those are *the migration's own verification
+runs*. Keys registered, proven once, running clients never switched.
+
+⭐ **The migration's success test is what made the gap invisible.** Someone connected with 4.7.2, saw
+key-pair work, closed the ticket. The proof was real — it just measured a client nobody runs. At
+Phase 3 enforcement five Core API service accounts break: the exact outage the estate believed it
+had already prevented.
+
+> **Rule: for any "have we migrated X" question, audit the event log, not the object's properties.**
+> A property says what is *possible*; only the event log says what *happened*. Generalises well past
+> Snowflake — feature flags, TLS versions, deprecated endpoints, permission grants.
+
+### 10b — the same field, read twice, changed underneath
+
+`SERVICE_POWER_BI.has_rsa_public_key` was `false` at 16:25 PT and `true` at 17:05 PT the same day — a
+colleague was remediating concurrently. First instinct was "my script has a bug"; the answer was that
+**the estate is not static while you measure it.** Re-reading the raw value with `repr()` and its type
+settled it in one query. *A discrepancy between two of your own readings is a fact about the world at
+least as often as a fact about your code.*
+
+### 10c — `targetStorageMode: "Abf"` does not mean Import
+
+Read as "these are Import models, so nothing hits Snowflake between refreshes." MS documents the
+field, in full, as *"The dataset storage mode"* — **no enum, no values**. `Abf` is a storage *format*,
+consistent with Import, Composite and DirectQuery alike. The field carrying mode semantics is
+`ContentProviderType` (`PbixInImportMode` / `PbixInCompositeMode` / …), omitted unless asked.
+
+Same species: **`refreshSchedule.enabled = False` is not a lock.** A schedule-disabled prod model
+showed two `ViaApi` refreshes; another an `OnDemand` one. The flag governs the scheduler, not access.
+
+### 10d — the alarm that is armed, fires, and still detects nothing
+
+All nine prod bindings carry `notifyOption = MailOnFailure`. `ALDC_FINANCE / Profitability Model`
+failed 2026-05-29 **with the alarm on**, mailed its owner, and ~3 months passed with no response.
+*Configured* is not *detecting* — the chain fails at the last link, which no config check can measure.
+
+Two structural blind spots on the same mechanism:
+- Power BI **disables a schedule after 4 consecutive failures**, at which point failure emails stop —
+  **the alarm goes quiet exactly when the outage becomes permanent.**
+- The defect this migration risks (`count distinct` wrong under ADBC) makes the refresh **Complete**.
+  `MailOnFailure` cannot fire on it *by construction*.
+
+Alarm on **staleness**, not on `Failed`.
+
+### 10e — and the clean zero, again
+
+A first enumeration reported **`SNOWFLAKE datasources: 0` with 0 errors**. Modern Power BI connectors
+report `datasourceType: "Extension"` and leave `connectionDetails.server`/`.database` NULL — identity
+is in `.kind`, target in `.path`. The filter read fields that are always empty. Fixed with a positive
+control that **exits loudly** if it cannot see a Snowflake source known to exist.
+
+From the same afternoon: `GET /gateways` returns **0 rows with HTTP 200** for cloud connections —
+not "no gateways"; `/admin/groups` returns 401 — not "no workspaces". *An access gap and an absence
+are the same shape at the call site.*
+
+### 10f — the masking regex that leaked what it was written to hide
+
+Inspecting a credentials file, a regex meant to redact values was written against *value shapes* and
+missed the markdown-table row format — printing two real passwords into a session transcript. The
+repair: **mask by COLUMN HEADER, never by guessing what a secret looks like.** A redactor validated
+only against the cases you imagined is a redactor you have not tested. Both credentials were rotated.
+
 ## See Also
 
+- [[ALDC-1164]] — where the tenth shape was found; five instances in one afternoon
 - [[agent-session-completion-signals]] — the sibling failure: content genuinely PARTIAL while every instrument reports arrival (a proxy for done-ness fails toward "done")
 - [[pbi-xmla-automation]] — the operational half of the 2026-08-27 case: TMSL exports carry credentials, and surgical vs full-model rollback on a shared model
 - [[answerability-guard]] — the four ways a guard test battery lies, including vacuous passes

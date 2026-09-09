@@ -306,6 +306,71 @@ ALTER USER service_account SET TYPE = LEGACY_SERVICE;
 
 Long-term target: key-pair authentication or federated credentials for all service accounts.
 
+### ⭐ Phase 3 enforcement — measured state of prod `wj66376` (2026-09-08)
+
+Snowflake's single-factor-password deprecation runs in three phases; **Phase 3 is a per-account
+rolling window, Aug–Oct 2026 — not a fixed date.** At enforcement: all non-human users are blocked
+from password auth, and existing `LEGACY_SERVICE` users are auto-converted to `TYPE = SERVICE`.
+A `SERVICE` user *cannot* log in with a password or SAML SSO, cannot enroll in MFA, and supports
+**key-pair** + programmatic access tokens only. (`SERVICE_AGENT` adds workload identity federation.)
+
+⭐ **The account-specific enforcement date — and the option to EXTEND it — live in
+Snowsight → Governance & security → Trust Center → Overview → "Strong authentication progress".**
+Viewing needs `TRUST_CENTER_VIEWER`; extending needs MODIFY on the account (ACCOUNTADMIN).
+This is the single highest-value read-only check before any Phase 3 work.
+
+Measured `SHOW USERS` on `wj66376`, 2026-09-08 — **17 `LEGACY_SERVICE` users, 16 with an RSA key
+registered, exactly one without: `SERVICE_POWER_BI`** (see [[ALDC-1164]]). Two users are already
+fully migrated (`TYPE = SERVICE`, `has_password = false`): `PROD_DG1_CORE_SVC_F49F9AA3` and
+`PROD_DG1_PREFECT_SVC_DA8904DB`. Password auth still worked at **2026-09-08 17:01Z**, so
+enforcement had not landed on this account.
+
+⚠ **"has a key" is NOT "uses a key".** `PROD_DG1_CORE_SVC_DA8904DB` carries
+`has_rsa_public_key = true` **and authenticated by Password** on 2026-09-08 (~15 sessions via
+PythonConnector 3.12.3). A registered-but-unused key does not survive Phase 3. Audit
+`SNOWFLAKE.ACCOUNT_USAGE.SESSIONS.AUTHENTICATION_METHOD` — actual events — never the config flag.
+This puts [[ALDC-1002]]'s completeness in question.
+
+⚠ Human accounts used programmatically also break: `VLADRYZHKOV` (`TYPE = PERSON`) authenticates
+by password via PythonConnector.
+
+Useful instrument — names the user, driver and auth method in one read-only query:
+
+```sql
+SELECT USER_NAME, AUTHENTICATION_METHOD, CLIENT_APPLICATION_ID,
+       COUNT(*) AS SESSIONS, MAX(CREATED_ON) AS LAST_SEEN
+FROM SNOWFLAKE.ACCOUNT_USAGE.SESSIONS
+WHERE CREATED_ON >= DATEADD(day, -14, CURRENT_TIMESTAMP())
+GROUP BY 1,2,3 ORDER BY 1,4 DESC;
+```
+
+### Power BI ↔ Snowflake auth — what is actually supported (corrected 2026-09-08)
+
+⭐ **The long-standing belief that Power BI cannot do Snowflake key-pair is FALSE and has been
+since 2025.** Connector implementation 2.0 (GA July 2025) replaced the embedded Simba **ODBC**
+driver with the Arrow **ADBC** driver; key-pair went GA Feb 2026.
+
+Snowflake's own partner-authentication matrix, for **`TYPE = SERVICE`** users:
+
+| Client | External OAuth | Key pair | PAT |
+|---|---|---|---|
+| PowerBI Cloud | **No** | **Yes** | No |
+| PowerBI Desktop | **No** | **Yes** | No |
+
+So after Phase 3 converts a service user, **key-pair is the supported path and Entra External
+OAuth is not**. PAT is also marked "No" — it is not the cheap password-field substitute it looks like.
+
+⚠ Key-pair **forces ADBC**, which removes the documented ODBC fallback and inherits two open
+connector defects — including *`count distinct` returns incorrect result*, a **silent** wrong-number
+failure. See [[power-bi]] and [[ALDC-1164]].
+
+Formatting trap: Snowflake takes the **public** key *without* PEM delimiters
+(`ALTER USER u SET RSA_PUBLIC_KEY='MIIBIjANBgkqh…'`), while Power BI takes the **private** key
+*with* `-----BEGIN PRIVATE KEY-----` intact. `RSA_PUBLIC_KEY_2` exists for zero-downtime rotation.
+
+⛔ **Ordering:** register the key and verify it *before* `ALTER USER … SET TYPE = SERVICE` — that
+statement immediately invalidates the password.
+
 ### Network Policy Audit
 
 ```sql
