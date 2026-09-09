@@ -731,6 +731,33 @@ ALDC-1175 arrived as a client-side Python traceback and was first assessed as "n
 came from `func_common.py:92`. **Grep the repos for the literal error text before assigning
 blame** — the client's daemon had merely interpolated our response body into its own exception.
 
+**6. ⏳ The failure time is NOT the change time — a config change here can lie dormant for hours.**
+Measured on ALDC-1175 (2026-09-09): the only app-settings write + restart to
+`aldcprodfnapcore1c03-appsvc` was at **04:00:38–04:02:34Z**, but the app did not begin failing until
+**19:04:38Z** — **~15 hours later**, with **zero ARM events on any resource in the group** at or near
+the failure moment. The running worker kept its old environment in memory; the bad config only took
+effect when the Functions host recycled, and a host recycle does **not** surface in the Azure
+Activity Log.
+
+Two consequences, both of which cost time on this incident:
+- **Correlating "what changed just before it broke" points at the wrong session.** The evening
+  config session was blamed; it never touched that app. Always pull the *whole day's* activity log
+  for the resource, not a window around the failure, and expect the causal write to be far upstream.
+- **A green post-change smoke test proves nothing.** The app kept serving correctly for 15 hours
+  *after* the breaking change. To validate an app-settings change here you must force a recycle and
+  re-probe, not simply confirm the app still answers.
+
+**7. Before blaming the pipeline for "no data", check whether the client PULLS from us.**
+On 2026-09-09 GEP/Navira reported no sales. Three plausible causes were tested and all three were
+refuted by measurement: ingestion (raw Amazon `ALL_ORDERS` was fresh that morning), the Nextcloud
+CSV supplements (all loaded, and every supplement join in the GEP sales chain is a `LEFT JOIN`, so
+an empty one cannot zero out sales), and the warehouse/PBI layer (rebuild ran, **GEP Prod Models /
+"Data Model" refreshing hourly with row counts identical to Snowflake**). Our data was complete and
+current the whole time. What was broken was the client's *own* extract, which pulls through core_api
+— so a total core_api outage presents to the client as "no data" while every internal dashboard,
+reading Snowflake directly, looks perfectly healthy. **"The client sees nothing" and "we produced
+nothing" are different claims; measure the second before accepting it.**
+
 ### ⛔ `AZURE_CLIENT_ID` cannot be both present and absent — the ALDC-1002 / `func_common` deadlock
 
 Surfaced by [[ALDC-1175]]. **`DefaultAzureCredential()` requires `AZURE_CLIENT_ID` to be UNSET to
