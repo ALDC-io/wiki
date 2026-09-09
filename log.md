@@ -2345,3 +2345,58 @@ was refuted (`units/exec` 672,871, **26% ABOVE** the highest baseline hour). The
 inverted: `func_common.py` catches the `ValueError` at :98 then **continues** to :100-120 building the
 `CosmosClient`, so import cost is identical either way and cold-start over 12 instances dominates.
 See [[ALDC-1175]].
+
+### 2026-09-08 (close) — ALDC-1175 final lane: the observability gap is the finding, plus 2 security items
+
+⛔ **Production 2 has ZERO alert rules of any kind** — verified: metric alerts **0**, activity-log
+alerts **0**, scheduled-query rules **0**. And on `aldcprodfnapcore1c01` **every log sink is Off** —
+`httpLogs.fileSystem` false, `httpLogs.azureBlobStorage` false, `applicationLogs.fileSystem` "Off",
+`detailedErrorMessages` false, `failedRequestsTracing` false, diagnostic settings `[]`, no App
+Insights component. So a **total configuration outage of the client-facing API returned HTTP 200
+"success" with no HTTP log, no application log, no telemetry export, and not one alert rule in the
+whole production subscription.** The client's email to their own colleagues was the monitoring.
+**Rank the observability gap alongside the 200-masking, not beneath it — masking is only dangerous
+because nothing else is watching.**
+
+🔒 **SECURITY (new): `api.aldc.io` accepts plaintext HTTP.** Verified `httpsOnly: false`,
+`ftpsState: AllAllowed`, `minTls: 1.2` on `aldcprodfnapcore1c01`. Our published client-integration
+pattern sends credentials as **`X-API-Key`/`X-API-Secret` headers** (`eclipse-demo/public/download/
+api_request.py`, a script we hand clients), so a daemon configured with an `http://` base URL would
+send them **unencrypted**. Own ticket.
+
+🔒 **SECURITY (new): credential-bearing payloads are landing in App Insights.** Traces on the
+`aldcprodfnapcore1c03` component carry request bodies with `'salt'` and `'secrets': [{…}]` fields,
+readable by anyone with reader access to the component. Not queried further. Own ticket. Third item
+after the plaintext master bearer and the encrypted PBI secret.
+
+⭐ **Why Gate 1 was structurally unanswerable:** `deployments` on `aldcprodfnapcore1c01` returns
+**`[]`**, there is **no function-app deploy workflow** in `core_api/.github/workflows/`, and no
+`WEBSITE_RUN_FROM_PACKAGE` — while today's log shows `ListPublishingCredentials` ×17 and
+`publishxml/action` ×9. **The client-facing legacy API is hand-deployed via publish profiles with no
+build provenance and no deployment record.** "What is deployed" cannot be answered from Azure at all.
+
+**Timeline now corroborated by THREE independent instruments** (ARM Activity Log, Azure Resource
+Graph `resourceChanges` agreeing on every Stop/Start to the millisecond, and the traffic-shape
+metric). New from ARG: the app was **untouched for 10 days** before today
+(`lastModifiedTimeUtc 2026-08-29T01:52:36 → 2026-09-08T19:07:56`), so the churn is anomalous; and
+`minimumElasticInstanceCount 0 → 1` at 19:07:57 added an always-ready instance mid-session.
+**The slot swap that DID happen was 18:59:15Z on `aldcprodwbapcore1c01/slots/stage`** — same
+operator, ~3h before the error, and the one core app that *cannot* emit the string. Exactly the trap
+the top-ranked hypothesis was flagged as. Slot-sticky on `1c01` is only `ENVIRONMENT_LEVEL`,
+`KEY_VAULT_URL`, `SLACK_AUTH_ALERT_CHANNEL`, `SLACK_BOT_TOKEN`; prod/stage name sets **identical
+(39=39, empty diff)**. Fourth ground against the on-prem container: it is **DataVisor's and stale** —
+every `deploy_on_premise.yaml` run is on a `DV-*` branch, most recent **2025-12-16**, nine months old.
+
+⭐ **A THIRD green-but-blind instrument, and the catch that saved it.** A 30-day App Insights search
+for the error string returned **0 rows while the same component showed 17,508 traces** — the shape of
+a proven-live instrument returning a true zero. `summarize min(timestamp)` showed **all** traces begin
+**22:51:24Z, 65 minutes AFTER the incident**, with none in 21:00–22:30. That zero carried no
+information. Together with `Requests`/`Http5xx` reading 0.0 through 200+ known requests and
+`InstanceCount` reading 1.0 through a 12-instance hour, this case produced **three** distinct
+green-but-blind instruments. ⭐ **The generalisable check is not "is the instrument live" but "when did
+this instrument start seeing anything at all, and does that window contain my event."**
+
+Permanently unanswerable: the **contents** of the 20:56:16Z write — Activity Log carries no request
+body, ARG tracks only 3 property names, and **Change Analysis is unavailable** (RP unregistered,
+`InvalidGatewayHost`); and per-worker state on Y1 Consumption (`/instances` returns empty). Asking
+Tami what changed at 20:56 and 21:47 is the only route to PROVEN. See [[ALDC-1175]].
