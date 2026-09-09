@@ -2546,3 +2546,74 @@ Paul reviewed and chose not to rotate.
 
 Not done: the UI click-through on job `7d9b5cc1`; the client email (drafted, unsent); ALDC-1064 and
 ALDC-1185 both still To Do.
+
+---
+
+## 2026-09-09 — ⛔ Snowflake Phase 3 landed on prod `wj66376` and took both client-facing PBI models down
+
+Ingested from the live incident session. Pages: `tickets/aldc/ALDC-1191.md`,
+`tickets/aldc/ALDC-1192.md`, `entities/tools/snowflake.md`, `entities/tools/power-bi.md`.
+
+**What happened.** Both live prod PBI models started failing refresh at ~17:00Z with byte-identical
+"credentials ... invalid (Source at wj66376...)". They share ONE credential object (`79d103a2...`),
+so they flip together. Root cause was **not** a person: `SHOW USERS` went from **17 `LEGACY_SERVICE`
+users on 09-08 to 0 on 09-09**, all 20 non-person users now `TYPE = SERVICE` / `has_password =
+false`, zero authentication policies, and Snowflake's own
+`SECURITY_ESSENTIALS_STRONG_AUTH_LEGACY_SERVICE` task visible in the account (re-runs **09-13**).
+Written here the day before as a deadline; arrived ~24h later as an outage.
+
+⭐ **Phase 3 strips the password rather than blocking the login**, so the symptom is
+`390100 INCORRECT_USERNAME_PASSWORD` -- indistinguishable from a rotation, and "someone rotated it"
+was the wrong first read. The cheap discriminators: count `LEGACY_SERVICE` (population, not sample),
+and read the Key Vault entry's `attributes.updated` **metadata** field, which separates "our copy
+drifted" from "the remote object changed" **without retrieving the value at all**
+(`prod-dg1-core-admin` was untouched since 2026-06-03 and no longer authenticated).
+
+⭐ **A `SERVICE` user cannot hold a password and no admin can restore one** -- type constraint, not
+permission. So "can an admin reset it" is a definitive no and a Snowflake support ticket is not on
+the recovery path. Fix is forward: key-pair.
+
+**Fixed:** FUSION_92 Prod / Activation Model, via credential switch to KeyPair at 18:11:33Z -- then
+4 sustained scheduled refreshes and a **15/15** numeric parity gate (frozen closed-history rows +
+distinct counts across ODBC->ADBC; the ADBC `count distinct` defect did not manifest).
+**Still down:** GEP Prod / Data Model -- blocked by [[ALDC-1192]].
+
+**New durable facts.** PBI KeyPair for Snowflake works **only** on the legacy
+`/gateways/{gw}/datasources/{id}` surface (Fabric `/v1/connections` -> bare `InvalidInput`), and
+`passphrase` is **required even for an unencrypted key**. `ExportTo` returns
+`FeatureNotAvailableError` on our `PP3` capacity, so **rendered validation has no API path** and
+needs a real browser. And the **4-failure auto-disable was observed happening** -- GEP's schedule
+switched itself off after 5 failures, which means **fixing the credential is not sufficient; the
+schedule must be manually re-enabled**.
+
+**Side-finding, now blocking ([[ALDC-1192]]).** `GEP Prod / Data Model` reads **non-prod**: the
+`Campaign` and `Platform` partitions hard-code `og35375` + literal `TEST_DG1_GEP`, bypassing the
+parameters the other 34 tables use. Live, not vestigial -- proven from
+`$SYSTEM.TMSCHEMA_PARTITIONS.QueryDefinition`, because **a datasource listing proves only that a
+model DECLARES a source, not that a table queries it**. Repointing is *not* a clean fix: prod holds
+less than TEST (144,729 vs 150,053; 2 vs 5), so it would change client numbers -- it reads as a
+deliberate shim to ship marketing dims ahead of the prod warehouse. Chose **B to restore** (register
+a key on the non-prod PBI user, switch credential `2f0ade5e`) **and C as the real fix** (deploy the
+missing prod-side content, then repoint).
+
+⚠ **og35375 is MFA-gated**, so option B has an irreducible human step. `PAULRUSSELLADMIN` and
+`paulrussell` return "MFA with TOTP is required" -- which means the **password was accepted**; that
+error is good news dressed as failure. Also: **a helper's failure is only evidence about what the
+helper actually tried** -- `connect_nonprod()` failing was misread as "og35375 is converted" when it
+only ever tries an MFA-gated PERSON account and a Key Vault copy known to be stale.
+
+**Three of my own silent verification failures, all caught by reading state back:**
+1. The PBI `PATCH` returned **HTTP 200 with `credentialType` unchanged** at `Basic`.
+2. The parity gate printed **"GATE PASSED" on 2 assertions with 13 NOT-MEASURED** -- an unvalidated
+   integer surrogate date column outranked an execution-validated one, and the verdict asked only
+   "any mismatches?" never "did I see anything?". ⭐ **Coverage belongs IN the verdict.**
+3. The Key Vault CLI's **set-by-value form silently truncated a PEM at the first newline** -- the
+   store held a 27-char stub while the script reported "stored, 1704 chars" from its own local
+   variable. **Use the set-from-file form for any multi-line value.**
+
+Not done: **GEP still down and its schedule disabled**; **no rendered validation on either model**
+(Chrome extension not connected, `ExportTo` unavailable, Playwright blocked at login -- so FUSION_92
+is numerically verified and NOT render-verified, cf. [[GP-293]]); GEP parity NOT-MEASURABLE until it
+refreshes; `PROD_DG1_CORE_SVC_9AC36447` still fully down (key staged 09-07, client never switched);
+Trust Center enforcement date **still never read**; evidence scripts uncommitted on the wrong
+branch.
