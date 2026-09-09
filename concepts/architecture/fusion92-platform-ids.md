@@ -3,7 +3,7 @@ tags: [concept, architecture, fusion92, flight-check, platform-ids, advertising]
 aliases: [Platform ID Mapping, Fusion92 Platform IDs]
 sources: [CF92/1669300225, FU92-429 (2026-08-28, measured in PROD_DG1_FUSION_92)]
 created: 2026-04-18
-updated: 2026-08-28
+updated: 2026-09-08
 ---
 
 # Fusion92 Platform ID Mapping
@@ -107,7 +107,7 @@ reads the platform-ID fields at all: `dax_api/jobs/lib/calculations.py:247`
 #### ✅ Resolution — the explicit signal exists now (`manual_metrics_entry`)
 
 The "new explicit signal" predicted above was built on 2026-08-28: a `manual_metrics_entry: bool`
-on the flight document (`workflows` @ `667355a`, **not deployed**). When set, direct rows are dropped
+on the flight document (`workflows` PR #33 @ `54e71c5`, **not merged, not deployed**). When set, direct rows are dropped
 in `build_metrics_table` *before* the source-priority ladder runs, so the flight behaves exactly like
 one that never matched direct spend and falls through to Smartsheet → mixed → Dax.
 
@@ -123,7 +123,29 @@ Two things worth carrying forward:
   source classification must touch both.
 
 Still blocked on product decisions (who may set it; what happens to already-matched metrics; whether
-it is reversible), so there is no UI yet.
+it is reversible) — but note that those block the **UI only**, not the code. The flag can be set
+per-flight today via `application/update`, which is a permissive merge that creates unknown fields
+(see [[core-api-data-model]] § `application/update`). So one flight can be unblocked without any
+frontend work, and the DAX flight sync is **outbound only**, so a hand-set flag is not overwritten by
+the 30-minute cycle.
+
+**Keep the flag out of the warehouse sync.** `manual_metrics_entry` is in `EXCLUDED_FLIGHT_FIELDS`
+(`dax_api/sync/lib.py`, `workflows` @ `54e71c5`) because `model_dump_json` ships declared fields
+*including defaults* — so without the exclusion the flag would add a column to **every** flight record
+and fork the datastore table. That fork is survivable (the consumer reads the absorbing
+`CURRENT_*` view) but pointless; see [[core-api-data-model]] § Version tables for the mechanism and
+the numbers.
+
+> ⚠ **A claim made on FU92-429 and since disproved:** that shipping the new column would silently
+> freeze the flight dimension for all ~4,755 flights. **It would not.**
+> `WAREHOUSE_UTILITY.DAX_FLIGHT_CHECK_FLIGHTS` reads `DATA_STORE.CURRENT_FLIGHT_CHECK_SYNC_FLIGHT`,
+> an absorbing view, **not** the master table — measured in prod 2026-09-08. The lesson is the general
+> one: when a schema change forks a table, the severity is decided entirely by *which object the
+> consumer reads*, and that hop must be measured rather than assumed.
+
+**Deploy order, when it ships:** backend (`workflows`) **before** frontend (`flight-check`). The
+backend accepts both POST and GET so it is backwards-compatible with the deployed frontend; the reverse
+order makes the new frontend POST at a GET-only backend and 405 every export.
 
 ### Freshness — an ID change is not visible immediately
 

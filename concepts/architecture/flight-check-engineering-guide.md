@@ -1,5 +1,5 @@
 ---
-tags: [architecture, flight-check, dax-media-app, fusion92, engineering-guide, nextjs, azure-functions, onboarding]
+tags: [architecture, flight-check, dax-media-app, fusion92, engineering-guide, nextjs, azure-functions, onboarding, security]
 aliases: [Flight Check Engineering Guide, DAX Media App Engineering Guide, Flight Check Architecture Guide]
 sources:
   - entities/repos/flight-check.md
@@ -7,7 +7,7 @@ sources:
   - entities/projects/dax-media-app.md
   - processes/operations/flight-check.md
 created: 2026-04-22
-updated: 2026-04-23
+updated: 2026-09-08
 ---
 
 # Flight-Check Engineering Guide
@@ -125,6 +125,29 @@ sequenceDiagram
 ```
 
 **JWT role refresh (added [[FU92-396]]):** The `jwt` callback in `authOptions.ts` periodically re-fetches `applications` and `groups` from CosmosDB via the `user/list` v1 core API endpoint (5-minute TTL via `ROLE_REFRESH_MS`). This ensures role changes made in Eclipse Admin → User Management take effect within 5 minutes without requiring the user to log out. Prior to this fix, roles were only set at initial login and cached indefinitely in the JWT.
+
+> ### ⛔ `pages/api/coreAPI.tsx` is an unvalidated pass-through carrying the privileged token
+>
+> The session model above governs the *page*. It does **not** govern this route. Measured 2026-09-08:
+>
+> - `apiCall()` sets `Authorization: process.env.api_token` — the server-side core_api credential.
+> - `handler()` takes **caller-supplied** `reqObject.url` and `reqObject.message` and forwards them
+>   verbatim: `apiCall(reqObject.url, reqObject.message)`.
+> - There is **no `getServerSession` check, no route allow-list, and no body schema.**
+>
+> So a `POST /api/coreAPI {"url": "application/update", "message": {…}}` reaches core_api with our
+> privileged token attached, and `application/update` is a permissive merge that will set arbitrary
+> fields (see [[core-api-data-model]] § `application/update`). The blast radius is every core_api v1
+> route reachable by that token, read **and write**, for anyone who can load the app.
+>
+> This is a *different and broader* exposure than the unauthenticated export on the `dax.` host
+> (ALDC-1064) — that one is read-only. Both live on the same deploy path, so read this before
+> scheduling any DAX Media App release. Note also that
+> [[reference_core_api_token_rotation_pending|`CORE_API_CLIENT_TOKEN`]] has leaked into tracked
+> commits and has not been rotated, which compounds it.
+>
+> When fixing: add a session check **and** an explicit allow-list of permitted `url` values, rather
+> than only the session check — a valid session should not imply permission to call every v1 route.
 
 ### 2.4 Iframe ↔ parent URL sync
 

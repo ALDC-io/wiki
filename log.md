@@ -2462,3 +2462,45 @@ must read `FunctionExecutionCount`, never `Requests`/`Http5xx` (0.0 always on Co
 
 Nothing pushed, nothing deployed, no secret retrieved. Publish sequencing is Tami's — she holds the
 manual `v1/` deploy channel. See [[ALDC-1183]] and [[ALDC-1175]].
+
+## 2026-09-08 — FU92-429: the datastore fork hazard, measured — and my own claim refuted
+
+**Pages updated:** [[core-api-data-model]] (new § Version tables + § `application/update`),
+[[fusion92-platform-ids]] (§ Resolution + the corrected claim), [[flight-check-engineering-guide]]
+(§ 2.3, the `coreAPI` pass-through). No new pages.
+
+**The durable lesson — a schema change FORKS the physical table, and severity depends on which object
+the consumer reads.** `route_warehouse.schema_match` has no `ALTER TABLE` path: if a load's schema
+signature matches neither the master nor a prior version, `warehouse_create_version()` mints
+`<CATEGORY>_<TABLE>_<n>` and the rows land there. A `COMBINED_*` view (`UNION ALL`, harmonising with
+`null AS <missing>`) and a `CURRENT_*` view (`RANK()` on the history timestamp per primary hash)
+absorb the family. Forking is **routine**: ~90 `_N` tables across 15 schemas on Fusion92 prod.
+
+⚠ **Read `CURRENT_*`, never `COMBINED_*`** — measured `PROD_DG1_FUSION_92.DATA_STORE` 2026-09-08:
+COMBINED **10,277 rows / 4,755 distinct**, CURRENT **4,755 / 4,755**. A **2.2x** inflation for anything
+counting through COMBINED. Regeneration SQL is on the page beside the numbers.
+
+**I published a wrong claim on FU92-429 and it is corrected in both places it appeared.** I said
+shipping `manual_metrics_entry` would silently freeze the flight dimension for all ~4,755 flights. It
+would not: `DAX_FLIGHT_CHECK_FLIGHTS` reads `DATA_STORE.CURRENT_FLIGHT_CHECK_SYNC_FLIGHT`, the
+absorbing view. The claim rested on the consumer reading the master table — the one hop I had flagged
+as unmeasured, and the measurement killed it. Downgraded from deploy blocker to hygiene.
+
+**A hypothesis of mine that also died:** that the 09:10 UTC full reconcile was orphaned into
+`FLIGHT_2` while the consumer read `FLIGHT`, which would have broken FU92-419's backstop. Refuted —
+membership divergence **0 rows both ways**, both tables hold the FU92-429 flight, and their column
+sets are identical (so the June fork was a *type* difference, matching the authors' own TODO about
+all-NULL columns inferring a different type).
+
+**Also recorded, unrelated to the fork:** `flight-check` `pages/api/coreAPI.tsx` forwards
+caller-supplied `url` + `message` to core_api with the server-side `api_token` attached and **no
+session check and no route allow-list** — a write-capable exposure, broader than ALDC-1064's
+read-only export hole, and compounded by the un-rotated `CORE_API_CLIENT_TOKEN`. Needs its own ticket.
+
+**Pydantic gotcha worth the space:** `model_dump_json()` emits declared fields *including defaults*, so
+adding an optional field to a synced model changes the schema signature for **every** record. Exclude
+it from the upload when the warehouse does not need it.
+
+Shipped: `workflows` PR #33 @ `54e71c5` (the `EXCLUDED_FLIGHT_FIELDS` entry). **Not merged, not
+deployed, no client contact.** Read-only probes with predictions pre-registered in-file live in
+`aldc-launchpad` `sf_ops/_fu92_429_{schema_version,consumer_route}_probe.py`.

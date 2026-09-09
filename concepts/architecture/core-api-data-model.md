@@ -1,9 +1,9 @@
 ---
-tags: [concept, architecture, core-api, data-model, cosmosdb, v1, legacy]
+tags: [concept, architecture, core-api, data-model, cosmosdb, v1, legacy, security, warehouse-versioning]
 aliases: [core_api v1 data model, v1 domain model, ALDC v1 schema]
 sources: [CORE/537002029, CORE/540115003, CORE/540115026, CORE/522191103, CORE/540704854, CORE/537329699, CORE/537296929, CORE/540114967, CORE/540114974, CORE/540704807, CORE/540114985, CORE/540704815, CORE/540704833, CORE/701956097]
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-09-08
 ---
 
 # core_api v1 Domain Model
@@ -340,9 +340,109 @@ See [[cosmosdb-schema]] § Work Template Collection for the `merge_strategy` / `
 
 ---
 
+## ⭐ Version tables — a schema change FORKS the physical table, and views absorb it
+
+The Schema Collection section above describes versioning *logically*. This is what it does
+**physically**, because it surprises people: **a schema change does not alter the target table. It
+creates a new one.**
+
+`route_warehouse.schema_match` (the non-keylist branch, i.e. everything except **Key Sync**) resolves
+a load's target in three steps:
+
+| Condition | Target |
+|---|---|
+| session schema **==** master schema | the master table `<CATEGORY>_<TABLE>` |
+| session schema matches a **prior version** | `<CATEGORY>_<TABLE>_<v>` |
+| **neither** | `warehouse_create_version()` mints **`<CATEGORY>_<TABLE>_<n>`** and the rows land there |
+
+There is **no `ALTER TABLE` anywhere in this path.** So adding a column, removing one, *or changing an
+inferred type* forks the table. Type drift alone is enough — and the code carries its own warning that
+an all-NULL column infers a different type and will "create extra unnecessary tables".
+
+### The absorbing views — and the one that double-counts
+
+Two views are (re)created over each version family, within seconds of a fork:
+
+- **`COMBINED_<CATEGORY>_<TABLE>`** — `UNION ALL` across master + every version, harmonising differing
+  shapes by projecting `null AS <missing_column>` per branch.
+- **`CURRENT_<CATEGORY>_<TABLE>`** — `RANK() OVER (PARTITION BY ___ALDC___GLOBAL_PRIMARY_HASH___
+  ORDER BY ___ALDC___GLOBAL_HISTORY_TIMESTAMP_START___ DESC, ___ALDC___GLOBAL_ROW_INDEX___)`
+  over COMBINED, keeping the latest row per natural key.
+
+> ### ⛔ Read `CURRENT_*`, never `COMBINED_*`
+> `COMBINED_*` holds **every** version of every row, so it over-counts by roughly the number of
+> version tables. Measured on `PROD_DG1_FUSION_92.DATA_STORE` 2026-09-08:
+> **COMBINED = 10,277 rows / 4,755 distinct ids; CURRENT = 4,755 / 4,755** — a **2.2×** inflation for
+> anything that sums or counts through COMBINED.
+>
+> Regenerate (read-only):
+> ```sql
+> SELECT 'CURRENT'  v, COUNT(*) n, COUNT(DISTINCT id) d FROM DATA_STORE.CURRENT_FLIGHT_CHECK_SYNC_FLIGHT
+> UNION ALL
+> SELECT 'COMBINED' v, COUNT(*) n, COUNT(DISTINCT id) d FROM DATA_STORE.COMBINED_FLIGHT_CHECK_SYNC_FLIGHT;
+> ```
+
+### Consequences worth knowing before you change a synced payload
+
+1. **A consumer reading `CURRENT_*` survives a fork.** Proven on Fusion92: `FLIGHT_1` (2026-03-16) and
+   `FLIGHT_2` (2026-06-17) both exist and are absorbed correctly, and the consumer view
+   `WAREHOUSE_UTILITY.DAX_FLIGHT_CHECK_FLIGHTS` reads `DATA_STORE.CURRENT_FLIGHT_CHECK_SYNC_FLIGHT`.
+2. **A consumer reading the master table directly would silently freeze** at its last pre-fork load —
+   no error, stale rows, looks healthy. So the first question about any new column is *which object the
+   consumer reads*, not whether a fork happens.
+3. **Forking is routine, not exceptional.** Enumerate before assuming otherwise:
+   ```sql
+   SHOW TABLES IN DATABASE <DB>;   -- then filter names matching _<digits> at the end
+   ```
+   That returned ~90 version tables across 15 schemas on Fusion92 prod
+   (`GOOGLE_ADS_CAMPAIGN_1…12`, `SMARTSHEET_2024_BCBSM_1…10`, `TRADE_DESK_PERFORMANCE_REPORT_1…2`).
+4. **Two writers on different schedules can occupy different version tables simultaneously.** On
+   Fusion92, `FLIGHT` (30-minute incrementals) and `FLIGHT_2` (the 09:10 UTC full reconcile) are both
+   written daily with *identical column sets* — so the fork was a type difference, and both are
+   reconciled by `CURRENT_*`. Membership divergence between them measured **0 rows both ways**.
+
+⚠ **A Pydantic-modelled payload ships defaults.** `model_dump_json()` emits every declared field
+including its default, so adding an optional field to a synced model changes the schema signature for
+**every** record, not just the ones that use it. Exclude it from the upload if the warehouse does not
+need it — on Fusion92 that list is `EXCLUDED_FLIGHT_FIELDS` in `dax_api/sync/lib.py`.
+
+---
+
+## ⛔ `application/update` is a permissive merge — no schema, no allow-list
+
+`route_application.update_item` sets **every** key handed to it under `document`, excluding only `id`
+and keys beginning with `_`:
+
+```python
+for k, v in updates.items():
+    if k == "id" or k[0] == "_":
+        continue
+    operations.append({"op": "set", "path": f"/{k}", "value": v})
+```
+
+Cosmos `"op": "set"` **creates** a property that does not yet exist. There is no Pydantic model, no
+metadata cross-check, and no field registry on the write side — so any caller can add arbitrary fields
+to an application document. `update_metadata_item` is equally permissive.
+
+Two practical consequences:
+
+- **Useful:** a new document field can be populated before any UI exists to set it (this is how
+  [[fusion92-platform-ids]]'s `manual_metrics_entry` can be enabled per-flight with no frontend).
+- **Risky:** nothing validates or strips an unexpected field, and the `application` branch of the
+  dispatcher has no `check_auth_service` gate of its own (unlike `securitygroup`). Pair this with
+  [[flight-check-engineering-guide]] § the `coreAPI` pass-through before assuming the write path is
+  protected.
+
+Writes are also **partial merges**: a full flat document may be accepted and discarded with `HTTP 200`.
+Always re-read and diff **every** field after a write — a success status is not proof of a write.
+
+---
+
 ## See Also
 
 - [[cosmosdb-schema]] — Current v2 CosmosDB schema (supersedes most v1 structures)
 - [[core_api]] — API surface that reads/writes these collections
 - [[snowflake]] — Warehouse that receives staged data via merge strategies
 - [[CosmosDB]] — Runtime instance details, stale-template bug, patch_item
+- [[fusion92-platform-ids]] — a worked case of changing a synced payload safely
+- [[flight-check-engineering-guide]] — the consumer that reads `CURRENT_FLIGHT_CHECK_SYNC_FLIGHT`
