@@ -2462,3 +2462,266 @@ must read `FunctionExecutionCount`, never `Requests`/`Http5xx` (0.0 always on Co
 
 Nothing pushed, nothing deployed, no secret retrieved. Publish sequencing is Tami's — she holds the
 manual `v1/` deploy channel. See [[ALDC-1183]] and [[ALDC-1175]].
+
+## 2026-09-08 — FU92-429: the datastore fork hazard, measured — and my own claim refuted
+
+**Pages updated:** [[core-api-data-model]] (new § Version tables + § `application/update`),
+[[fusion92-platform-ids]] (§ Resolution + the corrected claim), [[flight-check-engineering-guide]]
+(§ 2.3, the `coreAPI` pass-through). No new pages.
+
+**The durable lesson — a schema change FORKS the physical table, and severity depends on which object
+the consumer reads.** `route_warehouse.schema_match` has no `ALTER TABLE` path: if a load's schema
+signature matches neither the master nor a prior version, `warehouse_create_version()` mints
+`<CATEGORY>_<TABLE>_<n>` and the rows land there. A `COMBINED_*` view (`UNION ALL`, harmonising with
+`null AS <missing>`) and a `CURRENT_*` view (`RANK()` on the history timestamp per primary hash)
+absorb the family. Forking is **routine**: ~90 `_N` tables across 15 schemas on Fusion92 prod.
+
+⚠ **Read `CURRENT_*`, never `COMBINED_*`** — measured `PROD_DG1_FUSION_92.DATA_STORE` 2026-09-08:
+COMBINED **10,277 rows / 4,755 distinct**, CURRENT **4,755 / 4,755**. A **2.2x** inflation for anything
+counting through COMBINED. Regeneration SQL is on the page beside the numbers.
+
+**I published a wrong claim on FU92-429 and it is corrected in both places it appeared.** I said
+shipping `manual_metrics_entry` would silently freeze the flight dimension for all ~4,755 flights. It
+would not: `DAX_FLIGHT_CHECK_FLIGHTS` reads `DATA_STORE.CURRENT_FLIGHT_CHECK_SYNC_FLIGHT`, the
+absorbing view. The claim rested on the consumer reading the master table — the one hop I had flagged
+as unmeasured, and the measurement killed it. Downgraded from deploy blocker to hygiene.
+
+**A hypothesis of mine that also died:** that the 09:10 UTC full reconcile was orphaned into
+`FLIGHT_2` while the consumer read `FLIGHT`, which would have broken FU92-419's backstop. Refuted —
+membership divergence **0 rows both ways**, both tables hold the FU92-429 flight, and their column
+sets are identical (so the June fork was a *type* difference, matching the authors' own TODO about
+all-NULL columns inferring a different type).
+
+**Also recorded, unrelated to the fork:** `flight-check` `pages/api/coreAPI.tsx` forwards
+caller-supplied `url` + `message` to core_api with the server-side `api_token` attached and **no
+session check and no route allow-list** — a write-capable exposure, broader than ALDC-1064's
+read-only export hole, and compounded by the un-rotated `CORE_API_CLIENT_TOKEN`. Needs its own ticket.
+
+**Pydantic gotcha worth the space:** `model_dump_json()` emits declared fields *including defaults*, so
+adding an optional field to a synced model changes the schema signature for **every** record. Exclude
+it from the upload when the warehouse does not need it.
+
+Shipped: `workflows` PR #33 @ `54e71c5` (the `EXCLUDED_FLIGHT_FIELDS` entry). **Not merged, not
+deployed, no client contact.** Read-only probes with predictions pre-registered in-file live in
+`aldc-launchpad` `sf_ops/_fu92_429_{schema_version,consumer_route}_probe.py`.
+
+## 2026-09-09 — FU92-428 shipped to prod; the deploy tool reported the opposite of the truth, twice
+
+**Page updated:** [[flight-check-engineering-guide]] § 7.1–7.3 (CLI deploy gotchas, rollback, pre-deploy
+checks). No new pages.
+
+**Shipped to PROD:** `workflows` main @ `b948de9` (backend, `aldcprodfnapf921c01`) and `flight-check`
+main @ `3452c8f` (frontend, `aldcprodwbapflightcheck1c01`), backend first — it accepts POST *and* GET,
+so the pair was never in a broken combination. FU92-429's `manual_metrics_entry` flag rode along and is
+**inert** (nothing sets it).
+
+**⛔ `func azure functionapp publish --slot` printed "Deployment Failed. Remote build failed!" and
+exited 0.** Both signals were wrong in opposite directions: the exit code claimed success over a
+failure message, and the failure message was itself false — the build completed and the code was
+serving. Only the final worker-reset call failed, and that endpoint does not resolve for a **slot** on a
+Y1/Dynamic plan. A false *failure* costs an evening re-deploying something that already worked.
+
+**⭐ The reusable technique: tell which build a Function App serves, with no function key.** Azure
+Functions answers **404** for an undeclared HTTP method and **401** for a declared one without a key.
+Run the *old* host first as a control to prove the app really does 404 on method mismatch — without
+that control a 401 proves nothing. This also *measures* the rollback artifact: after the swap the stage
+slot flipped back to 404, proving the previous build was parked and revertible rather than assumed.
+
+**FU92-428 proven on prod, both sides, no client data** (bogus job id, 200 fabricated ids — bigger than
+the largest real job at 207 flights): GET with ids in the query string → **431**, the reported symptom
+reproduced live; POST with the same ids in an 8,070-byte body → **500**, i.e. reached app logic. Left
+**in QA, not Done** — the Export *button* using POST is still inferred from the deployed commit, because
+the bundle carrying that code sits behind auth.
+
+**Also measured:** the README's app name is wrong (`aldcprodfnapfn921c01` vs the real
+`aldcprodfnapf921c01`); the frontend Actions workflow deploys to `stage` and health-checks it but
+**never swaps**, so a green run does not mean prod changed; all 7 prod `AzureWebJobs.*.Disabled`
+settings are correctly slot-scoped; and `f92_flight_check_full_reconcile` is deployed in prod with no
+disable setting, so the 09:10 UTC reconcile is live.
+
+**⚠ Self-inflicted:** filtering app settings with `starts_with(name,'AzureWebJobs')` also matches
+`AzureWebJobsStorage`, printing a live storage account key into the transcript. Use the dotted prefix.
+Paul reviewed and chose not to rotate.
+
+Not done: the UI click-through on job `7d9b5cc1`; the client email (drafted, unsent); ALDC-1064 and
+ALDC-1185 both still To Do.
+
+---
+
+## 2026-09-09 — ⛔ Snowflake Phase 3 landed on prod `wj66376` and took both client-facing PBI models down
+
+Ingested from the live incident session. Pages: `tickets/aldc/ALDC-1191.md`,
+`tickets/aldc/ALDC-1192.md`, `entities/tools/snowflake.md`, `entities/tools/power-bi.md`.
+
+**What happened.** Both live prod PBI models started failing refresh at ~17:00Z with byte-identical
+"credentials ... invalid (Source at wj66376...)". They share ONE credential object (`79d103a2...`),
+so they flip together. Root cause was **not** a person: `SHOW USERS` went from **17 `LEGACY_SERVICE`
+users on 09-08 to 0 on 09-09**, all 20 non-person users now `TYPE = SERVICE` / `has_password =
+false`, zero authentication policies, and Snowflake's own
+`SECURITY_ESSENTIALS_STRONG_AUTH_LEGACY_SERVICE` task visible in the account (re-runs **09-13**).
+Written here the day before as a deadline; arrived ~24h later as an outage.
+
+⭐ **Phase 3 strips the password rather than blocking the login**, so the symptom is
+`390100 INCORRECT_USERNAME_PASSWORD` -- indistinguishable from a rotation, and "someone rotated it"
+was the wrong first read. The cheap discriminators: count `LEGACY_SERVICE` (population, not sample),
+and read the Key Vault entry's `attributes.updated` **metadata** field, which separates "our copy
+drifted" from "the remote object changed" **without retrieving the value at all**
+(`prod-dg1-core-admin` was untouched since 2026-06-03 and no longer authenticated).
+
+⭐ **A `SERVICE` user cannot hold a password and no admin can restore one** -- type constraint, not
+permission. So "can an admin reset it" is a definitive no and a Snowflake support ticket is not on
+the recovery path. Fix is forward: key-pair.
+
+**Fixed:** FUSION_92 Prod / Activation Model, via credential switch to KeyPair at 18:11:33Z -- then
+4 sustained scheduled refreshes and a **15/15** numeric parity gate (frozen closed-history rows +
+distinct counts across ODBC->ADBC; the ADBC `count distinct` defect did not manifest).
+**Still down:** GEP Prod / Data Model -- blocked by [[ALDC-1192]].
+
+**New durable facts.** PBI KeyPair for Snowflake works **only** on the legacy
+`/gateways/{gw}/datasources/{id}` surface (Fabric `/v1/connections` -> bare `InvalidInput`), and
+`passphrase` is **required even for an unencrypted key**. `ExportTo` returns
+`FeatureNotAvailableError` on our `PP3` capacity, so **rendered validation has no API path** and
+needs a real browser. And the **4-failure auto-disable was observed happening** -- GEP's schedule
+switched itself off after 5 failures, which means **fixing the credential is not sufficient; the
+schedule must be manually re-enabled**.
+
+**Side-finding, now blocking ([[ALDC-1192]]).** `GEP Prod / Data Model` reads **non-prod**: the
+`Campaign` and `Platform` partitions hard-code `og35375` + literal `TEST_DG1_GEP`, bypassing the
+parameters the other 34 tables use. Live, not vestigial -- proven from
+`$SYSTEM.TMSCHEMA_PARTITIONS.QueryDefinition`, because **a datasource listing proves only that a
+model DECLARES a source, not that a table queries it**. Repointing is *not* a clean fix: prod holds
+less than TEST (144,729 vs 150,053; 2 vs 5), so it would change client numbers -- it reads as a
+deliberate shim to ship marketing dims ahead of the prod warehouse. Chose **B to restore** (register
+a key on the non-prod PBI user, switch credential `2f0ade5e`) **and C as the real fix** (deploy the
+missing prod-side content, then repoint).
+
+⚠ **og35375 is MFA-gated**, so option B has an irreducible human step. `PAULRUSSELLADMIN` and
+`paulrussell` return "MFA with TOTP is required" -- which means the **password was accepted**; that
+error is good news dressed as failure. Also: **a helper's failure is only evidence about what the
+helper actually tried** -- `connect_nonprod()` failing was misread as "og35375 is converted" when it
+only ever tries an MFA-gated PERSON account and a Key Vault copy known to be stale.
+
+**Three of my own silent verification failures, all caught by reading state back:**
+1. The PBI `PATCH` returned **HTTP 200 with `credentialType` unchanged** at `Basic`.
+2. The parity gate printed **"GATE PASSED" on 2 assertions with 13 NOT-MEASURED** -- an unvalidated
+   integer surrogate date column outranked an execution-validated one, and the verdict asked only
+   "any mismatches?" never "did I see anything?". ⭐ **Coverage belongs IN the verdict.**
+3. The Key Vault CLI's **set-by-value form silently truncated a PEM at the first newline** -- the
+   store held a 27-char stub while the script reported "stored, 1704 chars" from its own local
+   variable. **Use the set-from-file form for any multi-line value.**
+
+Not done: **GEP still down and its schedule disabled**; **no rendered validation on either model**
+(Chrome extension not connected, `ExportTo` unavailable, Playwright blocked at login -- so FUSION_92
+is numerically verified and NOT render-verified, cf. [[GP-293]]); GEP parity NOT-MEASURABLE until it
+refreshes; `PROD_DG1_CORE_SVC_9AC36447` still fully down (key staged 09-07, client never switched);
+Trust Center enforcement date **still never read**; evidence scripts uncommitted on the wrong
+branch.
+
+## 2026-09-10 — both PBI models restored; a shared-gateway false alarm; and an eleventh vacuous-verification shape (my own)
+
+Ingested from the client-comms + handoff session. Pages updated:
+`concepts/patterns/vacuous-verification.md` (shape 11), `entities/tools/power-bi.md`
+(shared-gateway credential collateral).
+
+**Restoration.** GEP Prod / Data Model completed 2026-09-10 18:32:31Z and 19:03:38Z with
+`schedule enabled: True` — the auto-disable was cleared. FUSION_92 completed 19:04:10Z. Both
+gateway credentials now `KeyPair` (`wj66376` and `og35375`). GEP's outage window was
+2026-09-09 16:08:27Z → 2026-09-10 18:32:31Z, **~26.4 hours stale**; reports rendered throughout.
+
+**⚠ A credential edit knocks over OTHER datasources on the same gateway.** While `2f0ade5e`
+(og35375) was being switched to KeyPair, in-flight refreshes against `79d103a2` (wj66376) failed
+naming **wj66376** — the account not being edited. Read alone that says "prod key-pair auth has
+died", one day after a platform-wide enforcement event, and it nearly went to Snowflake as an
+escalation. Both retry windows **overlapped the write**; the next clean scheduled cycle completed on
+both models. Rule: never diagnose from a refresh whose window overlaps a credential write — wait one
+cycle. Corollary worth keeping: **a change in which datasource the error names is a measurement** —
+GEP's error moving from og35375 to wj66376 was the evidence the og35375 fix had landed.
+
+**⭐ The eleventh vacuous-verification shape, and it was mine.** I read one evidence artifact
+(`baseline_pre_keypair_filled_…17:59Z`, showing `ERROR: PBI API 400` on `Order Line` and `Order`)
+and published to two Jira tickets and a boot prompt that those tables were **"permanently
+NOT-MEASURABLE"** and that GEP had **"never been parity-checked"**. Both false. A repair script had
+already succeeded at **18:06Z — five minutes before the cutover** (`Order Line` 3,549,007 frozen
+rows + three distinct keys; `Order` 2,959,711), the parity gate had run (20 assertions, 5
+mismatches), and [[ALDC-1302]] analysing those mismatches was created **twelve minutes before** my
+comment claiming the check never happened. I also wrote that the repair script "evidently did not
+resolve these two" while its output sat in a directory listing I had already run.
+
+The first ten shapes claim **more** than was measured; this one claims **less**, and it is the more
+expensive direction because a false NOT-MEASURABLE **closes an avenue** — it tells the next session
+not to look. Rule banked: *an artifact recording an instrument's failure is a fact about that run,
+never about the measurement in general.* Where evidence accumulates as timestamped runs, the newest
+artifact for an object supersedes older ones by construction. Corrections published to [[ALDC-1191]]
+(36423) and [[ALDC-1193]] (36422), and struck through in place in the boot prompt.
+
+**Client comms + two new tickets.** Drafts written for GEP (Heather Tabor) and Fusion92 (Juliann
+Otto) plus a leads progress checklist — all in `aldc-launchpad/docs/drafts/`, none sent, and none
+claiming resolution (they were drafted while both models were still failing). Two FU92 tickets filed
+from Juliann's reply: **FU92-433** (UM Ross Meta actuals not returning; source email recovered from
+Outlook so the ticket carries the real example flight and IDs; warns not to inherit FU92-421's
+month-old clearance of UM Ross, and requires enumerating every UM Ross Meta flight) and **FU92-434**
+(DAX notifications reading "Unknown", filed as scoping not diagnosis). For 434 the mechanism was
+located: `dax_api/notifications/change_notifications.py:432-455` uses `"Unknown"` as the `.get()`
+default on **every** field, so the notification reports a gap rather than inventing one — the real
+question is why core_api's `application/audit` payload lacks those keys. The 09-09 prod deploy
+(`b948de9`) did **not** touch the notifications module, which weakens the "recent deploy" candidate.
+
+**Still owed:** no rendered/consumer-layer validation on either prod model (three instruments all
+unavailable — extension unconnected, `ExportTo` blocked on PP3, Playwright at the login wall);
+ALDC-1302 §1 discriminating the 5 mismatches (H1 ADBC defect vs H2 stale baseline, prediction on
+record is H2); `PROD_DG1_CORE_SVC_9AC36447` still down; the **09-13 person-user wave** with the
+Trust Center enforcement date still unread.
+
+---
+
+## 2026-09-10 (evening) — ALDC-1302 / ALDC-1192: the parity failure was neither hypothesis
+
+**Ingest: measured, not inferred.** Ran the source-vs-consumer discriminator on GEP Prod / Data
+Model and localised the result. Evidence in `aldc-launchpad` `docs/evidence/aldc1191/`
+(`aldc1192_c7_source_vs_consumer_`, `aldc1302_c8_orderline_localize_`, `aldc1302_c8b_partitions_`,
+`aldc1192_platform_census_`, all `20260910T21*Z`), branch `evidence/aldc-1192-nonprod-deadend`,
+not yet pushed.
+
+**H1 (the ADBC `count distinct` defect) is REFUTED — the key-pair cutover is clean.** The gate
+printed *"the model disagrees with its source, escalate"*. Grouping the same comparison by period
+killed it: **8,968 of 8,975 rows of divergence sit in the blank-ship-date bucket while 2.87M dated
+rows agree to within 7**. A driver defect cannot confine itself to one date bucket. H2 (a stale
+baseline) is also out — the residue is real.
+
+**What it actually is:** `Order Line` is incremental with **97 partitions, 91 last refreshed
+2026-07-07**. The prod model holds 8,968 order lines the warehouse no longer has, and **no normal
+refresh will ever correct them** — `RefreshType.Full` on the archived partitions. Cause unproven;
+GP-282's SellerCloud anti-join is the candidate to check against the 07-07 boundary.
+
+⭐ **Three traps, all failing toward a false alarm**, now on [[power-bi]]: DAX/SQL **NULL semantics
+differ** in both directions (blank `< date` is TRUE in DAX and excluded in SQL; `DISTINCTCOUNT`
+counts BLANK where `COUNT(DISTINCT)` discards NULL) — unmirrored, one run read a 4x divergence that
+was entirely the 29,657 blank-dated rows; **a green refresh says nothing about 94% of an incremental
+table**; and **a gate's verdict is not a diagnosis** — localise along an axis before telling anyone
+to roll back a platform change.
+
+⭐ **New page [[three-layer-presence-census]].** Asked whether Google/Meta had been accidentally
+promoted to prod alongside Sponsored Display: no — deployed DDL matches the deploy branch at two
+arms, and Google/Meta have **zero objects in prod, even raw**. But **Sponsored Display is arriving
+and invisible**: ~17,500 rows in prod raw, written to that same day, share-exposed, selected by
+nothing. "Is X in prod?" needs L1 deployed DDL + L2 modelled data + L3 raw landing, because they
+disagree and each disagreement is a different finding.
+
+**Two better hypotheses posted to ALDC-1193**, both already measured on 09-08 and neither in H0-H3:
+**H4** the Marketing Model's refresh window pinned at 1 August (**122,894 order lines missing**,
+refresh green while three tables are frozen — [[GP-321]], whose title still describes the *resolved*
+half) and **H5** production summing GBP+CAD+USD into marketing cost (X-01/SALES-014, **no ticket
+yet**). H0 removed as refuted.
+
+**Corrections banked:** the 09-10 boot prompt claimed GEP had "no parity check, ever" and that
+`Order Line`/`Order` were permanently unmeasurable — both refuted by
+`parity_gap_closed_20260909T180634Z.json`, stamped five minutes before the ADBC cutover. ⭐ *An
+artifact reporting an instrument's failure is not evidence the measurement was never made — look
+for the repair before declaring anything permanently unmeasurable.* Also corrected in place: my own
+claim that repointing `Platform` to prod would drop three platforms from client visuals — the prod
+model's `Marketing Activity` carries **2** distinct PLATFORM_IDs, so those dim members have no facts
+behind them and repointing removes three empty members.
+
+Jira updated: ALDC-1302, ALDC-1192, ALDC-1193, GP-321. Live plan artifact created for the
+workstream (progress/blockers/open questions), and `aldc-launchpad/CLAUDE.md` now carries the rule
+that it is updated in the same pass as wiki and Jira.

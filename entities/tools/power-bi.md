@@ -345,8 +345,47 @@ instrument can observe either, and default to `Unmeasurable` rather than being s
 an estate with no renderer wired reports "did not look" instead of a false PASS. See
 [[agent-factory]] §"The Power BI GreenContract" for the full assertion list.
 
+### Comparing a model against its source — three traps that all fail toward a false alarm (2026-09-10)
+
+From ALDC-1302, where a parity gate reported "escalate the driver cutover" and every part of that
+verdict turned out to be wrong. All three traps share a shape: **they manufacture a divergence, and
+a manufactured divergence reads as a defect.**
+
+**1. ⛔ NULL semantics differ between DAX and SQL. Mirror them or the comparison means nothing.**
+
+| | DAX | SQL |
+|---|---|---|
+| `col < cutoff` where col is blank/NULL | **TRUE** — row INCLUDED | UNKNOWN — row EXCLUDED |
+| `DISTINCTCOUNT(col)` / `COUNT(DISTINCT col)` | counts BLANK as **one value** | **discards** NULL entirely |
+
+So the SQL side must read `(col < cutoff OR col IS NULL)`, and a distinct count needs
+`COUNT(DISTINCT k) + (CASE WHEN COUNT(*) > COUNT(k) THEN 1 ELSE 0 END)`. Unmirrored, one run
+compared `pbi=39,929` against `snowflake=10,272` and read as a **4× divergence** — the entire gap
+was the 29,657 rows with a blank date. A key column holding any NULL diverges by exactly 1, every
+time, which reads as a subtle corruption rather than an artefact.
+
+**2. An incremental table's history is an ARCHIVE, and a green refresh never touches it.**
+Measured on GEP Prod `Order Line`: **97 partitions, 91 of them last refreshed 2026-07-07**, with only
+a rolling ~3-month window updating. Every refresh since has reported success. So the model held
+**8,968 order lines the warehouse no longer has**, and no normal refresh will ever correct them —
+that needs `RefreshType.Full` on the archived partitions. ⚠ Corollary: *"the refresh completed"*
+says nothing about 94% of the table.
+
+**3. A gate's verdict is not a diagnosis — localise before escalating.** The gate printed
+`H1 — the model disagrees with its source, escalate the ADBC cutover`. Breaking the same comparison
+down by period killed it in one table: **8,968 of 8,975 rows of divergence sat in the blank-date
+bucket while 2.87M dated rows agreed to within 7**. A transport or driver defect cannot confine
+itself to one date bucket. The cheap discriminator — *group the divergence by an axis and see
+whether it concentrates* — should run **before** anyone is told to roll back a platform change.
+
+⚠ Two more things that read like permissions failures and are not: `RowCount` is **not** a
+`$SYSTEM.TMSCHEMA_PARTITIONS` column (asking for it fails the whole query with *"the specified column
+was not found"*), and `GET_DDL` on a `WAREHOUSE.*` wrapper view returns only
+`SELECT * FROM WAREHOUSE_SOURCE.*` — read the `WAREHOUSE_SOURCE` object for the real definition.
+
 ## See Also
 
+- [[three-layer-presence-census]] — answering "is this data in prod?" without a false negative
 - [[Snowflake]] — direct data source (via Snowflake.Databases M connector)
 - [[SSMS]] — XMLA client into the PBI tabular model (for partition re-processing of historical data)
 - [[pbi-xmla-automation]] — canonical pattern for programmatic model metadata changes
