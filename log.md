@@ -2672,3 +2672,57 @@ unavailable — extension unconnected, `ExportTo` blocked on PP3, Playwright at 
 ALDC-1302 §1 discriminating the 5 mismatches (H1 ADBC defect vs H2 stale baseline, prediction on
 record is H2); `PROD_DG1_CORE_SVC_9AC36447` still down; the **09-13 person-user wave** with the
 Trust Center enforcement date still unread.
+
+---
+
+## 2026-09-10 (evening) — ALDC-1302 / ALDC-1192: the parity failure was neither hypothesis
+
+**Ingest: measured, not inferred.** Ran the source-vs-consumer discriminator on GEP Prod / Data
+Model and localised the result. Evidence in `aldc-launchpad` `docs/evidence/aldc1191/`
+(`aldc1192_c7_source_vs_consumer_`, `aldc1302_c8_orderline_localize_`, `aldc1302_c8b_partitions_`,
+`aldc1192_platform_census_`, all `20260910T21*Z`), branch `evidence/aldc-1192-nonprod-deadend`,
+not yet pushed.
+
+**H1 (the ADBC `count distinct` defect) is REFUTED — the key-pair cutover is clean.** The gate
+printed *"the model disagrees with its source, escalate"*. Grouping the same comparison by period
+killed it: **8,968 of 8,975 rows of divergence sit in the blank-ship-date bucket while 2.87M dated
+rows agree to within 7**. A driver defect cannot confine itself to one date bucket. H2 (a stale
+baseline) is also out — the residue is real.
+
+**What it actually is:** `Order Line` is incremental with **97 partitions, 91 last refreshed
+2026-07-07**. The prod model holds 8,968 order lines the warehouse no longer has, and **no normal
+refresh will ever correct them** — `RefreshType.Full` on the archived partitions. Cause unproven;
+GP-282's SellerCloud anti-join is the candidate to check against the 07-07 boundary.
+
+⭐ **Three traps, all failing toward a false alarm**, now on [[power-bi]]: DAX/SQL **NULL semantics
+differ** in both directions (blank `< date` is TRUE in DAX and excluded in SQL; `DISTINCTCOUNT`
+counts BLANK where `COUNT(DISTINCT)` discards NULL) — unmirrored, one run read a 4x divergence that
+was entirely the 29,657 blank-dated rows; **a green refresh says nothing about 94% of an incremental
+table**; and **a gate's verdict is not a diagnosis** — localise along an axis before telling anyone
+to roll back a platform change.
+
+⭐ **New page [[three-layer-presence-census]].** Asked whether Google/Meta had been accidentally
+promoted to prod alongside Sponsored Display: no — deployed DDL matches the deploy branch at two
+arms, and Google/Meta have **zero objects in prod, even raw**. But **Sponsored Display is arriving
+and invisible**: ~17,500 rows in prod raw, written to that same day, share-exposed, selected by
+nothing. "Is X in prod?" needs L1 deployed DDL + L2 modelled data + L3 raw landing, because they
+disagree and each disagreement is a different finding.
+
+**Two better hypotheses posted to ALDC-1193**, both already measured on 09-08 and neither in H0-H3:
+**H4** the Marketing Model's refresh window pinned at 1 August (**122,894 order lines missing**,
+refresh green while three tables are frozen — [[GP-321]], whose title still describes the *resolved*
+half) and **H5** production summing GBP+CAD+USD into marketing cost (X-01/SALES-014, **no ticket
+yet**). H0 removed as refuted.
+
+**Corrections banked:** the 09-10 boot prompt claimed GEP had "no parity check, ever" and that
+`Order Line`/`Order` were permanently unmeasurable — both refuted by
+`parity_gap_closed_20260909T180634Z.json`, stamped five minutes before the ADBC cutover. ⭐ *An
+artifact reporting an instrument's failure is not evidence the measurement was never made — look
+for the repair before declaring anything permanently unmeasurable.* Also corrected in place: my own
+claim that repointing `Platform` to prod would drop three platforms from client visuals — the prod
+model's `Marketing Activity` carries **2** distinct PLATFORM_IDs, so those dim members have no facts
+behind them and repointing removes three empty members.
+
+Jira updated: ALDC-1302, ALDC-1192, ALDC-1193, GP-321. Live plan artifact created for the
+workstream (progress/blockers/open questions), and `aldc-launchpad/CLAUDE.md` now carries the rule
+that it is updated in the same pass as wiki and Jira.
