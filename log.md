@@ -2725,3 +2725,24 @@ behind them and repointing removes three empty members.
 Jira updated: ALDC-1302, ALDC-1192, ALDC-1193, GP-321. Live plan artifact created for the
 workstream (progress/blockers/open questions), and `aldc-launchpad/CLAUDE.md` now carries the rule
 that it is updated in the same pass as wiki and Jira.
+
+**Addendum, same evening — a scope decision that lifts a gate.** Paul: **no Navira model work is
+promoted to production**; GP-318 and the GP-319 rebuild land in **TEST only**, because the client
+reviews in TEST. So **GP-294 is DEFERRED** — its entire argument was that closing GP-318 in TEST
+leaves the identical defect in front of the client on prod. Deferred, *not* done: the 128-TEST-vs-76
+-prod measure gap, the 37-of-72 differing definitions and the never-measured prod axis behaviour all
+stand, and become a hard blocker the day a promotion is proposed. ⚠ The decision does **not** cover
+the live production defects (the pinned refresh window, the three-currency marketing cost, the 8,968
+phantom order lines) — those are defects in a surface someone already reads, not changes awaiting
+promotion. Also decided: the **Marketing Model is rebuilt from scratch** rather than repaired
+(wrong grain, key hashing three namespaces, canonical fact with no definition), which makes most of
+GP-319's line items moot. Jira: GP-294 and GP-318 both commented.
+
+⭐ **Process lesson banked — a phase list is not a loop unless each phase says what it carries.**
+The workstream now has a live plan artifact as a third sync target beside wiki and Jira, and each
+phase in it names its boot prompt, its **wiki pages**, and a two-directional `Carries` line: what it
+inherits, and what it must leave behind. The live example is the rendered-evidence instrument —
+three were tried on 09-09 and all three failed, so whichever one works is a dependency of two later
+phases and would otherwise be re-failed from scratch. ⚠ Also proven: a published artifact **cannot**
+start a Claude session (sandboxed, no process/filesystem/terminal reach), so a phase launcher is
+copy-to-clipboard, never a button.
