@@ -3,7 +3,7 @@ tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
 sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21, Navira live-data-model + ME/Agency integration 2026-06-18, Agentic Power BI docs pointer 2026-08-23 (UNREAD)]
 created: 2026-04-16
-updated: 2026-08-29
+updated: 2026-09-10
 ---
 
 # Power BI
@@ -141,6 +141,35 @@ Completes**, so `MailOnFailure` structurally cannot fire on it. **Gate any cutov
 parity, not on a green refresh** — freeze the comparison to closed history (e.g. rows dated before
 the cutover month, which cannot legitimately move) and assert row counts **and distinct counts**,
 the latter being what the defect actually corrupts.
+
+### ⚠ A credential edit takes DOWN OTHER DATASOURCES on the same gateway, briefly
+
+Measured on [[ALDC-1191]], 2026-09-10, and it produced a false alarm that nearly went to Snowflake
+as an escalation.
+
+The two prod models share gateway `39ea52f4` but read **different** Snowflake accounts through
+**different** credential objects — `79d103a2` (`wj66376`, prod) and `2f0ade5e` (`og35375`, non-prod).
+While `2f0ade5e` was being switched to KeyPair, refreshes in flight against `79d103a2` failed:
+
+| Model | Window | Error names |
+|---|---|---|
+| FUSION_92 Prod / Activation Model | 18:00:38 → 18:11:49Z | `wj66376` — the account **not** being edited |
+| GEP Prod / Data Model | 18:11:40 → 18:19:58Z | `wj66376` — same |
+
+Read on its own this says *"prod key-pair auth has stopped working"* — an account-wide credential
+failure on the account that had been healthy all morning, one day after a platform-wide enforcement
+event. That reading was wrong. **Both retry windows overlap the credential write**, and the next
+clean scheduled cycle completed on both models (19:04:10Z and 19:03:38Z respectively).
+
+> **Rule: never diagnose from a refresh whose window overlaps a credential write on the same
+> gateway.** Wait for the next clean cycle; that is the discriminator, and it costs one hour at most.
+> The failure is transient and it names the *victim's* datasource, not the one being edited — so the
+> error text points away from the actual cause.
+
+⭐ Corollary in the other direction, and a genuinely useful signal: **a change in which datasource
+the error names is a measurement.** GEP's error naming `og35375` on every failure through 04:39Z and
+then `wj66376` at 18:11Z was the evidence that the og35375 fix had landed — the refresh had got past
+that source for the first time. A changed error string is data, not noise.
 
 ### ⛔ Export to File is NOT available on our capacity
 

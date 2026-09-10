@@ -2617,3 +2617,58 @@ is numerically verified and NOT render-verified, cf. [[GP-293]]); GEP parity NOT
 refreshes; `PROD_DG1_CORE_SVC_9AC36447` still fully down (key staged 09-07, client never switched);
 Trust Center enforcement date **still never read**; evidence scripts uncommitted on the wrong
 branch.
+
+## 2026-09-10 — both PBI models restored; a shared-gateway false alarm; and an eleventh vacuous-verification shape (my own)
+
+Ingested from the client-comms + handoff session. Pages updated:
+`concepts/patterns/vacuous-verification.md` (shape 11), `entities/tools/power-bi.md`
+(shared-gateway credential collateral).
+
+**Restoration.** GEP Prod / Data Model completed 2026-09-10 18:32:31Z and 19:03:38Z with
+`schedule enabled: True` — the auto-disable was cleared. FUSION_92 completed 19:04:10Z. Both
+gateway credentials now `KeyPair` (`wj66376` and `og35375`). GEP's outage window was
+2026-09-09 16:08:27Z → 2026-09-10 18:32:31Z, **~26.4 hours stale**; reports rendered throughout.
+
+**⚠ A credential edit knocks over OTHER datasources on the same gateway.** While `2f0ade5e`
+(og35375) was being switched to KeyPair, in-flight refreshes against `79d103a2` (wj66376) failed
+naming **wj66376** — the account not being edited. Read alone that says "prod key-pair auth has
+died", one day after a platform-wide enforcement event, and it nearly went to Snowflake as an
+escalation. Both retry windows **overlapped the write**; the next clean scheduled cycle completed on
+both models. Rule: never diagnose from a refresh whose window overlaps a credential write — wait one
+cycle. Corollary worth keeping: **a change in which datasource the error names is a measurement** —
+GEP's error moving from og35375 to wj66376 was the evidence the og35375 fix had landed.
+
+**⭐ The eleventh vacuous-verification shape, and it was mine.** I read one evidence artifact
+(`baseline_pre_keypair_filled_…17:59Z`, showing `ERROR: PBI API 400` on `Order Line` and `Order`)
+and published to two Jira tickets and a boot prompt that those tables were **"permanently
+NOT-MEASURABLE"** and that GEP had **"never been parity-checked"**. Both false. A repair script had
+already succeeded at **18:06Z — five minutes before the cutover** (`Order Line` 3,549,007 frozen
+rows + three distinct keys; `Order` 2,959,711), the parity gate had run (20 assertions, 5
+mismatches), and [[ALDC-1302]] analysing those mismatches was created **twelve minutes before** my
+comment claiming the check never happened. I also wrote that the repair script "evidently did not
+resolve these two" while its output sat in a directory listing I had already run.
+
+The first ten shapes claim **more** than was measured; this one claims **less**, and it is the more
+expensive direction because a false NOT-MEASURABLE **closes an avenue** — it tells the next session
+not to look. Rule banked: *an artifact recording an instrument's failure is a fact about that run,
+never about the measurement in general.* Where evidence accumulates as timestamped runs, the newest
+artifact for an object supersedes older ones by construction. Corrections published to [[ALDC-1191]]
+(36423) and [[ALDC-1193]] (36422), and struck through in place in the boot prompt.
+
+**Client comms + two new tickets.** Drafts written for GEP (Heather Tabor) and Fusion92 (Juliann
+Otto) plus a leads progress checklist — all in `aldc-launchpad/docs/drafts/`, none sent, and none
+claiming resolution (they were drafted while both models were still failing). Two FU92 tickets filed
+from Juliann's reply: **FU92-433** (UM Ross Meta actuals not returning; source email recovered from
+Outlook so the ticket carries the real example flight and IDs; warns not to inherit FU92-421's
+month-old clearance of UM Ross, and requires enumerating every UM Ross Meta flight) and **FU92-434**
+(DAX notifications reading "Unknown", filed as scoping not diagnosis). For 434 the mechanism was
+located: `dax_api/notifications/change_notifications.py:432-455` uses `"Unknown"` as the `.get()`
+default on **every** field, so the notification reports a gap rather than inventing one — the real
+question is why core_api's `application/audit` payload lacks those keys. The 09-09 prod deploy
+(`b948de9`) did **not** touch the notifications module, which weakens the "recent deploy" candidate.
+
+**Still owed:** no rendered/consumer-layer validation on either prod model (three instruments all
+unavailable — extension unconnected, `ExportTo` blocked on PP3, Playwright at the login wall);
+ALDC-1302 §1 discriminating the 5 mismatches (H1 ADBC defect vs H2 stale baseline, prediction on
+record is H2); `PROD_DG1_CORE_SVC_9AC36447` still down; the **09-13 person-user wave** with the
+Trust Center enforcement date still unread.
