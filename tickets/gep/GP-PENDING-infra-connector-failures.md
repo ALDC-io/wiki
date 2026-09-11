@@ -22,6 +22,26 @@ Four long-running infrastructure failures discovered 2026-05-22 during investiga
 - **Secondary issue:** Samba password in the `agent-nextcloud` containers' passdb did not match the `NEXTCLOUD_PASSWORD` env var (`ALDCAgent007_`). Reset via `smbpasswd -s agent` on both hosts.
 - **Fix:** Recreated agent containers on both Coquitlam and Kamloops with `--privileged` mode enabled via Portainer. CIFS mounts confirmed working on both hosts. All 10 templates will resume on next scheduled run.
 
+> ⚠ **2026-09-09 — this root cause is NOT the only one producing this signature. See [[ALDC-1187]].**
+>
+> The same `[Errno 2] No such file or directory: '/media/nextcloud/...'` recurred on
+> `dcgeneral-coquitlam` for 5d19h (2026-09-03 → 2026-09-09) with **`Privileged=true`** and
+> `CapEff=000001ffffffffff` — so the cause recorded above **did not apply**. Measured: smbd running
+> (2 processes), `smbclient -L` authenticating from the agent, DNS resolving `agent-nextcloud`, the
+> volume holding all 10 tenants — and still `NO CIFS MOUNT PRESENT` in the container's namespace.
+>
+> Actual cause: a **startup race**. `run.sh` runs `mount -t cifs` as its first line and never checks
+> the exit code; on a *host reboot* the agent and `agent-nextcloud` start within 1 ms of each other
+> (`19:09:08.137Z` / `.138Z`), so the mount fires before `smbd` listens, fails silently, and is never
+> retried. Fix was a plain `docker restart` — which also rearms the trap for the next reboot.
+>
+> **Diagnose with `docker inspect … Privileged` + `grep cifs /proc/mounts` before assuming the
+> non-privileged cause** — the full discriminator table is in
+> [[connector-docker-deployment]]. Recommendation 7 on this page ("add a mount-health check … a
+> missing `/media/nextcloud/` should alert before connectors start failing") was **never actioned**,
+> which is why this went 5 days unnoticed and was found only while investigating an unrelated
+> missing-sales incident — *the same way it was found in May 2026*.
+
 **Issue 2 — SQL Server DNS: RESOLVED 2026-05-27**
 - **Root cause:** Docker's internal DNS resolver (`127.0.0.11` in the container's `/etc/resolv.conf`) cannot resolve ALDC's local domain `*.prod.site3.aldc`. The Eclipse connection uses the FQDN `galactica.prod.site3.aldc` (not the IP `192.168.35.138`), so ODBC login times out at the DNS stage. The 2026-05-22 TCP test was a **false negative** — it tested via IP directly, not the FQDN, so it passed while templates continued to fail.
 - **Why Kamloops works:** The Kamloops agent (`192.168.35.70`) is on the same subnet as Galactica (`192.168.35.138`) and has local DNS that resolves `.prod.site3.aldc`. Coquitlam (`192.168.22.70`) is cross-site and lacks this DNS.

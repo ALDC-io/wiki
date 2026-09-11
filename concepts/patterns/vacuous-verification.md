@@ -1,9 +1,9 @@
 ---
 tags: [pattern, verification, evidence, agents, review, quality, claude-code]
-aliases: [vacuous verification, vacuous verdict, verdict without content, schema-degenerate agent return, location-dependent verdict, mtime verification]
-sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md, agent-factory session 2026-08-30 (research separation; contract.py fifth verdict, commit 0d4bdb1), agent-army-research/research/synthesis/W0-foundations.md, agent-factory session 2026-08-31 (findings F91/F92/F93, commit d5c0af4)]
+aliases: [vacuous verification, false not-measurable, stale error artifact, vacuous verdict, verdict without content, schema-degenerate agent return, location-dependent verdict, mtime verification]
+sources: [prefect-connectors session 2026-08-14 (docs/KNOWN_ISSUES.md issues 22-26), concepts/patterns/answerability-guard.md, concepts/patterns/schema-dialect-drift.md, concepts/patterns/conclave-pr-review.md, agent-factory session 2026-08-30 (research separation; contract.py fifth verdict, commit 0d4bdb1), agent-army-research/research/synthesis/W0-foundations.md, agent-factory session 2026-08-31 (findings F91/F92/F93, commit d5c0af4), aldc-launchpad session 2026-09-10 (ALDC-1191 parity baseline, docs/evidence/aldc1191/)]
 created: 2026-08-14
-updated: 2026-08-31
+updated: 2026-09-10
 ---
 
 # Vacuous Verification
@@ -19,9 +19,14 @@ shapes where the content is **present and correct** and something downstream des
 fifth, the **arithmetic** throws it away (a scoring layer). In the sixth, the **transport** does —
 a shell pipeline replacing a failing exit code with `tail`'s.
 
-Nine shapes, in the order they were found. The last three all came from one act — **running the
+Eleven shapes, in the order they were found. Shapes 7–9 all came from one act — **running the
 suite from a fresh git worktree instead of the primary checkout** — which is itself the lesson:
 three of these were invisible from the only place anyone routinely stands.
+
+⭐ **The eleventh runs the other way**, and it is worth stating up front: the first ten are a
+verification claiming *more* than it measured. The eleventh is a verification claiming **less** —
+declaring something permanently unmeasurable when the measurement had already been taken. Both
+destroy the same thing, which is a true account of what is known.
 
 | | Shape | Found |
 |---|---|---|
@@ -34,6 +39,8 @@ three of these were invisible from the only place anyone routinely stands.
 | 7 | **The verdict depends on where the instrument is standing** | 2026-08-31 |
 | 8 | **A measurement so expensive it prevents the measurement it feeds** | 2026-08-31 |
 | 9 | **The check reads the filesystem's timestamps, not the content** | 2026-08-31 |
+| 10 | **The configuration flag standing in for the behaviour** | 2026-09-08 |
+| 11 | **A stale error artifact read as proof the measurement never happened** | 2026-09-10 |
 
 ## The reference case — verifier agents, 2026-08-14
 
@@ -523,8 +530,78 @@ missed the markdown-table row format — printing two real passwords into a sess
 repair: **mask by COLUMN HEADER, never by guessing what a secret looks like.** A redactor validated
 only against the cases you imagined is a redactor you have not tested. Both credentials were rotated.
 
+## 2026-09-10 — the eleventh shape: a STALE ERROR ARTIFACT read as proof the measurement never happened ([[ALDC-1191]])
+
+The first ten shapes all claim **more** than was measured. This one claims **less** — and it is the
+easier mistake to feel virtuous about, because it wears the costume of rigour. Declaring something
+`NOT-MEASURABLE` sounds like the disciplined move. Here it was simply wrong.
+
+### 11 — ⭐ an artifact recording an instrument's FAILURE is not evidence that the measurement was never MADE
+
+Diagnosing the GEP Power BI model after the Phase 3 key-pair cutover, the question was whether the
+model's numbers could be compared against a pre-cutover baseline. The baseline file
+`baseline_pre_keypair_filled_20260909T175934Z.json` (17:59Z) carries, for the two tables that matter
+most — `Order Line` (= `WAREHOUSE.SALES_FCT_ORDERLINE`, the sales/COGS/margin fact) and `Order` —
+the value `ERROR: PBI API 400`.
+
+From that single file I concluded, and **published to two Jira tickets and a boot prompt**:
+
+> "`Order Line` and `Order` have ZERO baseline metrics … the window has closed … baseline-vs-model
+> parity on those two tables is **permanently NOT-MEASURABLE**."
+
+**Every clause of that was false.** Seven minutes later on the day itself, a repair script had
+already run and succeeded:
+
+| File | Stamp | `Order Line` | `Order` |
+|---|---|---|---|
+| `baseline_pre_keypair_filled_…json` | 09-09 **17:59Z** | `ERROR: PBI API 400` | `ERROR: PBI API 400` |
+| `parity_gap_closed_…json` | 09-09 **18:06Z** | **ASSERTED** — 3,549,007 frozen rows, distinct `ORDER_LINE_KEY` 3,548,975 / `ORDER_KEY` 2,960,816 / `PRODUCT_KEY` 16,563, date column "Ship Date" | **ASSERTED** — 2,959,711 rows |
+
+18:06Z is **five minutes before** the 18:11Z ADBC cutover, so the capture is genuinely pre-cutover.
+The parity gate had then *run* on the merged result — 20 assertions, 0 errors, 5 mismatches — and a
+ticket ([[ALDC-1302]]) analysing those mismatches already existed, created twelve minutes before the
+comment claiming the check had never happened.
+
+I compounded it by writing that the repair script "evidently did not resolve these two" — naming the
+exact script whose output file, sitting in a directory listing I had already run, showed that it had.
+
+### Why this is a verification failure and not just carelessness
+
+The conclusion was **structurally identical to a vacuous pass, inverted**. A vacuous pass reports
+success from a check that did not run. This reported *impossibility* from a check that did run —
+and in both cases the reader downstream gets a verdict with nothing behind it, indistinguishable
+from one with everything behind it.
+
+It is also the more expensive direction. A vacuous pass gets caught when the thing breaks. A false
+`NOT-MEASURABLE` **closes an avenue**: it tells the next session not to bother looking, and the
+evidence quietly stops being consulted. Had it not been caught, the recommendation built on it
+(*"parity must be source-anchored because the baseline is missing"*) would have sent the next session
+to rebuild a measurement it already had.
+
+> **Rule: an artifact recording an instrument's failure is a fact about that run, at that moment —
+> never a fact about the measurement in general.** Before writing `NOT-MEASURED`, `NOT-MEASURABLE`
+> or "the window has closed", search for a *later* artifact covering the same object. The repair is
+> very often already there, in the same folder, minutes newer.
+>
+> Corollary: **`NOT-MEASURABLE, permanently` is a load-bearing claim and needs its own evidence** —
+> at least as much as a positive finding does. "I looked and could not find it" and "it cannot be
+> found" are different verdicts, and only the first was ever true here.
+
+### The tell that should have fired
+
+Sorting the evidence directory by time was the whole check, and it had already been done — the newer
+file was on screen. The failure was reading **one** artifact and generalising, when the folder was
+an ordered record of an instrument being repaired. ⚠ Where evidence accumulates as timestamped runs,
+**the newest artifact for an object supersedes older ones by construction** — treat any older
+artifact as a snapshot of a superseded state unless proven otherwise.
+
+Corrections published to [[ALDC-1191]] (comment 36423) and [[ALDC-1193]] (36422), and struck through
+in place in `boot-prompts/gep-prod-model-data-issues-2026-09-10.md` rather than deleted, so the
+correction stays legible next to the claim.
+
 ## See Also
 
+- [[ALDC-1191]] — where the eleventh shape was found; also the shared-gateway credential collateral (see [[power-bi]])
 - [[ALDC-1164]] — where the tenth shape was found; five instances in one afternoon
 - [[agent-session-completion-signals]] — the sibling failure: content genuinely PARTIAL while every instrument reports arrival (a proxy for done-ness fails toward "done")
 - [[pbi-xmla-automation]] — the operational half of the 2026-08-27 case: TMSL exports carry credentials, and surgical vs full-model rollback on a shared model

@@ -3,7 +3,7 @@ tags: [entity, tool, power-bi, reporting, visualization]
 aliases: [Power BI, PBI]
 sources: [clients repo report_common/ directories, Obsidian vault notes, GP-208 Data Source Settings check 2026-04-21, GP-200 UAT investigation 2026-05-20, Eclipse Test report fix 2026-05-21, Navira live-data-model + ME/Agency integration 2026-06-18, Agentic Power BI docs pointer 2026-08-23 (UNREAD)]
 created: 2026-04-16
-updated: 2026-08-29
+updated: 2026-09-10
 ---
 
 # Power BI
@@ -98,11 +98,103 @@ regression. The first **Completes** rather than failing, so `MailOnFailure` cann
 Always run an old-vs-new **numeric parity check** on cutover — a green refresh is not evidence of
 correct numbers. See [[ALDC-1164]], and [[GP-318]] for the same failure shape.
 
+### ⭐ Switching a Snowflake datasource to KeyPair — the working recipe
+
+Proven in production 2026-09-09 ([[ALDC-1191]]) after Snowflake Phase 3 stripped the password from
+`SERVICE_POWER_BI`. Two facts cost real time and are not in Microsoft's docs:
+
+**1. Only the LEGACY gateway surface works.** `PATCH /v1.0/myorg/gateways/{gatewayId}/datasources/{datasourceId}`.
+The Fabric surface `PATCH /v1/connections/{id}` returns a bare `InvalidInput` with no detail — most
+likely because these are `connectivityType: PersonalCloud`.
+
+**2. `passphrase` is REQUIRED even when the key is unencrypted.** Omitting it fails with a
+genuinely excellent error that names the field:
+
+> The given credential contains a property with a null value. Data source kind: Snowflake.
+> **Property name: passphrase.**
+
+The body that works:
+
+```
+credentialType: "KeyPair"
+credentials: {"credentialData":[
+    {"name":"username",  "value":"SERVICE_POWER_BI"},
+    {"name":"privatekey","value":"<PEM, delimiters INCLUDED>"},
+    {"name":"passphrase","value":""}]}
+encryptedConnection: "NotEncrypted",  encryptionAlgorithm: "NONE",
+privacyLevel: "Organizational"
+```
+
+⚠ **Power BI takes the PRIVATE key WITH PEM delimiters; Snowflake takes the PUBLIC key WITHOUT
+them.** Field names also differ by surface: legacy uses a `credentialData` array of
+`{name, value}`; Fabric uses flat `identifier`/`privateKey`/`passphrase`.
+
+⛔ **A 200 is not proof the write took.** The first attempt on ALDC-1191 returned **HTTP 200** and
+left `credentialType` unchanged at `Basic`. Always re-`GET` the datasource and compare
+`credentialType` before/after. Since `skipTestConnection: false` for Snowflake, a genuine success
+also performs a real authentication attempt — so verify at the source too
+(`LOGIN_HISTORY`, expect `FIRST_AUTHENTICATION_FACTOR = RSA_KEYPAIR`).
+
+**KeyPair forces ADBC** — post-switch logins report `GO_DRIVER 2.1.0`, not `ODBC_DRIVER 3.2.2`. That
+brings the open `count distinct` defect, which returns wrong numbers **while the refresh
+Completes**, so `MailOnFailure` structurally cannot fire on it. **Gate any cutover on numeric
+parity, not on a green refresh** — freeze the comparison to closed history (e.g. rows dated before
+the cutover month, which cannot legitimately move) and assert row counts **and distinct counts**,
+the latter being what the defect actually corrupts.
+
+### ⚠ A credential edit takes DOWN OTHER DATASOURCES on the same gateway, briefly
+
+Measured on [[ALDC-1191]], 2026-09-10, and it produced a false alarm that nearly went to Snowflake
+as an escalation.
+
+The two prod models share gateway `39ea52f4` but read **different** Snowflake accounts through
+**different** credential objects — `79d103a2` (`wj66376`, prod) and `2f0ade5e` (`og35375`, non-prod).
+While `2f0ade5e` was being switched to KeyPair, refreshes in flight against `79d103a2` failed:
+
+| Model | Window | Error names |
+|---|---|---|
+| FUSION_92 Prod / Activation Model | 18:00:38 → 18:11:49Z | `wj66376` — the account **not** being edited |
+| GEP Prod / Data Model | 18:11:40 → 18:19:58Z | `wj66376` — same |
+
+Read on its own this says *"prod key-pair auth has stopped working"* — an account-wide credential
+failure on the account that had been healthy all morning, one day after a platform-wide enforcement
+event. That reading was wrong. **Both retry windows overlap the credential write**, and the next
+clean scheduled cycle completed on both models (19:04:10Z and 19:03:38Z respectively).
+
+> **Rule: never diagnose from a refresh whose window overlaps a credential write on the same
+> gateway.** Wait for the next clean cycle; that is the discriminator, and it costs one hour at most.
+> The failure is transient and it names the *victim's* datasource, not the one being edited — so the
+> error text points away from the actual cause.
+
+⭐ Corollary in the other direction, and a genuinely useful signal: **a change in which datasource
+the error names is a measurement.** GEP's error naming `og35375` on every failure through 04:39Z and
+then `wj66376` at 18:11Z was the evidence that the og35375 fix had landed — the refresh had got past
+that source for the first time. A changed error string is data, not noise.
+
+### ⛔ Export to File is NOT available on our capacity
+
+`POST /groups/{ws}/reports/{id}/ExportTo` → **HTTP 404 `FeatureNotAvailableError`** on the `PP3`
+(Premium Per User) capacity, measured 2026-09-09. So server-side rendering cannot be used as a
+consumer-layer check here, and **rendered validation has no API path** — it needs a real browser
+session. Plan for that rather than discovering it mid-incident.
+
+Note what even a successful export would and would not prove: it renders through the service as
+**the owner**, not through the client's **embed path and identity**, which is where the [[GP-293]]
+failure lived. A clean export is stronger than DAX and still not client-visible confirmation.
+
 ### ⚠ Refresh alerting does not mean refresh detection
 
 - Power BI **disables a schedule after 4 consecutive failures**, at which point failure emails stop
   — *the alarm goes quiet exactly when the outage becomes permanent*. Alarm on **staleness**
   (no new `Completed` within 2× the interval), not just on `status == Failed`.
+- ⭐ **OBSERVED HAPPENING, 2026-09-09** ([[ALDC-1191]]): `GEP Prod Models / Data Model` hit **5**
+  consecutive failures and `refreshSchedule.enabled` flipped to **False** on its own, within ~3
+  hours of the first failure. This was written here as a *warning* the day before and became a
+  *fact* the next day.
+  ⭐ **The operational consequence is the bit that gets missed: fixing the credential is NOT
+  sufficient — the schedule must be MANUALLY RE-ENABLED afterwards**, or the model never refreshes
+  again despite working auth. Put "re-enable the schedule" on every PBI auth-fix checklist; it is
+  the step that silently un-fixes the fix.
 - Measured on this estate: `ALDC_FINANCE / Profitability Model` failed 2026-05-29 with
   `notifyOption = MailOnFailure` **enabled** and ~3 months passed with no response;
   `FUSION_92 Test Models / Activation Model` reads `enabled: true` and has been silent since
@@ -133,6 +225,19 @@ readable via `GET /datasets/{id}/parameters` by any principal with ordinary data
 | GEP Prod Models | `de58032f-c282-46fb-8b8f-88900df997d1` | Data Model | `74a529b3-5112-4f1e-9ee6-9ab642b288c4` | `PROD_DG1_GEP` | **Hourly, 02:00–16:00 Pacific**. Owner: `paul.russell@aldc.io` |
 | GEP Prod Reports | `11b7df98-b2bd-4cea-a01c-42d8a63a7134` | Daily Sales | `c35abad7-c685-4ddb-a352-2b761f98618e` | `PROD_DG1_GEP` | No schedule. |
 | GEP Sandbox Models | `8545f3cb-4e2d-4985-bf31-79066248c9be` | GEP_Sandbox_Current | `fb41970d-2beb-4ed9-9f82-35c6439b35ea` | Per-ticket sandbox DB | Manual only. |
+
+> ⛔ **`GEP Prod Models / Data Model` does NOT read only prod.** Two of its 36 tables — `Campaign`
+> (150,053 rows) and `Platform` (5) — hard-code `og35375` (**non-prod**) and the literal
+> `TEST_DG1_GEP` database in their partition M, bypassing the `SNOWFLAKE_HOST` /
+> `SNOWFLAKE_COMPUTE` / `PARAM_SHORT_CODE` parameters the other 34 use. Live, not vestigial. See
+> [[ALDC-1192]]. Prod holds *less* than TEST (`MARKETING_DIM_CAMPAIGN` 144,729 vs 150,053;
+> `MARKETING_DIM_PLATFORM` 2 vs 5), so **repointing would change client-facing numbers** — it reads
+> as a deliberate shim to ship marketing dims ahead of the prod warehouse, not as an accident.
+>
+> ⭐ **A datasource in `GET /datasets/{id}/datasources` proves only that the model DECLARES a
+> source, not that a table queries it.** To establish which tables actually read what, read
+> `$SYSTEM.TMSCHEMA_PARTITIONS.QueryDefinition` and attribute by the server string in the M. This is
+> the discriminating test for any "which environment does this model really read?" question.
 
 > ⚠️ **Do not use GEP Test Reports for UAT.** The "Daily Sales" dataset there has no scheduled refresh and is stale (last refresh Oct 2024). Always use **GEP Test Models → Data Model** for UAT validation. **Action item:** Rename "GEP Test Reports" workspace to "GEP Test Reports (LEGACY - DO NOT USE)" and archive. Owner: `karen.prete@aldc.io` — nothing depends on it as of 2026-05-21 (Eclipse Test was the last dependency, now resolved).
 

@@ -96,6 +96,63 @@ mount -t cifs -o username=agent,password=$NEXTCLOUD_PASSWORD,domain=WORKGROUP \
 
 This requires `SYS_ADMIN` capability. **If the container is not privileged, the mount fails silently** — the agent starts and appears healthy, but `/media/nextcloud/` is empty. All templates reading CSV supplement files will fail with `[Errno 2] No such file or directory`.
 
+#### ⚠ Two different causes produce this identical signature — check privilege FIRST, then the race
+
+`[Errno 2] No such file or directory: '/media/nextcloud/...'` has **two** root causes. Diagnosing
+the wrong one wastes the session, because the documented fix (recreate with `--privileged`) does
+nothing for the second.
+
+| | Cause A — non-privileged deploy | Cause B — startup race (**added 2026-09-09, ALDC-1187**) |
+|---|---|---|
+| Trigger | container deployed/recreated without `--privileged` | **host reboot** — agent and `agent-nextcloud` start together |
+| `Privileged` | `false` | **`true`** |
+| `CapEff` | restricted | **`000001ffffffffff`** (full) |
+| Fix | recreate with `--privileged` | **`docker restart <agent>`** — smbd is up by then |
+| Precedent | GP-269 (2026-05-22) | 2026-09-09, 5d19h outage |
+
+**Discriminate in one command** — do this before assuming Cause A:
+
+```bash
+docker inspect <agent> --format 'Privileged={{.HostConfig.Privileged}} CapAdd={{.HostConfig.CapAdd}}'
+docker exec <agent> sh -c 'grep -i cifs /proc/mounts || echo "NO CIFS MOUNT PRESENT"'
+```
+
+`Privileged=true` **and** `NO CIFS MOUNT PRESENT` ⇒ **Cause B**. Confirm by comparing container
+start times — a race shows both starting within milliseconds of each other:
+
+```bash
+for c in <agent> agent-nextcloud; do docker inspect $c --format "$c {{.State.StartedAt}}"; done
+```
+
+**Why B happens:** `run.sh` runs `mount -t cifs` as its *first* line and **never checks the exit
+code**. On a host reboot the mount fires before `smbd` inside `agent-nextcloud` is listening, fails,
+and is never retried — so the agent runs indefinitely against an empty directory while reporting
+healthy. A `docker restart` fixes it *and rearms the trap*: the next reboot reintroduces it. This
+root cause has fired **24 times** per observability alerts. Durable fix tracked in **ALDC-1187**.
+
+**Prove the server side is healthy before touching the agent** (all three should pass under Cause B):
+
+```bash
+docker exec agent-nextcloud sh -c 'pgrep -la smbd'            # expect 2 smbd -D
+docker exec <agent> sh -c 'getent hosts agent-nextcloud'      # expect an IP
+docker exec <agent> sh -c 'smbclient -L //agent-nextcloud -U agent%"$NEXTCLOUD_PASSWORD"'
+```
+
+⚠ **Empty `.Mounts` on the agent container is CORRECT and not a finding.** The share is CIFS-mounted
+from *inside* the container against `agent-nextcloud`'s Samba server; it is not a Docker volume on
+the agent. Only `agent-nextcloud` itself has the volume. Reading empty `.Mounts` as "deployed
+without `-v`" is a wrong turn.
+
+⚠ **Verify the blast radius at tenant level, not from the alert.** The 2026-09-09 alert said
+"8 GEP templates"; in fact **all 10 tenant folders** were invisible, so every file-based template
+for every tenant on that agent was failing. Check `ls /media/nextcloud/Client_Tenants/ | wc -l`
+(expect 10), not just the client named in the alert.
+
+⚠ **`docker logs` on these agents times out** — no log rotation, and the file is enormous.
+`--since` and `--tail N | grep` both scan the whole file. Use `docker top <agent>` for liveness,
+and bare `--tail N`. Note also that `docker logs | head` shows lines from container *creation*, not
+the current boot — do not read current behaviour from the head of the log.
+
 **When deploying via Portainer:** Duplicate/Edit → Capabilities tab → enable **Privileged mode**.
 
 **When deploying via CLI:**

@@ -325,6 +325,55 @@ fully migrated (`TYPE = SERVICE`, `has_password = false`): `PROD_DG1_CORE_SVC_F4
 `PROD_DG1_PREFECT_SVC_DA8904DB`. Password auth still worked at **2026-09-08 17:01Z**, so
 enforcement had not landed on this account.
 
+### ⛔ ENFORCEMENT LANDED THE NEXT DAY — 2026-09-09 (supersedes the line above)
+
+**It landed ~24 hours later and caused a client-facing outage.** See [[ALDC-1191]].
+
+Re-measured `SHOW USERS` on `wj66376`, 2026-09-09: **`LEGACY_SERVICE` = 0.** All **20** non-person
+users are now `TYPE = SERVICE`, `has_password = false`. `PERSON` users kept their passwords.
+`SHOW AUTHENTICATION POLICIES IN ACCOUNT` → **0 rows** (so it was the type conversion, not a policy
+attach). Conversion window: last successful password auth anywhere **09:15:15 PDT**, first failure
+**10:03:05 PDT** — 48 minutes.
+
+Snowflake's own tasks are visible in the account and name the mechanism:
+
+```
+2026-09-13 07:41  SCHEDULED  SECURITY_ESSENTIALS_STRONG_AUTH_LEGACY_SERVI…
+2026-09-13 07:41  SCHEDULED  SECURITY_ESSENTIALS_STRONG_AUTH_PERSON_USERS
+2026-09-09 18:50  SCHEDULED  THREAT_INTELLIGENCE_PASSWORD_SERVICE_USERS_T…
+```
+
+⭐ **Phase 3 STRIPS THE PASSWORD; it does not block the login.** The symptom is therefore
+`390100 INCORRECT_USERNAME_PASSWORD` — **indistinguishable from a rotated password**. Expect the
+first diagnosis to be "someone rotated the credential"; it was wrong on ALDC-1191. Two things
+separate the cases cheaply:
+
+- **Population, not sample.** One user failing looks like a rotation; *every non-person user*
+  converting is the platform. `SHOW USERS` and count `LEGACY_SERVICE` — that single row count is
+  the discriminator.
+- **Vault metadata.** `az keyvault secret show --query attributes.updated` tells you whether OUR
+  copy drifted, with **no secret retrieval**. On ALDC-1191 `prod-dg1-core-admin` was untouched since
+  2026-06-03 while no longer authenticating — which is what proved the change was Snowflake-side.
+
+⭐ **A `SERVICE` user cannot hold a password, and NO admin can restore one — `ACCOUNTADMIN`
+included.** It is a type constraint, not a permission: Snowflake's `CREATE USER` reference defines
+`LEGACY_SERVICE` as *"similar to `SERVICE`, but allows password and SAML authentication"*. So the
+natural question "can an admin just reset the password?" has a definitive **no**, and a Snowflake
+support ticket is not on the recovery path. Reverting to `LEGACY_SERVICE` is what Phase 3 removes,
+and the conversion task above re-runs on **2026-09-13**.
+
+⚠ **Non-prod `og35375` is under it too.** `PERSON` accounts there are MFA-gated: `PAULRUSSELLADMIN`
+and `paulrussell` return **"MFA with TOTP is required"** — i.e. the password was *accepted* and the
+second factor is the wall. **That error is good news dressed as failure**: it confirms the stored
+password is still correct. Consequence: there is **no automated route into og35375**, so anything
+needing `ALTER USER` there requires a human in Snowsight ([[ALDC-1192]]).
+
+⚠ **A helper's failure is only evidence about what the helper actually tried.** `connect_nonprod()`
+failing was read as "og35375 is converted" and that was wrong — it only ever tries an MFA-gated
+PERSON account and a Key Vault copy known to be stale (the `TEST_DG1_CORE_ADMIN` rotation of
+2026-09-08 updated the **wiki vault**, not Key Vault). Enumerate what the instrument covers before
+believing its zero.
+
 ⚠ **"has a key" is NOT "uses a key".** `PROD_DG1_CORE_SVC_DA8904DB` carries
 `has_rsa_public_key = true` **and authenticated by Password** on 2026-09-08 (~15 sessions via
 PythonConnector 3.12.3). A registered-but-unused key does not survive Phase 3. Audit
