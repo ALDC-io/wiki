@@ -523,6 +523,62 @@ missed the markdown-table row format — printing two real passwords into a sess
 repair: **mask by COLUMN HEADER, never by guessing what a secret looks like.** A redactor validated
 only against the cases you imagined is a redactor you have not tested. Both credentials were rotated.
 
+## The sixth shape — a verdict that never states its COVERAGE (2026-09-11)
+
+The first five shapes are about a check whose *content* is empty or whose *aggregate* discards a
+refusal. This one is subtler and commoner: **the verdict is truthful about what it found and silent
+about what it looked at.** "No differences" over zero comparisons is a true statement and a useless
+one, and it reads exactly like a pass.
+
+⭐ **Produced three times in one night, by someone writing the guards.** That is the finding — these
+are not other people's mistakes.
+
+**a) A comparison over an empty intersection.** A prod-vs-TEST measure diff printed:
+
+> *"none — the shared ones are identical, so any defect is SHARED, not a TEST regression"*
+
+`drift` was empty because the **intersection** was empty: production had zero measures matching the
+filter, so nothing had been compared. The sentence was a conclusion about a set that did not exist.
+Fixed by separating three outcomes and making "nothing compared" a **refusal**:
+
+```
+0 shared  -> NOT-COMPARABLE, and WHY (prod-only / TEST-only / filter wrong)
+drift     -> name the pairs
+no drift  -> pass, AND state the coverage it passed over
+```
+
+**b) A freshness check that marked six-month-old data `ok`.** DAX returns a naive datetime, `now`
+was aware, the subtraction raised, a bare `except` returned `None`, and the caller's
+`elif age is not None and age > threshold` fell through leaving `state = "ok"`. Printed
+`0 findings ✓`. ⭐ **An unmeasurable value must be a FINDING, not a default.**
+
+**b′) The same check, one layer down.** Clustering partitions by exact `RefreshedTime` string
+reported **4 of 97** where the truth was **91 of 97** — seconds differ, so one load event became 97
+distinct strings. The verdict was arithmetically correct and answered the wrong question. Fixed by
+clustering on the date prefix.
+
+**c) A name-based duplicate check that cannot see duplicates.** A measure audit compared measure
+NAMES for near-duplication and reported one pair. Comparing **expressions** found two pairs of
+*exact* duplicates (`Sessions` == `Traffic - Sessions - Total`) whose names share no words at all.
+⭐ **Same shape as the fourth shape's "test pins a weaker property than its name"** — here the
+weaker property is *name similarity* standing in for *semantic duplication*.
+
+### The rule
+
+**Every verdict states its denominator.** "0 findings" is meaningless without "over N checks", and
+"N" must be the count actually executed, not the count intended. Three questions that would have
+caught all four:
+
+1. **If every check returned "could not measure", what does this print?** If the answer is a pass,
+   the verdict is vacuous.
+2. **What is the denominator, and is it non-zero?** A ratio over an empty set is not a result.
+3. **Does the property being compared equal the property being claimed?** Names are not
+   expressions; presence is not content; a green refresh is not a loaded table.
+
+⚠ And the meta-lesson, which is the reason this shape keeps appearing: **writing the warning does
+not confer immunity.** The observer in (b) carries a docstring explaining trap (a) and shipped with
+trap (b) in the same file.
+
 ## See Also
 
 - [[ALDC-1164]] — where the tenth shape was found; five instances in one afternoon

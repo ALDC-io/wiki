@@ -383,6 +383,83 @@ whether it concentrates* — should run **before** anyone is told to roll back a
 was not found"*), and `GET_DDL` on a `WAREHOUSE.*` wrapper view returns only
 `SELECT * FROM WAREHOUSE_SOURCE.*` — read the `WAREHOUSE_SOURCE` object for the real definition.
 
+### The consumer layer decides what a "rendered check" even means (2026-09-11)
+
+⭐ **Established for Navira on 2026-09-11, and it had never been written down.** They consume
+**Eclipse dashboards** and **Analyze in Excel using PIVOTS** against the semantic model. They do
+**not** use the Power BI report canvases — the reports sitting in `GEP Test Models` are Paul's own
+QA artifacts.
+
+Two consequences that reorder work:
+
+1. **For a pivot user, the FIELD LIST is the UI.** Measure names, display folders, descriptions and
+   hidden-vs-visible are not polish — they are the entire interface. So GP-318's "write the missing
+   descriptions", "folder the strays" and "two spend routes indistinguishable by name" are
+   **consumer-facing defects**, and a **cold Excel field-list screenshot IS the rendered check**,
+   not a precursor to one.
+2. **A Playwright pass over PBI report canvases would check a surface nobody opens.** The rendered
+   check that matters on the PBI side is Excel (a desktop action, human-only); on the Eclipse side
+   it is the e2e suite.
+
+⚠ A memory note read *"66151728 is the client's live surface — 2 reports bound"*, and a conclusion
+was built on it (*"one client-facing report, small cutover risk"*) before anyone asked what the
+client actually opens. **Ask what the consumer opens before scoping a consumer-layer check.**
+
+### ⛔ Freshness instruments: four ways to get a false ALL-CLEAR
+
+All four were produced in one night (2026-09-10/11) while building GP-321's staleness observer, by
+someone who had just written the warnings against them.
+
+**1. `RefreshedTime` renders as a 12-hour clock with AM/PM.** `strptime` fails on it. A refresh
+check tried two formats, both raised, the unparsed value fell through to a negative, and it printed
+*"at least one partition did not move"* over three that had **all** moved. A false NEGATIVE in a
+freshness check is worse than none — it teaches you to ignore the tool.
+
+**2. DAX returns a NAIVE datetime; `datetime.now(timezone.utc)` is AWARE.** Subtracting raises
+`TypeError`, a bare `except` swallows it, age comes back `None`, and an `elif age is not None and
+age > threshold` **falls through marking the row healthy**. The observer's first run printed
+`0 findings ✓` with a table **six months stale**. ⭐ **A value that arrived but cannot be aged is
+NOT-MEASURED and must be a finding — never "ok".**
+
+**3. Exact-string equality is too strict for clustering.** `RefreshedTime` carries seconds, so one
+load event across 97 partitions became 97 distinct strings: the check reported **4/97** where the
+truth was **91/97**. Cluster on the **date prefix** — still parse-free, because equality needs no
+interpretation while ordering does.
+
+**4. A comparison reporting "no differences" without reporting its COVERAGE.** A prod-vs-TEST
+measure diff printed *"the shared ones are identical, so any defect is SHARED"* — computed over an
+**empty intersection**. Nothing had been compared. See [[vacuous-verification]].
+
+⭐ **What works: three checks, none trusting a refresh status.** Every silent failure this week
+reported `Completed`.
+
+| Check | Catches | Blind to |
+|---|---|---|
+| last refresh outcome **+ age** | a model nobody asks any more, or one failing | a model refreshing fine over frozen tables |
+| per-table `MAX(date)` via DAX | a table frozen while the model refreshes green | a frozen ARCHIVE — the tip still moves |
+| **partition clustering** | an archive frozen behind a moving tip | anything outside the watched tables |
+
+`aldc-launchpad` `pbi_ops/_gp321_staleness_observer.py`. Validated against the incident it exists
+for (PROD `Order Line`, 92/97 partitions on 2026-07-07) and it immediately found **three more
+frozen archives nobody knew about**, including PROD `Traffic Activity` at 89/97 on **2026-04-02** —
+the same date its warehouse view was last altered.
+
+### ⛔ The TEST half of a PROD fix gets forgotten (2026-09-11)
+
+ALDC-1191 was diagnosed, fixed, evidenced and closed **for production**. Both **TEST** models had
+been failing their scheduled refresh on the same `og35375` credential the whole time, and nobody
+looked — because `_aldc1192_live_state.py`, the instrument everyone ran, **only ever listed the two
+PROD models**. The absence of TEST from the watchlist read as TEST being fine.
+
+Worse: `66151728`'s last success ended **2026-09-09 14:07:41Z, seventeen minutes before**
+ALDC-1175's 14:24Z ingestion repair — so the client's live Daily surface sat frozen holding the
+outage hole (SP/SB zero for 09-08 and 09-09) for 36 hours. It refreshes **once a day**, so one
+failed slot costs a whole day.
+
+**Rule: when a credential/auth/config fix lands in prod, enumerate every OTHER environment sharing
+that credential before closing.** And build watchlists by **enumerating what exists**, never by
+naming what you remember.
+
 ## See Also
 
 - [[three-layer-presence-census]] — answering "is this data in prod?" without a false negative

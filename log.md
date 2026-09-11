@@ -2746,3 +2746,59 @@ three were tried on 09-09 and all three failed, so whichever one works is a depe
 phases and would otherwise be re-failed from scratch. ⚠ Also proven: a published artifact **cannot**
 start a Claude session (sandboxed, no process/filesystem/terminal reach), so a phase launcher is
 copy-to-clipboard, never a button.
+
+---
+
+## 2026-09-11 (overnight) — Phase 0 shipped, and every instrument built to check it lied once first
+
+**GP-321 unpinned.** `RangeEnd` on the Marketing Model was pinned at `#datetime(2026,8,1,...)`, so
+the refresh window ended 1 August **while reporting green**. Unpinned to a 2099 sentinel with the
+old value captured as rollback: `Order Line` **3,429,869 → 3,578,378 (+148,509)**, Aug/Sep **$0 →
+$4.33M gross / $1.17M**. **ALDC-1193 closed** — cause H4, confirmed once Paul said which surface he
+was on (the Marketing Model). **GP-324 reopened Low → High**: it had been closed "no client-facing
+figure is wrong" on a check against the wrong measure; the defect is live on
+`Actual - Marketing - Cost` and `- Ad Sales`, +$10,802.90 / +0.974% CY2025.
+
+⭐ **SEVEN inherited premises failed in one night, and all seven were the same mistake**: a
+*recorded instrument failure* read as a *fact about the world*. "GEP was never parity-checked" (it
+had been, one directory over) · "`Order Line` is permanently unmeasurable" (repaired five minutes
+before the cutover) · "escalate the ADBC cutover" (divergence was 99.9% in one date bucket) · "the
+currency defect has no ticket" (GP-324, wrongly closed) · "Playwright hits the login wall"
+(`save-auth.js` solved it months ago — the real blocker was an **expired cookie**) · "66151728 is
+the client's live surface, 2 reports bound" (both are Paul's QA artifacts) · "three instruments
+failed on 09-09" (one existed, worked, and had gone stale). ⭐ **When a note says something cannot
+be measured, check whether someone already got past it.**
+
+⭐ **The consumer layer, finally established and never written down before** — Navira uses **Eclipse
+dashboards** and **Analyze in Excel PIVOTS**, not report canvases. So the field list *is* the UI,
+which promotes GP-318's descriptions/folders/naming from tidy-up to consumer-facing, and makes
+EV-1's cold Excel capture *the* rendered check. Recorded on [[power-bi]].
+
+⛔ **Four ways to get a false all-clear from a freshness instrument** — also on [[power-bi]], all
+four produced in one night by the person writing the warnings: the 12-hour AM/PM `RefreshedTime`
+that defeats `strptime`; a **naive-vs-aware** datetime subtraction whose swallowed `TypeError` made
+a six-month-stale table render `ok` under `0 findings ✓`; exact-string clustering reporting **4/97**
+where the truth was **91/97**; and a diff announcing "no differences" over an **empty
+intersection**. ⭐ The last three are the new **sixth shape** on
+[[vacuous-verification]] — *a verdict truthful about what it found and silent about what it looked
+at*. Rule: **every verdict states its denominator.**
+
+⛔ **The TEST half of a PROD fix gets forgotten.** ALDC-1191 was fixed and closed for production
+while **both TEST models** kept failing on the same `og35375` credential — invisible because the
+instrument everyone ran (`_aldc1192_live_state.py`) only ever listed the two PROD models.
+`66151728`'s last success ended **17 minutes before** ALDC-1175's ingestion repair, so the client's
+live Daily surface held the outage hole (SP/SB zero, 09-08/09-09) for 36 hours; it refreshes once a
+day, so one missed slot costs a day. Refreshed 02:32Z. **Enumerate every environment sharing a
+credential before closing an auth fix, and build watchlists by enumerating what exists.**
+
+**GP-331 filed** — `Traffic Activity` stops at **2026-03-01** on both models while the source runs
+to 2026-09-09 (10,290,862 rows). Model-side, six months, unrecorded. **GP-318 unblocked**: D-01 was
+Tami's forecast WIP (prod has no forecast feature at all, so not a regression) and D-02 had no
+client request on record — neither was a decision. Its description count is **56, not 48**, and
+reading the DAX exposed five defects that are not description gaps, including two pairs of *exact*
+duplicate measures and an exchange rate formatted `0.00%` so 1.35 renders as "135%".
+
+**GP-321's durability criterion built** — `pbi_ops/_gp321_staleness_observer.py`, three checks, none
+trusting a refresh status. Validated against the incident it exists for and immediately found three
+more frozen archives, including PROD `Traffic Activity` at 89/97 partitions on **2026-04-02**, the
+same date its warehouse view was last altered — a likely mechanism GP-331 does not yet have.
